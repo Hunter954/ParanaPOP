@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin - Anúncio</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-4" style="max-width: 900px;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="h5 m-0">{% if mode=='new' %}Novo Slot{% else %}Editar Slot{% endif %}</h1>
+      <a class="btn btn-outline-dark btn-sm" href="{{ url_for('admin.dashboard') }}">Voltar</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }} mb-3">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card">
+      <div class="card-body">
+        <form method="post">
+          {{ form.csrf_token }}
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Key</label>
+              {{ form.key(class="form-control") }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Nome</label>
+              {{ form.name(class="form-control") }}
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <div class="form-check">
+                {{ form.is_active(class="form-check-input") }}
+                <label class="form-check-label">Ativo</label>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label">HTML do anúncio</label>
+              {{ form.html(class="form-control", rows="10") }}
+              <div class="small text-muted mt-1">Pode colar scripts/iframes. (Cuidado com scripts de terceiros.)</div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <button class="btn btn-dark" type="submit">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

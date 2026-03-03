@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %} - {{ cat.name }}{% endblock %}
+{% block content %}
+
+<div class="section-title mb-3">
+  <h2 class="m-0">{{ cat.name }}</h2>
+</div>
+
+<div class="row g-3">
+  {% for p in pagination.items %}
+    <div class="col-md-6">
+      <a class="card post-card h-100 text-decoration-none" href="{{ url_for('site.post', slug=p.slug) }}">
+        {% if p.featured_image %}
+          <img src="{{ p.featured_image }}" class="card-img-top" alt="">
+        {% endif %}
+        <div class="card-body">
+          <h3 class="h6 m-0">{{ p.title|safe }}</h3>
+        </div>
+      </a>
+    </div>
+  {% endfor %}
+</div>
+
+<nav class="mt-4">
+  <ul class="pagination">
+    {% if pagination.has_prev %}
+      <li class="page-item"><a class="page-link" href="{{ url_for('site.category', slug=cat.slug, page=pagination.prev_num) }}">Anterior</a></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">Página {{ pagination.page }} / {{ pagination.pages }}</span></li>
+    {% if pagination.has_next %}
+      <li class="page-item"><a class="page-link" href="{{ url_for('site.category', slug=cat.slug, page=pagination.next_num) }}">Próxima</a></li>
+    {% endif %}
+  </ul>
+</nav>
+
+{% endblock %}

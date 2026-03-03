@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %} - {{ post.title|striptags }}{% endblock %}
+{% block content %}
+
+<article class="post">
+  <h1 class="h3">{{ post.title|safe }}</h1>
+
+  <div class="d-flex flex-wrap gap-2 my-2">
+    {% for c in post.categories %}
+      <a class="badge text-bg-dark text-decoration-none" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
+    {% endfor %}
+    {% if post.published_at %}
+      <span class="small text-muted ms-auto">{{ post.published_at.strftime('%d/%m/%Y %H:%M') }}</span>
+    {% endif %}
+  </div>
+
+  {% if post.featured_image %}
+    <img src="{{ post.featured_image }}" class="img-fluid rounded mb-3" alt="">
+  {% endif %}
+
+  {% if post.excerpt %}
+    <div class="post-excerpt mb-3">{{ post.excerpt|safe }}</div>
+  {% endif %}
+
+  <div class="post-content">
+    {{ post.content_html|safe }}
+  </div>
+</article>
+
+{% endblock %}
