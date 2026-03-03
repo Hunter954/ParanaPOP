@@ -13,14 +13,11 @@ from .sync import sync_categories, sync_posts
 login_manager = LoginManager()
 login_manager.login_view = "admin.login"
 
-
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-
 def _ensure_defaults():
-    # cria slots padrão se não existirem
     defaults = [
         ("header_top", "Publicidade (Topo)"),
         ("lateral_1", "Publicidade (Lateral 1)"),
@@ -35,7 +32,6 @@ def _ensure_defaults():
 
     db.session.commit()
 
-
 def _auto_sync_loop(app: Flask):
     with app.app_context():
         client = WPClient(app.config["WP_BASE_URL"])
@@ -46,7 +42,6 @@ def _auto_sync_loop(app: Flask):
             except Exception:
                 pass
             time.sleep(app.config["AUTO_SYNC_INTERVAL"])
-
 
 def create_app():
     load_dotenv()
@@ -63,23 +58,23 @@ def create_app():
         db.create_all()
         _ensure_defaults()
 
-        # =========================================================
-        # CRIA ADMIN AUTOMATICAMENTE (TEMPORÁRIO - SEM SHELL NO RAILWAY)
-        # Depois que você conseguir logar, REMOVA este bloco e commite.
-        # =========================================================
+        # ✅ ADMIN AUTOMÁTICO (IDEMPOTENTE)
+        # - se não existir: cria
+        # - se existir: garante is_admin e reseta senha
+        # Depois que logar, REMOVA este bloco e commite.
         admin_email = "admin@admin.com"
         admin_password = "senha123"
 
         u = User.query.filter_by(email=admin_email).first()
         if not u:
             u = User(email=admin_email, is_admin=True)
-            u.set_password(admin_password)
             db.session.add(u)
-            db.session.commit()
-            print("ADMIN CRIADO AUTOMATICAMENTE:", admin_email)
-        # =========================================================
 
-    # auto sync (opcional)
+        u.is_admin = True
+        u.set_password(admin_password)
+        db.session.commit()
+        print("ADMIN OK:", admin_email)
+
     if app.config.get("AUTO_SYNC_INTERVAL", 0) and app.config["AUTO_SYNC_INTERVAL"] > 0:
         t = threading.Thread(target=_auto_sync_loop, args=(app,), daemon=True)
         t.start()
