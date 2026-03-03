@@ -59,6 +59,7 @@ def dashboard():
 
     slots = AdSlot.query.order_by(AdSlot.key.asc()).all()
     live_embed = SiteSetting.query.filter_by(key="live_embed_html").first()
+    logo_url = SiteSetting.query.filter_by(key="logo_url").first()
 
     return render_template(
         "admin/dashboard.html",
@@ -66,6 +67,7 @@ def dashboard():
         pv_24h=pv_24h,
         slots=slots,
         live_embed=(live_embed.value if live_embed else ""),
+        logo_url=(logo_url.value if logo_url else ""),
     )
 
 
@@ -92,10 +94,16 @@ def ads_new_post():
             flash("Já existe um slot com essa chave.", "danger")
             return render_template("admin/ad_form.html", form=form, mode="new")
 
+        html = form.html.data or ""
+        img = (form.image_url.data or "").strip()
+        link = (form.link_url.data or "").strip() or "#"
+        if img:
+            html = f'<a href="{link}" target="_blank" rel="noopener"><img src="{img}" alt="" style="max-width:100%;height:auto;display:block;border-radius:6px;"></a>'
+
         slot = AdSlot(
             key=form.key.data.strip(),
             name=form.name.data.strip(),
-            html=form.html.data or "",
+            html=html,
             is_active=bool(form.is_active.data),
         )
         db.session.add(slot)
@@ -128,7 +136,12 @@ def ads_edit_post(slot_id):
     if form.validate_on_submit():
         slot.key = form.key.data.strip()
         slot.name = form.name.data.strip()
-        slot.html = form.html.data or ""
+        html = form.html.data or ""
+        img = (form.image_url.data or "").strip()
+        link = (form.link_url.data or "").strip() or "#"
+        if img:
+            html = f'<a href="{link}" target="_blank" rel="noopener"><img src="{img}" alt="" style="max-width:100%;height:auto;display:block;border-radius:6px;"></a>'
+        slot.html = html
         slot.is_active = bool(form.is_active.data)
         db.session.commit()
         flash("Slot atualizado.", "success")
@@ -155,4 +168,23 @@ def save_live():
 
     db.session.commit()
     flash("AO VIVO atualizado.", "success")
+    return redirect(url_for("admin.dashboard"))
+
+
+@admin_bp.post("/settings/logo")
+@login_required
+def save_logo():
+    r = _require_admin()
+    if r:
+        return r
+
+    logo_url = (request.form.get("logo_url", "") or "").strip()
+    s = SiteSetting.query.filter_by(key="logo_url").first()
+    if not s:
+        s = SiteSetting(key="logo_url", value=logo_url)
+        db.session.add(s)
+    else:
+        s.value = logo_url
+    db.session.commit()
+    flash("Logo atualizada.", "success")
     return redirect(url_for("admin.dashboard"))
