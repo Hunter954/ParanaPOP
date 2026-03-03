@@ -41,6 +41,20 @@
               </div>
             </div>
             <div class="col-12">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Imagem (URL)</label>
+                  {{ form.image_url(class="form-control", placeholder="https://.../banner.png") }}
+                  <div class="small text-muted mt-1">Se preencher, geramos automaticamente o HTML do banner com clique.</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Link (URL)</label>
+                  {{ form.link_url(class="form-control", placeholder="https://anunciante.com") }}
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12">
               <label class="form-label">HTML do anúncio</label>
               {{ form.html(class="form-control", rows="10") }}
               <div class="small text-muted mt-1">Pode colar scripts/iframes. (Cuidado com scripts de terceiros.)</div>

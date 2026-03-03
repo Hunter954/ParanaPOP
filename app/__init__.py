@@ -19,9 +19,12 @@ def load_user(user_id):
 
 def _ensure_defaults():
     defaults = [
-        ("header_top", "Publicidade (Topo)"),
-        ("lateral_1", "Publicidade (Lateral 1)"),
-        ("lateral_2", "Publicidade (Lateral 2)"),
+        ("header_top", "Publicidade (Topo - faixa)"),
+        ("home_top", "Publicidade (Home - faixa superior)"),
+        ("home_mid", "Publicidade (Home - faixa meio)"),
+        ("home_bottom", "Publicidade (Home - faixa inferior)"),
+        ("sidebar_1", "Publicidade (Sidebar 1)"),
+        ("sidebar_2", "Publicidade (Sidebar 2)"),
     ]
     for key, name in defaults:
         if not AdSlot.query.filter_by(key=key).first():
@@ -29,6 +32,10 @@ def _ensure_defaults():
 
     if not SiteSetting.query.filter_by(key="live_embed_html").first():
         db.session.add(SiteSetting(key="live_embed_html", value=""))
+
+    # Logo do site (URL)
+    if not SiteSetting.query.filter_by(key="logo_url").first():
+        db.session.add(SiteSetting(key="logo_url", value=""))
 
     db.session.commit()
 
@@ -53,6 +60,10 @@ def create_app():
 
     app.register_blueprint(site_bp)
     app.register_blueprint(admin_bp)
+
+    # utilitário para templates (data/hora)
+    from datetime import datetime
+    app.jinja_env.globals["now"] = datetime.now
 
     with app.app_context():
         db.create_all()

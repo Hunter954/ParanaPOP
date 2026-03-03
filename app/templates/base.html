@@ -6,65 +6,115 @@
   <title>{{ config.SITE_NAME }}{% block title %}{% endblock %}</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
 </head>
 <body>
-  <header class="site-header border-bottom">
-    <div class="container py-3 d-flex align-items-center justify-content-between">
-      <a class="brand" href="{{ url_for('site.home') }}">{{ config.SITE_NAME }}</a>
 
-      <form class="d-flex gap-2" action="{{ url_for('site.search') }}" method="get">
-        <input class="form-control form-control-sm" name="q" placeholder="Buscar..." value="{{ request.args.get('q','') }}">
-        <button class="btn btn-sm btn-dark" type="submit">Buscar</button>
-      </form>
-
-      <div class="d-flex gap-2">
-        <a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.dashboard') }}">Admin</a>
+  <!-- Topbar (preta) -->
+  <div class="topbar">
+    <div class="container-xl d-flex align-items-center justify-content-between">
+      <div class="topbar-left">
+        <span class="topbar-date">{{ (now().strftime('%A, %d %B %Y')) }}</span>
+      </div>
+      <div class="topbar-right d-flex align-items-center gap-3">
+        <a class="topbar-link" href="#">Carreira</a>
+        <a class="topbar-link" href="#">Contato</a>
+        <a class="topbar-link" href="{{ url_for('admin.dashboard') }}">Login / Registrar</a>
       </div>
     </div>
+  </div>
 
-    {% if ad_header %}
-      <div class="container pb-3">
-        <div class="ad-box">{{ ad_header|safe }}</div>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container-xl header-row">
+      <a class="brand" href="{{ url_for('site.home') }}" aria-label="Home">
+        {% if logo_url %}
+          <img src="{{ logo_url }}" alt="{{ config.SITE_NAME }}" />
+        {% else %}
+          <span class="brand-text">{{ config.SITE_NAME }}</span>
+        {% endif %}
+      </a>
+
+      <nav class="main-nav" aria-label="Menu principal">
+        <a class="nav-link" href="{{ url_for('site.home') }}">Home</a>
+        {% for c in nav_categories[:6] %}
+          <a class="nav-link" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
+        {% endfor %}
+        <a class="nav-link" href="{{ url_for('site.search') }}">Buscar</a>
+      </nav>
+
+      <form class="header-search" action="{{ url_for('site.search') }}" method="get">
+        <input name="q" placeholder="Pesquisar..." value="{{ request.args.get('q','') }}" />
+        <button type="submit" aria-label="Pesquisar">🔍</button>
+      </form>
+    </div>
+
+    <!-- faixa de publicidade (como no layout) -->
+    <div class="container-xl">
+      <div class="ad-strip">
+        {% if ad_header %}
+          <div class="ad-box">{{ ad_header|safe }}</div>
+        {% else %}
+          <div class="ad-placeholder" aria-hidden="true"></div>
+        {% endif %}
       </div>
-    {% endif %}
+    </div>
   </header>
 
-  <main class="container my-4">
-    <div class="row g-4">
-      <div class="col-lg-8">
-        {% block content %}{% endblock %}
-      </div>
-
-      <aside class="col-lg-4">
-        <div class="sticky-top" style="top: 16px;">
-          {% if ad_lateral_1 %}
-            <div class="ad-box mb-3">{{ ad_lateral_1|safe }}</div>
-          {% endif %}
-          {% if ad_lateral_2 %}
-            <div class="ad-box mb-3">{{ ad_lateral_2|safe }}</div>
-          {% endif %}
-          <div class="card">
-            <div class="card-body small text-muted">
-              Dica: configure anúncios e AO VIVO em <a href="{{ url_for('admin.dashboard') }}">/admin</a>.
-            </div>
-          </div>
-        </div>
-      </aside>
-    </div>
+  <main class="container-xl main-wrap">
+    {% block content %}{% endblock %}
   </main>
 
-  <footer class="border-top py-4">
-    <div class="container small text-muted d-flex justify-content-between">
-      <div>© {{ config.SITE_NAME }}</div>
-      <div>Feito com Flask</div>
+  <footer class="site-footer">
+    <div class="container-xl footer-top">
+      <div class="row g-4">
+        <div class="col-6 col-md-3">
+          <div class="footer-title">Mundo</div>
+          <a class="footer-link" href="#">Economia</a>
+          <a class="footer-link" href="#">Religião</a>
+          <a class="footer-link" href="#">Conflitos</a>
+          <a class="footer-link" href="#">Esportes</a>
+          <a class="footer-link" href="#">Escândalos</a>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="footer-title">Entretenimento</div>
+          <a class="footer-link" href="#">Celebridades</a>
+          <a class="footer-link" href="#">Filmes</a>
+          <a class="footer-link" href="#">TV</a>
+          <a class="footer-link" href="#">Música</a>
+          <a class="footer-link" href="#">Lifestyle</a>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="footer-title">Saúde</div>
+          <a class="footer-link" href="#">Pesquisa</a>
+          <a class="footer-link" href="#">Vida saudável</a>
+          <a class="footer-link" href="#">Saúde mental</a>
+          <a class="footer-link" href="#">Vírus</a>
+          <a class="footer-link" href="#">Crianças</a>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="footer-title">Negócios</div>
+          <a class="footer-link" href="#">Mercados</a>
+          <a class="footer-link" href="#">Tecnologia</a>
+          <a class="footer-link" href="#">Features</a>
+          <a class="footer-link" href="#">Propriedade</a>
+          <a class="footer-link" href="#">Líderes</a>
+        </div>
+      </div>
+
+      <div class="footer-brand">{{ config.SITE_NAME }}</div>
+      <div class="footer-bottom small">
+        <div>© {{ config.SITE_NAME }}</div>
+        <div>
+          <a class="footer-bottom-link" href="#">Contact</a>
+          <a class="footer-bottom-link" href="#">Terms</a>
+          <a class="footer-bottom-link" href="#">About</a>
+        </div>
+      </div>
     </div>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-  <script src="{{ url_for('static', filename='js/site.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

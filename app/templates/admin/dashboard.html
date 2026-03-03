@@ -52,6 +52,23 @@
     <div class="card mb-4">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 m-0">Identidade do Site</h2>
+        </div>
+        <form class="row g-2" method="post" action="{{ url_for('admin.save_logo') }}">
+          <div class="col-md-10">
+            <input class="form-control" name="logo_url" placeholder="URL da logo (PNG/SVG)" value="{{ logo_url }}">
+            <div class="small text-muted mt-1">Cole um link direto da imagem (ex: https://.../logo.png). Se vazio, mostra o nome do site.</div>
+          </div>
+          <div class="col-md-2 d-grid">
+            <button class="btn btn-dark" type="submit">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
           <h2 class="h6 m-0">Slots de Anúncio</h2>
           <a class="btn btn-sm btn-dark" href="{{ url_for('admin.ads_new') }}">Novo slot</a>
         </div>
@@ -79,7 +96,7 @@
             </tbody>
           </table>
         </div>
-        <div class="small text-muted">Use as keys: <code>header_top</code>, <code>lateral_1</code>, <code>lateral_2</code> (ou crie outras).</div>
+        <div class="small text-muted">Keys usadas no layout: <code>header_top</code>, <code>home_top</code>, <code>home_mid</code>, <code>home_bottom</code>, <code>sidebar_1</code>, <code>sidebar_2</code>.</div>
       </div>
     </div>
 

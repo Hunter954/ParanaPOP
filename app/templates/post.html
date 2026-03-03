@@ -2,29 +2,52 @@
 {% block title %} - {{ post.title|striptags }}{% endblock %}
 {% block content %}
 
-<article class="post">
-  <h1 class="h3">{{ post.title|safe }}</h1>
+<div class="inner-grid">
+  <article class="article">
+    <h1 class="article-title">{{ post.title|safe }}</h1>
 
-  <div class="d-flex flex-wrap gap-2 my-2">
-    {% for c in post.categories %}
-      <a class="badge text-bg-dark text-decoration-none" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
-    {% endfor %}
-    {% if post.published_at %}
-      <span class="small text-muted ms-auto">{{ post.published_at.strftime('%d/%m/%Y %H:%M') }}</span>
+    <div class="article-meta">
+      <div class="article-tags">
+        {% for c in post.categories %}
+          <a class="tag" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
+        {% endfor %}
+      </div>
+      {% if post.published_at %}
+        <div class="meta">{{ post.published_at.strftime('%d/%m/%Y %H:%M') }}</div>
+      {% endif %}
+    </div>
+
+    {% if post.featured_image %}
+      <img src="{{ post.featured_image }}" class="article-cover" alt="">
     {% endif %}
-  </div>
 
-  {% if post.featured_image %}
-    <img src="{{ post.featured_image }}" class="img-fluid rounded mb-3" alt="">
-  {% endif %}
+    {% if post.excerpt %}
+      <div class="article-excerpt">{{ post.excerpt|safe }}</div>
+    {% endif %}
 
-  {% if post.excerpt %}
-    <div class="post-excerpt mb-3">{{ post.excerpt|safe }}</div>
-  {% endif %}
+    <div class="article-content">
+      {{ post.content_html|safe }}
+    </div>
+  </article>
 
-  <div class="post-content">
-    {{ post.content_html|safe }}
-  </div>
-</article>
+  <aside class="right-rail">
+    <div class="section-head">
+      <h2>Publicidade</h2>
+      <div class="section-line"></div>
+    </div>
+
+    {% if ad_sidebar_1 %}
+      <div class="ad-box mb-3">{{ ad_sidebar_1|safe }}</div>
+    {% else %}
+      <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+    {% endif %}
+
+    {% if ad_sidebar_2 %}
+      <div class="ad-box">{{ ad_sidebar_2|safe }}</div>
+    {% else %}
+      <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+    {% endif %}
+  </aside>
+</div>
 
 {% endblock %}
