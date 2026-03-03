@@ -13,9 +13,11 @@ from .sync import sync_categories, sync_posts
 login_manager = LoginManager()
 login_manager.login_view = "admin.login"
 
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
 
 def _ensure_defaults():
     # cria slots padrão se não existirem
@@ -27,9 +29,12 @@ def _ensure_defaults():
     for key, name in defaults:
         if not AdSlot.query.filter_by(key=key).first():
             db.session.add(AdSlot(key=key, name=name, html="", is_active=True))
+
     if not SiteSetting.query.filter_by(key="live_embed_html").first():
         db.session.add(SiteSetting(key="live_embed_html", value=""))
+
     db.session.commit()
+
 
 def _auto_sync_loop(app: Flask):
     with app.app_context():
@@ -41,6 +46,7 @@ def _auto_sync_loop(app: Flask):
             except Exception:
                 pass
             time.sleep(app.config["AUTO_SYNC_INTERVAL"])
+
 
 def create_app():
     load_dotenv()
@@ -56,6 +62,22 @@ def create_app():
     with app.app_context():
         db.create_all()
         _ensure_defaults()
+
+        # =========================================================
+        # CRIA ADMIN AUTOMATICAMENTE (TEMPORÁRIO - SEM SHELL NO RAILWAY)
+        # Depois que você conseguir logar, REMOVA este bloco e commite.
+        # =========================================================
+        admin_email = "admin@admin.com"
+        admin_password = "senha123"
+
+        u = User.query.filter_by(email=admin_email).first()
+        if not u:
+            u = User(email=admin_email, is_admin=True)
+            u.set_password(admin_password)
+            db.session.add(u)
+            db.session.commit()
+            print("ADMIN CRIADO AUTOMATICAMENTE:", admin_email)
+        # =========================================================
 
     # auto sync (opcional)
     if app.config.get("AUTO_SYNC_INTERVAL", 0) and app.config["AUTO_SYNC_INTERVAL"] > 0:
