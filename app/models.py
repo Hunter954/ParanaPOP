@@ -21,7 +21,8 @@ class User(UserMixin, db.Model):
         self.password_hash = generate_password_hash(pw)
 
     def check_password(self, pw: str) -> bool:
-        return check_password_hash(pw)
+        # ✅ CORRETO
+        return check_password_hash(self.password_hash, pw)
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -32,7 +33,6 @@ class Category(db.Model):
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
-    # origem WP
     wp_id = db.Column(db.Integer, unique=True, index=True, nullable=True)
     source = db.Column(db.String(20), default="wp")  # wp | local
 
@@ -53,7 +53,7 @@ class AdSlot(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(80), unique=True, nullable=False)  # ex: lateral_1, lateral_2, header_top
     name = db.Column(db.String(190), nullable=False)
-    html = db.Column(db.Text, nullable=True)  # código do anúncio (script/iframe/etc)
+    html = db.Column(db.Text, nullable=True)
     is_active = db.Column(db.Boolean, default=True)
 
 class SiteSetting(db.Model):
