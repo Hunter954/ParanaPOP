@@ -7,12 +7,17 @@
 {% set cidade_sections = category_sections if category_sections else ([{"category": selected_cat, "posts": selected_posts}] if selected_cat else []) %}
 
 <section class="pp-section">
-  <div class="section-head pp-head">
-    <h2>Últimas Notícias</h2>
-    <div class="section-line"></div>
-  </div>
-
   <div class="home-news-layout">
+    <div class="section-head pp-head news-main-head">
+      <h2>Últimas Notícias</h2>
+      <div class="section-line"></div>
+    </div>
+
+    <div class="section-head pp-head side-head news-side-head">
+      <h2>Brasil</h2>
+      <div class="section-line"></div>
+    </div>
+
     <div class="news-feature-media">
       {% if destaque %}
       <a class="lead-thumb-card" href="{{ url_for('site.post', slug=destaque.slug) }}">
@@ -35,11 +40,6 @@
     </div>
 
     <aside class="news-sidebar">
-      <div class="section-head pp-head side-head">
-        <h2>Brasil</h2>
-        <div class="section-line"></div>
-      </div>
-
       <div class="sidebar-stack">
         {% for p in brasil_posts[:3] %}
         <a class="side-story-card" href="{{ url_for('site.post', slug=p.slug) }}">
@@ -79,50 +79,52 @@
 </section>
 
 <section class="pp-section rotative-section" data-rotative>
-  <div class="section-head pp-head rotative-head">
-    <h2 class="rotative-title">{{ cidade_sections[0].category.name if cidade_sections else 'Cidade' }}</h2>
-    <div class="section-line"></div>
-    <div class="rotative-controls">
-      <button type="button" class="rotative-arrow" data-rotative-prev aria-label="Categoria anterior">‹</button>
-      <button type="button" class="rotative-arrow" data-rotative-next aria-label="Próxima categoria">›</button>
-    </div>
-  </div>
-
-  <div class="rotative-track" data-rotative-track>
-    {% for section in cidade_sections %}
-    <article class="rotative-panel" data-title="{{ section.category.name }}">
-      <div class="rotative-layout">
-        <div class="rotative-posts">
-          {% for p in section.posts[:4] %}
-          <a class="city-story-row" href="{{ url_for('site.post', slug=p.slug) }}">
-            <div class="thumb-card-image city-thumb" style="background-image:url('{{ p.featured_image or '' }}')"></div>
-            <div class="city-story-copy">
-              <h3>{{ clean_text(p.title, 86) }}</h3>
-              <p>{{ clean_text(p.excerpt or p.content_html, 150) }}</p>
-            </div>
-          </a>
-          {% endfor %}
+  <div class="rotative-layout">
+    <div class="rotative-main">
+      <div class="section-head pp-head rotative-head">
+        <h2 class="rotative-title">{{ cidade_sections[0].category.name if cidade_sections else 'Cidade' }}</h2>
+        <div class="section-line"></div>
+        <div class="rotative-controls">
+          <button type="button" class="rotative-arrow" data-rotative-prev aria-label="Categoria anterior">‹</button>
+          <button type="button" class="rotative-arrow" data-rotative-next aria-label="Próxima categoria">›</button>
         </div>
-
-        <aside class="rotative-ads">
-          <div class="rotative-ad-box">
-            {% if ad_sidebar_1 %}
-              <div class="ad-box">{{ ad_sidebar_1|safe }}</div>
-            {% else %}
-              <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
-            {% endif %}
-          </div>
-          <div class="rotative-ad-box">
-            {% if ad_sidebar_2 %}
-              <div class="ad-box">{{ ad_sidebar_2|safe }}</div>
-            {% else %}
-              <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
-            {% endif %}
-          </div>
-        </aside>
       </div>
-    </article>
-    {% endfor %}
+
+      <div class="rotative-track" data-rotative-track>
+        {% for section in cidade_sections %}
+        <article class="rotative-panel" data-title="{{ section.category.name }}">
+          <div class="rotative-posts">
+            {% for p in section.posts[:4] %}
+            <a class="city-story-row" href="{{ url_for('site.post', slug=p.slug) }}">
+              <div class="thumb-card-image city-thumb" style="background-image:url('{{ p.featured_image or '' }}')"></div>
+              <div class="city-story-copy">
+                <h3>{{ clean_text(p.title, 86) }}</h3>
+                <p>{{ clean_text(p.excerpt or p.content_html, 150) }}</p>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </div>
+
+    <aside class="rotative-ads">
+      <div class="rotative-ad-box">
+        {% if ad_sidebar_1 %}
+          <div class="ad-box">{{ ad_sidebar_1|safe }}</div>
+        {% else %}
+          <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+        {% endif %}
+      </div>
+      <div class="rotative-ad-box">
+        {% if ad_sidebar_2 %}
+          <div class="ad-box">{{ ad_sidebar_2|safe }}</div>
+        {% else %}
+          <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+        {% endif %}
+      </div>
+    </aside>
   </div>
 </section>
 {% endblock %}
