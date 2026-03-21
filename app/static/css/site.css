@@ -70,7 +70,7 @@ img{max-width:100%;display:block}
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
   gap:14px;
-  margin-top:-12px;
+  margin-top:-9px;
 }
 
 .home-inline-banner{grid-area:banner;margin-top:0}
