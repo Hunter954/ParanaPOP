@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+from html import unescape
+import re
 
 from flask import Blueprint, render_template, abort, request
 from sqlalchemy import desc, func
@@ -23,7 +25,33 @@ def inject_site_globals():
     return {
         "nav_categories": cats,
         "logo_url": _setting("logo_url", ""),
+        "clean_text": _clean_text,
+        "format_date_br": _format_date_br,
     }
+
+
+
+def _clean_text(value: str, limit: int = 0) -> str:
+    if not value:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", value)
+    text = unescape(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if limit and len(text) > limit:
+        cut = text[:limit].rsplit(" ", 1)[0].strip()
+        return (cut or text[:limit]).rstrip(" .,;:-") + "..."
+    return text
+
+
+def _format_date_br(value):
+    if not value:
+        return ""
+    months = [
+        "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+        "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+    ]
+    return f"{value.day} de {months[value.month - 1]} de {value.year}"
+
 
 def _track_view(post_id=None):
     try:
