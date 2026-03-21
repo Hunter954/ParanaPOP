@@ -5,7 +5,7 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///dev.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    WP_BASE_URL = os.getenv("WP_BASE_URL", "https://paranapop.com.br").rstrip("/")
+    WP_BASE_URL = os.getenv("WP_BASE_URL", "https://diariodegoias.com.br").rstrip("/")
     WP_PER_PAGE = int(os.getenv("WP_PER_PAGE", "20"))
 
     AUTO_SYNC_INTERVAL = int(os.getenv("AUTO_SYNC_INTERVAL", "0"))
