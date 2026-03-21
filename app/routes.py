@@ -55,9 +55,23 @@ def home():
                  .limit(limit).all())
         return cat, posts
 
-    # seção "Sports" do layout vira um bloco de categoria selecionável
-    selected_cat_slug = (request.args.get("cat") or "").strip() or "esportes"
+    # seção rotativa por categoria
+    selected_cat_slug = (request.args.get("cat") or "").strip() or "cidade"
     selected_cat, selected_posts = cat_posts(selected_cat_slug, 8)
+
+    category_sections = []
+    for cat in Category.query.order_by(Category.name.asc()).limit(8).all():
+        posts = (Post.query.join(Post.categories)
+                 .filter(Category.id == cat.id)
+                 .order_by(desc(Post.published_at))
+                 .limit(6).all())
+        if posts:
+            category_sections.append({"category": cat, "posts": posts})
+
+    if not selected_cat and category_sections:
+        selected_cat = category_sections[0]["category"]
+        selected_posts = category_sections[0]["posts"]
+        selected_cat_slug = selected_cat.slug
 
     # Popular do dia (top posts com mais pageviews nas últimas 24h)
     since = datetime.utcnow() - timedelta(hours=24)
@@ -87,6 +101,7 @@ def home():
         selected_posts=selected_posts,
         popular_posts=popular_posts,
         selected_cat_slug=selected_cat_slug,
+        category_sections=category_sections,
         live_title=live_title,
         live_embed_html=live_embed_html,
         ad_header=_get_ad("header_top"),

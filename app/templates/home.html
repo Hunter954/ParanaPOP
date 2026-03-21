@@ -1,162 +1,128 @@
 {% extends "base.html" %}
 {% block content %}
+{% set destaque = latest[0] if latest|length > 0 else none %}
+{% set principal = latest[1] if latest|length > 1 else destaque %}
+{% set brasil_posts = popular_posts if popular_posts else latest[2:5] %}
+{% set grid_posts = latest[2:5] %}
+{% set cidade_sections = category_sections if category_sections else ([{"category": selected_cat, "posts": selected_posts}] if selected_cat else []) %}
 
-<!-- faixa superior (vermelha/rosa) -->
-<div class="ad-strip mb-4">
-  {% if ad_home_top %}
-    <div class="ad-box">{{ ad_home_top|safe }}</div>
-  {% else %}
-    <div class="ad-placeholder" aria-hidden="true"></div>
-  {% endif %}
-</div>
-
-<!-- HERO -->
-<section class="hero-grid">
-  {% set hero = latest[0] if latest|length > 0 else none %}
-  {% set r1 = latest[1] if latest|length > 1 else none %}
-  {% set r2 = latest[2] if latest|length > 2 else none %}
-
-  <div class="hero-left">
-    {% if hero %}
-      <a class="hero-card" href="{{ url_for('site.post', slug=hero.slug) }}">
-        <div class="hero-img" style="background-image:url('{{ hero.featured_image or '' }}')"></div>
-        <div class="hero-overlay">
-          <div class="tag">{{ (hero.categories[0].name if hero.categories else 'Notícias') }}</div>
-          <h1 class="hero-title">{{ hero.title|safe }}</h1>
-          <div class="meta">Por {{ hero.author_name or 'Redação' }} • {{ hero.published_at.strftime('%d %b, %Y') if hero.published_at else '' }}</div>
-        </div>
-      </a>
-    {% endif %}
-  </div>
-
-  <div class="hero-right">
-    {% for p in [r1, r2] if p %}
-      <a class="side-card" href="{{ url_for('site.post', slug=p.slug) }}">
-        <div class="side-img" style="background-image:url('{{ p.featured_image or '' }}')"></div>
-        <div class="side-overlay">
-          <div class="tag">{{ (p.categories[0].name if p.categories else 'Notícias') }}</div>
-          <div class="side-title">{{ p.title|safe }}</div>
-          <div class="meta">Por {{ p.author_name or 'Redação' }} • {{ p.published_at.strftime('%d %b, %Y') if p.published_at else '' }}</div>
-        </div>
-      </a>
-    {% endfor %}
-  </div>
-</section>
-
-<!-- 4 cards abaixo do hero -->
-<section class="mini-grid">
-  {% for p in latest[3:7] %}
-    <a class="mini-card" href="{{ url_for('site.post', slug=p.slug) }}">
-      <div class="mini-img" style="background-image:url('{{ p.featured_image or '' }}')"></div>
-      <div class="mini-body">
-        <div class="mini-meta">Por {{ p.author_name or 'Redação' }} • {{ p.published_at.strftime('%d %b, %Y') if p.published_at else '' }}</div>
-        <div class="mini-title">{{ p.title|safe }}</div>
-      </div>
-    </a>
-  {% endfor %}
-</section>
-
-<!-- faixa meio -->
-<div class="ad-strip my-4">
-  {% if ad_home_mid %}
-    <div class="ad-box">{{ ad_home_mid|safe }}</div>
-  {% else %}
-    <div class="ad-placeholder" aria-hidden="true"></div>
-  {% endif %}
-</div>
-
-<!-- RECENT + POPULAR -->
-<section class="content-grid">
-  <div class="content-left">
-    <div class="section-head">
-      <h2>Recent Post</h2>
-      <div class="section-line"></div>
-    </div>
-
-    <div class="recent-grid">
-      {% for p in latest[7:13] %}
-        <a class="recent-card" href="{{ url_for('site.post', slug=p.slug) }}">
-          <div class="recent-img" style="background-image:url('{{ p.featured_image or '' }}')"></div>
-          <div class="recent-body">
-            <div class="tag small">{{ (p.categories[0].name if p.categories else 'Notícias') }}</div>
-            <div class="recent-title">{{ p.title|safe }}</div>
-            <div class="meta">Por {{ p.author_name or 'Redação' }} • {{ p.published_at.strftime('%d %b, %Y') if p.published_at else '' }}</div>
-          </div>
-        </a>
-      {% endfor %}
-    </div>
-  </div>
-
-  <aside class="content-right">
-    <div class="section-head">
-      <h2>Popular Post</h2>
-      <div class="section-line"></div>
-    </div>
-
-    <div class="popular-list">
-      {% for p in popular_posts %}
-        <a class="popular-item" href="{{ url_for('site.post', slug=p.slug) }}">
-          <div class="popular-rank">{{ loop.index }}</div>
-          <div class="popular-body">
-            <div class="tag small">{{ (p.categories[0].name if p.categories else 'Notícias') }}</div>
-            <div class="popular-title">{{ p.title|safe }}</div>
-          </div>
-        </a>
-      {% endfor %}
-
-      {% if not popular_posts %}
-        <div class="small text-muted">Sem dados ainda — assim que o site tiver acessos, essa lista aparece.</div>
-      {% endif %}
-    </div>
-
-    <div class="sidebar-ads">
-      {% if ad_sidebar_1 %}
-        <div class="ad-box mb-3">{{ ad_sidebar_1|safe }}</div>
-      {% else %}
-        <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
-      {% endif %}
-      {% if ad_sidebar_2 %}
-        <div class="ad-box">{{ ad_sidebar_2|safe }}</div>
-      {% else %}
-        <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
-      {% endif %}
-    </div>
-  </aside>
-</section>
-
-<!-- CATEGORIAS ("Sports" vira categoria selecionável) -->
-<section class="category-block">
-  <div class="section-head">
-    <h2>{{ selected_cat.name if selected_cat else 'Categorias' }}</h2>
+<section class="pp-section">
+  <div class="section-head pp-head">
+    <h2>Últimas Notícias</h2>
     <div class="section-line"></div>
   </div>
 
-  <div class="cat-tabs">
-    {% for c in nav_categories[:8] %}
-      <a class="cat-tab {% if c.slug == selected_cat_slug %}active{% endif %}" href="{{ url_for('site.home', cat=c.slug) }}">{{ c.name }}</a>
-    {% endfor %}
-  </div>
-
-  <div class="mini-grid mini-grid--wide">
-    {% for p in selected_posts[:4] %}
-      <a class="mini-card" href="{{ url_for('site.post', slug=p.slug) }}">
-        <div class="mini-img" style="background-image:url('{{ p.featured_image or '' }}')"></div>
-        <div class="mini-body">
-          <div class="mini-meta">Por {{ p.author_name or 'Redação' }} • {{ p.published_at.strftime('%d %b, %Y') if p.published_at else '' }}</div>
-          <div class="mini-title">{{ p.title|safe }}</div>
-        </div>
+  <div class="home-top-grid">
+    <div class="left-news-column">
+      {% if destaque %}
+      <a class="lead-thumb-card" href="{{ url_for('site.post', slug=destaque.slug) }}">
+        <div class="thumb-card-image" style="background-image:url('{{ destaque.featured_image or '' }}')"></div>
       </a>
-    {% endfor %}
+      {% endif %}
+
+      <div class="thumb-grid-row">
+        {% for p in grid_posts %}
+        <a class="news-tile-card" href="{{ url_for('site.post', slug=p.slug) }}">
+          <div class="thumb-card-image thumb-small" style="background-image:url('{{ p.featured_image or '' }}')"></div>
+          <div class="story-meta-row">
+            <span class="tag">{{ (p.categories[0].name if p.categories else 'Notícias') }}</span>
+            <span class="date-label">{{ p.published_at.strftime('%d de %B de %Y') if p.published_at else '' }}</span>
+          </div>
+          <h3>{{ p.title|safe }}</h3>
+          <p>{{ p.excerpt or p.content_html|striptags|truncate(115) }}</p>
+        </a>
+        {% endfor %}
+      </div>
+
+      <div class="home-inline-banner">
+        {% if ad_home_mid %}
+          <div class="ad-box">{{ ad_home_mid|safe }}</div>
+        {% else %}
+          <div class="ad-placeholder banner-wide" aria-hidden="true"></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="main-story-column">
+      {% if principal %}
+      <article class="main-story-card">
+        <div class="story-meta-row">
+          <span class="tag">{{ (principal.categories[0].name if principal.categories else 'Notícias') }}</span>
+          <span class="date-label">{{ principal.published_at.strftime('%d de %B de %Y') if principal.published_at else '' }}</span>
+        </div>
+        <h1>{{ principal.title|safe }}</h1>
+        <p>{{ principal.excerpt or principal.content_html|striptags|truncate(250) }}</p>
+      </article>
+      {% endif %}
+    </div>
+
+    <aside class="right-news-column">
+      <div class="section-head pp-head side-head">
+        <h2>Brasil</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="sidebar-stack">
+        {% for p in brasil_posts[:3] %}
+        <a class="side-story-card" href="{{ url_for('site.post', slug=p.slug) }}">
+          <div class="thumb-card-image side-thumb" style="background-image:url('{{ p.featured_image or '' }}')"></div>
+          <div class="story-meta-row">
+            <span class="tag">{{ (p.categories[0].name if p.categories else 'Notícias') }}</span>
+            <span class="date-label">{{ p.published_at.strftime('%d de %B de %Y') if p.published_at else '' }}</span>
+          </div>
+          <h3>{{ p.title|safe }}</h3>
+        </a>
+        {% endfor %}
+      </div>
+    </aside>
   </div>
 </section>
 
-<!-- faixa inferior -->
-<div class="ad-strip my-4">
-  {% if ad_home_bottom %}
-    <div class="ad-box">{{ ad_home_bottom|safe }}</div>
-  {% else %}
-    <div class="ad-placeholder" aria-hidden="true"></div>
-  {% endif %}
-</div>
+<section class="pp-section rotative-section" data-rotative>
+  <div class="section-head pp-head rotative-head">
+    <h2 class="rotative-title">{{ cidade_sections[0].category.name if cidade_sections else 'Cidade' }}</h2>
+    <div class="section-line"></div>
+    <div class="rotative-controls">
+      <button type="button" class="rotative-arrow" data-rotative-prev aria-label="Categoria anterior">‹</button>
+      <button type="button" class="rotative-arrow" data-rotative-next aria-label="Próxima categoria">›</button>
+    </div>
+  </div>
 
+  <div class="rotative-track" data-rotative-track>
+    {% for section in cidade_sections %}
+    <article class="rotative-panel" data-title="{{ section.category.name }}">
+      <div class="rotative-layout">
+        <div class="rotative-posts">
+          {% for p in section.posts[:4] %}
+          <a class="city-story-row" href="{{ url_for('site.post', slug=p.slug) }}">
+            <div class="thumb-card-image city-thumb" style="background-image:url('{{ p.featured_image or '' }}')"></div>
+            <div class="city-story-copy">
+              <h3>{{ p.title|safe }}</h3>
+              <p>{{ p.excerpt or p.content_html|striptags|truncate(150) }}</p>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+
+        <aside class="rotative-ads">
+          <div class="rotative-ad-box">
+            {% if ad_sidebar_1 %}
+              <div class="ad-box">{{ ad_sidebar_1|safe }}</div>
+            {% else %}
+              <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+            {% endif %}
+          </div>
+          <div class="rotative-ad-box">
+            {% if ad_sidebar_2 %}
+              <div class="ad-box">{{ ad_sidebar_2|safe }}</div>
+            {% else %}
+              <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+            {% endif %}
+          </div>
+        </aside>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
 {% endblock %}
