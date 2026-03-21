@@ -19,6 +19,8 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-main
 a{color:inherit}
 img{max-width:100%;display:block}
 .container-xl{max-width:var(--container);padding-left:24px;padding-right:24px}
+.header-shell,.footer-shell,.footer-credit{position:relative}
+.header-topline,.footer-shell,.footer-credit{margin-left:-8px;margin-right:-8px}
 
 .site-header{padding:20px 0 8px}
 .header-shell{display:flex;flex-direction:column;gap:18px}
@@ -26,10 +28,11 @@ img{max-width:100%;display:block}
 .main-nav{display:flex;align-items:center;gap:20px;flex-wrap:nowrap;min-width:0}
 .nav-link{text-decoration:none;text-transform:uppercase;font-size:14px;font-weight:900;letter-spacing:.01em;white-space:nowrap;padding:0}
 .nav-link:hover{opacity:.75}
-.live-chip{background:var(--accent);color:#fff;text-decoration:none;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:900;text-transform:uppercase;line-height:1.15;display:inline-flex;align-items:center;justify-content:center;min-height:48px;min-width:128px}
+.live-chip{background:var(--accent);color:#fff;text-decoration:none;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:900;text-transform:uppercase;line-height:1.15;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;min-width:146px;white-space:nowrap;text-align:center}
+.live-chip i{font-size:15px;line-height:1}
 .brand-row{display:grid;grid-template-columns:120px minmax(0,1fr);gap:26px;align-items:center}
 .brand{display:flex;align-items:center;text-decoration:none}
-.brand img{max-height:92px;width:auto;object-fit:contain}
+.brand img{max-height:106px;width:auto;object-fit:contain}
 .brand-text{font-size:38px;line-height:.88;font-weight:900;text-transform:uppercase;color:#111;display:inline-flex;flex-direction:column;letter-spacing:-.03em}
 .brand-text strong{color:#f6d500}
 .header-panels{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:28px;align-items:stretch}
@@ -128,7 +131,7 @@ img{max-width:100%;display:block}
 
 .site-footer{padding:40px 0 48px;background:#dcdcdc;margin-top:20px}
 .footer-shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);gap:40px;align-items:start}
-.footer-brand img{max-height:88px}
+.footer-brand img{max-height:101px}
 .footer-branding h3{max-width:360px;margin:20px 0 18px;font-size:30px;line-height:1.05;font-weight:900;letter-spacing:-.03em}
 .footer-points{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px;color:#505050;font-size:16px}
 .footer-points li::before{content:"✅ ";}
@@ -140,15 +143,43 @@ img{max-width:100%;display:block}
 .footer-credit a{font-weight:800;text-decoration:none}
 .footer-credit a:hover{text-decoration:underline}
 
-.article-title{font-size:42px;line-height:1.05;font-weight:900}
+.article-title{font-size:42px;line-height:1.05;font-weight:900;margin:0 0 14px}
 .article-meta,.article-content,.article-excerpt,.popular-list,.inner-grid,.right-rail,.content-grid,.recent-grid,.search-row{font-weight:500}
 .search-row{display:flex;gap:10px;margin:10px 0 18px}
 .search-row input{flex:1;height:40px;border-radius:999px;border:1px solid rgba(0,0,0,.1);padding:0 14px;outline:none}
 .search-row button{height:40px;border-radius:999px;border:0;background:#111;color:#fff;padding:0 16px;font-weight:900}
 .inner-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:28px}
+.article-layout{align-items:start;padding-top:10px}
+.article-category-head{margin:0 0 18px}
+.article{min-width:0}
+.article-meta{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}
+.article-tags{display:flex;flex-wrap:wrap;gap:8px}
+.meta{font-size:13px;color:#6f6f6f}
+.article-cover{margin-bottom:18px}
+.article-excerpt{margin:0 0 22px}
+.article-content{font-size:17px;line-height:1.75;color:#1f1f1f}
+.article-content p{margin:0 0 1.25em}
+.article-content iframe,.article-content table{max-width:100%}
+.article-inline-banner{margin:28px 0 32px}
+.article-related-block{margin-top:0}
+.article-related-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.related-tile-card{background:transparent}
+.related-tile-card .thumb-small{height:154px}
+.article-rail{display:flex;flex-direction:column;gap:24px}
+.rail-block{display:flex;flex-direction:column;gap:14px}
+.rail-head{margin-bottom:0}
+.rail-latest-list{display:flex;flex-direction:column;gap:18px}
+.rail-story-card .side-thumb{height:150px}
+.rail-ads-stack{display:flex;flex-direction:column;gap:18px}
+.rail-ad-box{height:228px}
+.recent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.recent-card{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;text-decoration:none}
+.recent-img{height:132px;border-radius:14px;background:#c9c9c9 center/cover no-repeat}
+.recent-body{min-width:0}
+.recent-title{font-size:22px;line-height:1.05;font-weight:900;margin:10px 0 8px;letter-spacing:-.02em}
 .article-cover{border-radius:14px}
 .article-excerpt{border-left:4px solid var(--line);background:#fff;padding:14px;border-radius:12px}
-.article-content img{max-width:100%;height:auto}
+.article-content img{max-width:100%;height:auto;border-radius:14px}
 
 @media (max-width: 1199px){
   .container-xl{padding-left:18px;padding-right:18px}
@@ -219,6 +250,7 @@ img{max-width:100%;display:block}
   }
 
   .footer-shell,.inner-grid{grid-template-columns:1fr}
+  .article-related-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 @media (max-width: 767px){
@@ -226,10 +258,12 @@ img{max-width:100%;display:block}
   .header-shell{gap:12px}
   .main-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:10px 14px}
   .nav-link{font-size:13px;white-space:normal}
-  .live-chip{font-size:11px;min-height:42px;min-width:116px}
+  .live-chip{font-size:11px;min-height:42px;min-width:132px}
   .brand-text{font-size:34px}
   .feature-thumb{height:220px}
   .news-card-row,.sidebar-stack{grid-template-columns:1fr}
+  .article-related-grid,.recent-grid{grid-template-columns:1fr}
+  .recent-card{grid-template-columns:1fr}
   .main-story-card h1{font-size:32px;max-width:none}
   .news-tile-card h3,.side-story-card h3{font-size:22px}
   .city-story-row{grid-template-columns:1fr;gap:12px}
@@ -238,3 +272,6 @@ img{max-width:100%;display:block}
   .rotative-ads{flex-direction:column}
   .section-head h2{font-size:20px}
 }
+
+.right-rail .ad-placeholder,.right-rail .ad-box{width:100%}
+.article-rail .ad-placeholder--square{height:228px}

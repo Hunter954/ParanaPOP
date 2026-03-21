@@ -2,8 +2,13 @@
 {% block title %} - {{ post.title|striptags }}{% endblock %}
 {% block content %}
 
-<div class="inner-grid">
+<div class="inner-grid article-layout">
   <article class="article">
+    <div class="section-head article-category-head">
+      <h2>{{ post.categories[0].name if post.categories else 'Notícias' }}</h2>
+      <div class="section-line"></div>
+    </div>
+
     <h1 class="article-title">{{ post.title|safe }}</h1>
 
     <div class="article-meta">
@@ -28,25 +33,82 @@
     <div class="article-content">
       {{ post.content_html|safe }}
     </div>
-  </article>
 
-  <aside class="right-rail">
-    <div class="section-head">
-      <h2>Publicidade</h2>
-      <div class="section-line"></div>
+    <div class="article-inline-banner">
+      {% if ad_home_mid %}
+        <div class="ad-box">{{ ad_home_mid|safe }}</div>
+      {% else %}
+        <div class="ad-placeholder banner-wide" aria-hidden="true"></div>
+      {% endif %}
     </div>
 
-    {% if ad_sidebar_1 %}
-      <div class="ad-box mb-3">{{ ad_sidebar_1|safe }}</div>
-    {% else %}
-      <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+    {% if related_posts %}
+    <section class="article-related-block">
+      <div class="section-head pp-head related-head">
+        <h2>Mais de {{ related_label }}</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="article-related-grid">
+        {% for p in related_posts %}
+        <a class="news-tile-card related-tile-card" href="{{ url_for('site.post', slug=p.slug) }}">
+          <div class="thumb-card-image thumb-small" style="background-image:url('{{ p.featured_image or '' }}')"></div>
+          <div class="story-meta-row">
+            <span class="tag">{{ (p.categories[0].name if p.categories else related_label) }}</span>
+            <span class="date-label">{{ format_date_br(p.published_at) }}</span>
+          </div>
+          <h3>{{ clean_text(p.title, 78) }}</h3>
+          <p>{{ clean_text(p.excerpt or p.content_html, 115) }}</p>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </article>
+
+  <aside class="right-rail article-rail">
+    {% if latest_posts %}
+    <section class="rail-block">
+      <div class="section-head pp-head rail-head">
+        <h2>Últimas matérias</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="rail-latest-list">
+        {% for p in latest_posts %}
+        <a class="side-story-card rail-story-card" href="{{ url_for('site.post', slug=p.slug) }}">
+          <div class="thumb-card-image side-thumb" style="background-image:url('{{ p.featured_image or '' }}')"></div>
+          <div class="story-meta-row">
+            <span class="tag">{{ (p.categories[0].name if p.categories else 'Notícias') }}</span>
+            <span class="date-label">{{ format_date_br(p.published_at) }}</span>
+          </div>
+          <h3>{{ clean_text(p.title, 80) }}</h3>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
     {% endif %}
 
-    {% if ad_sidebar_2 %}
-      <div class="ad-box">{{ ad_sidebar_2|safe }}</div>
-    {% else %}
-      <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
-    {% endif %}
+    <section class="rail-block">
+      <div class="section-head pp-head rail-head">
+        <h2>Publicidade</h2>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="rail-ads-stack">
+        {% if ad_sidebar_1 %}
+          <div class="ad-box rail-ad-box">{{ ad_sidebar_1|safe }}</div>
+        {% else %}
+          <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+        {% endif %}
+
+        {% if ad_sidebar_2 %}
+          <div class="ad-box rail-ad-box">{{ ad_sidebar_2|safe }}</div>
+        {% else %}
+          <div class="ad-placeholder ad-placeholder--square" aria-hidden="true"></div>
+        {% endif %}
+      </div>
+    </section>
   </aside>
 </div>
 

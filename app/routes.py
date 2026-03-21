@@ -146,10 +146,42 @@ def post(slug):
     if not post:
         abort(404)
     _track_view(post.id)
+
+    category_ids = [c.id for c in post.categories]
+    latest_posts = (Post.query
+                    .filter(Post.id != post.id)
+                    .order_by(desc(Post.published_at))
+                    .limit(4)
+                    .all())
+
+    related_posts = []
+    if category_ids:
+        related_posts = (Post.query.join(Post.categories)
+                         .filter(Category.id.in_(category_ids), Post.id != post.id)
+                         .order_by(desc(Post.published_at))
+                         .limit(6)
+                         .all())
+
+    if len(related_posts) < 6:
+        existing_ids = {p.id for p in related_posts}
+        existing_ids.add(post.id)
+        complement = (Post.query
+                      .filter(~Post.id.in_(list(existing_ids)))
+                      .order_by(desc(Post.published_at))
+                      .limit(6 - len(related_posts))
+                      .all())
+        related_posts.extend(complement)
+
+    related_label = post.categories[0].name if post.categories else "Notícias"
+
     return render_template(
         "post.html",
         post=post,
+        latest_posts=latest_posts,
+        related_posts=related_posts,
+        related_label=related_label,
         ad_header=_get_ad("header_top"),
+        ad_home_mid=_get_ad("home_mid"),
         ad_sidebar_1=_get_ad("sidebar_1"),
         ad_sidebar_2=_get_ad("sidebar_2"),
     )
