@@ -13,7 +13,7 @@
 </head>
 <body>
   <header class="site-header">
-    <div class="container-xl header-shell">
+    <div class="container-xl site-header-container header-shell">
       <div class="header-topline">
         <nav class="main-nav" aria-label="Menu principal">
           <a class="nav-link" href="{{ url_for('site.home') }}">Início</a>
@@ -63,7 +63,7 @@
   </main>
 
   <footer class="site-footer">
-    <div class="container-xl footer-shell">
+    <div class="container-xl site-footer-container footer-shell">
       <div class="footer-branding">
         <a class="brand footer-brand" href="{{ url_for('site.home') }}">
           {% if logo_url %}
@@ -94,7 +94,7 @@
         </div>
       </div>
     </div>
-    <div class="container-xl footer-credit">
+    <div class="container-xl site-footer-container footer-credit">
       Desenvolvido e Atualizado por: <a href="https://www.instagram.com/kpremoli/" target="_blank" rel="noopener">Kevin Premoli</a>
     </div>
   </footer>
