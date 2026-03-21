@@ -70,10 +70,10 @@ img{max-width:100%;display:block}
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
   gap:14px;
-  margin-top:-42px;
+  margin-top:-12px;
 }
 
-.home-inline-banner{grid-area:banner;margin-top:-6px}
+.home-inline-banner{grid-area:banner;margin-top:0}
 .lead-thumb-card,.news-tile-card,.side-story-card,.city-story-row{text-decoration:none;display:block}
 .thumb-card-image{background:#c9c9c9 center/cover no-repeat;border-radius:14px}
 .feature-thumb{height:228px}
@@ -182,7 +182,7 @@ img{max-width:100%;display:block}
   }
 
   .news-card-row{
-    margin-top:-10px;
+    margin-top:-6px;
   }
 }
 
