@@ -35,100 +35,143 @@ document.addEventListener('DOMContentLoaded', () => {
     syncTitle();
   });
 
-  const body = document.body;
-  const menuToggle = document.querySelector('[data-mobile-menu-toggle]');
-  const drawer = document.getElementById('mobileMenuDrawer');
-  const menuCloser = document.querySelectorAll('[data-mobile-menu-close]');
+  const drawer = document.getElementById('mobileDrawer');
+  const drawerBackdrop = document.querySelector('.mobile-drawer-backdrop');
+  const menuOpenBtn = document.querySelector('[data-mobile-menu-open]');
+  const menuCloseBtns = document.querySelectorAll('[data-mobile-menu-close]');
 
-  const closeMenu = () => {
-    body.classList.remove('mobile-menu-open');
-    if (drawer) drawer.setAttribute('aria-hidden', 'true');
-    if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
+  const openDrawer = () => {
+    if (!drawer || !drawerBackdrop) return;
+    drawer.hidden = false;
+    drawerBackdrop.hidden = false;
+    requestAnimationFrame(() => {
+      drawer.classList.add('is-open');
+      drawerBackdrop.classList.add('is-open');
+    });
+    drawer.setAttribute('aria-hidden', 'false');
+    menuOpenBtn?.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
   };
 
-  menuToggle?.addEventListener('click', () => {
-    const willOpen = !body.classList.contains('mobile-menu-open');
-    body.classList.toggle('mobile-menu-open', willOpen);
-    if (drawer) drawer.setAttribute('aria-hidden', String(!willOpen));
-    menuToggle.setAttribute('aria-expanded', String(willOpen));
+  const closeDrawer = () => {
+    if (!drawer || !drawerBackdrop) return;
+    drawer.classList.remove('is-open');
+    drawerBackdrop.classList.remove('is-open');
+    drawer.setAttribute('aria-hidden', 'true');
+    menuOpenBtn?.setAttribute('aria-expanded', 'false');
+    window.setTimeout(() => {
+      drawer.hidden = true;
+      drawerBackdrop.hidden = true;
+    }, 240);
+    document.body.style.overflow = '';
+  };
+
+  menuOpenBtn?.addEventListener('click', openDrawer);
+  menuCloseBtns.forEach((btn) => btn.addEventListener('click', closeDrawer));
+  drawer?.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeDrawer));
+
+  const pipRoot = document.getElementById('livePip');
+  const pipWindow = document.getElementById('livePipWindow');
+  const pipBody = document.getElementById('livePipBody');
+  const pipHandle = document.getElementById('livePipHandle');
+  const liveHost = document.getElementById('liveCamHost');
+  const liveOpenBtns = document.querySelectorAll('[data-live-open]');
+  const liveCloseBtn = document.querySelector('[data-live-close]');
+  const liveResizeBtn = document.querySelector('[data-live-resize]');
+
+  if (!liveHost || !pipRoot || !pipWindow || !pipBody) return;
+
+  const livePlaceholder = document.createElement('div');
+  livePlaceholder.style.display = 'none';
+  liveHost.parentNode?.insertBefore(livePlaceholder, liveHost);
+
+  const iconSwap = (expanded) => {
+    const icon = liveResizeBtn?.querySelector('i');
+    if (!icon) return;
+    icon.className = expanded ? 'bi bi-arrows-angle-contract' : 'bi bi-arrows-angle-expand';
+  };
+
+  const openPip = () => {
+    pipRoot.hidden = false;
+    pipRoot.setAttribute('aria-hidden', 'false');
+    pipBody.appendChild(liveHost);
+    pipWindow.style.right = '14px';
+    pipWindow.style.left = 'auto';
+    pipWindow.style.bottom = '90px';
+    pipWindow.style.top = 'auto';
+  };
+
+  const closePip = () => {
+    if (livePlaceholder.parentNode) {
+      livePlaceholder.parentNode.insertBefore(liveHost, livePlaceholder.nextSibling);
+    }
+    pipRoot.hidden = true;
+    pipRoot.setAttribute('aria-hidden', 'true');
+  };
+
+  liveOpenBtns.forEach((btn) => btn.addEventListener('click', (event) => {
+    event.preventDefault();
+    openPip();
+  }));
+
+  liveCloseBtn?.addEventListener('click', closePip);
+
+  liveResizeBtn?.addEventListener('click', () => {
+    const expanded = pipWindow.classList.toggle('live-pip-window--large');
+    iconSwap(expanded);
   });
 
-  menuCloser.forEach((item) => item.addEventListener('click', closeMenu));
-  drawer?.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeMenu));
+  let dragState = null;
 
-  const pipRoot = document.getElementById('livecamPip');
-  const pipWindow = pipRoot?.querySelector('[data-livecam-window]');
-  const dragBar = pipRoot?.querySelector('[data-livecam-drag]');
-  const openBtn = document.querySelector('[data-livecam-open]');
-  const closeBtn = pipRoot?.querySelector('[data-livecam-close]');
-  const sizeBtn = pipRoot?.querySelector('[data-livecam-size]');
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
-  if (pipRoot && pipWindow && dragBar) {
-    let posX = 14;
-    let posY = 94;
-    let activePointerId = null;
-    let startX = 0;
-    let startY = 0;
-    let originX = posX;
-    let originY = posY;
-
-    const clamp = () => {
-      const maxX = Math.max(12, window.innerWidth - pipWindow.offsetWidth - 12);
-      const maxY = Math.max(76, window.innerHeight - pipWindow.offsetHeight - 12);
-      posX = Math.min(Math.max(12, posX), maxX);
-      posY = Math.min(Math.max(76, posY), maxY);
+  const startDrag = (clientX, clientY) => {
+    const rect = pipWindow.getBoundingClientRect();
+    pipWindow.classList.add('is-dragging');
+    dragState = {
+      startX: clientX,
+      startY: clientY,
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
     };
+    pipWindow.style.left = `${rect.left}px`;
+    pipWindow.style.top = `${rect.top}px`;
+    pipWindow.style.right = 'auto';
+    pipWindow.style.bottom = 'auto';
+  };
 
-    const paint = () => {
-      clamp();
-      pipWindow.style.left = `${posX}px`;
-      pipWindow.style.top = `${posY}px`;
-    };
+  const moveDrag = (clientX, clientY) => {
+    if (!dragState) return;
+    const margin = 8;
+    const maxLeft = window.innerWidth - dragState.width - margin;
+    const maxTop = window.innerHeight - dragState.height - margin;
+    const nextLeft = clamp(dragState.left + (clientX - dragState.startX), margin, maxLeft);
+    const nextTop = clamp(dragState.top + (clientY - dragState.startY), margin, maxTop);
+    pipWindow.style.left = `${nextLeft}px`;
+    pipWindow.style.top = `${nextTop}px`;
+  };
 
-    const openPip = () => {
-      pipRoot.hidden = false;
-      pipRoot.setAttribute('aria-hidden', 'false');
-      paint();
-    };
+  const endDrag = () => {
+    pipWindow.classList.remove('is-dragging');
+    dragState = null;
+  };
 
-    const closePip = () => {
-      pipRoot.hidden = true;
-      pipRoot.setAttribute('aria-hidden', 'true');
-    };
+  pipHandle?.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('button')) return;
+    startDrag(event.clientX, event.clientY);
+    pipHandle.setPointerCapture?.(event.pointerId);
+  });
 
-    openBtn?.addEventListener('click', openPip);
-    closeBtn?.addEventListener('click', closePip);
-    sizeBtn?.addEventListener('click', () => {
-      pipWindow.classList.toggle('is-large');
-      paint();
-    });
+  window.addEventListener('pointermove', (event) => moveDrag(event.clientX, event.clientY));
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
 
-    dragBar.addEventListener('pointerdown', (event) => {
-      if (event.target.closest('button')) return;
-      activePointerId = event.pointerId;
-      startX = event.clientX;
-      startY = event.clientY;
-      originX = posX;
-      originY = posY;
-      dragBar.setPointerCapture(activePointerId);
-    });
-
-    dragBar.addEventListener('pointermove', (event) => {
-      if (activePointerId !== event.pointerId) return;
-      posX = originX + (event.clientX - startX);
-      posY = originY + (event.clientY - startY);
-      paint();
-    });
-
-    const releaseDrag = (event) => {
-      if (activePointerId !== event.pointerId) return;
-      dragBar.releasePointerCapture(activePointerId);
-      activePointerId = null;
-    };
-
-    dragBar.addEventListener('pointerup', releaseDrag);
-    dragBar.addEventListener('pointercancel', releaseDrag);
-    window.addEventListener('resize', paint);
-    paint();
-  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeDrawer();
+      closePip();
+    }
+  });
 });

@@ -15,11 +15,11 @@
   <header class="site-header">
     <div class="container-xl site-header-container header-shell">
       <div class="mobile-topbar d-md-none">
-        <button class="mobile-icon-btn mobile-live-btn" type="button" aria-label="Abrir câmera ao vivo" data-livecam-open>
+        <button class="mobile-action mobile-live-trigger" type="button" aria-label="Abrir câmera ao vivo" data-live-open>
           <i class="bi bi-camera-video-fill" aria-hidden="true"></i>
         </button>
 
-        <a class="brand mobile-brand" href="{{ url_for('site.home') }}" aria-label="Home">
+        <a class="mobile-brand" href="{{ url_for('site.home') }}" aria-label="Home">
           {% if logo_url %}
             <img src="{{ logo_url }}" alt="{{ config.SITE_NAME }}" />
           {% else %}
@@ -27,27 +27,10 @@
           {% endif %}
         </a>
 
-        <button class="mobile-icon-btn mobile-menu-btn" type="button" aria-label="Abrir menu" aria-controls="mobileMenuDrawer" aria-expanded="false" data-mobile-menu-toggle>
+        <button class="mobile-action mobile-menu-trigger" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="mobileDrawer" data-mobile-menu-open>
           <i class="bi bi-list" aria-hidden="true"></i>
         </button>
       </div>
-
-      <div class="mobile-menu-backdrop d-md-none" data-mobile-menu-close></div>
-      <aside class="mobile-menu-drawer d-md-none" id="mobileMenuDrawer" aria-hidden="true">
-        <div class="mobile-menu-head">
-          <strong>Menu</strong>
-          <button class="mobile-menu-close" type="button" aria-label="Fechar menu" data-mobile-menu-close>
-            <i class="bi bi-x-lg" aria-hidden="true"></i>
-          </button>
-        </div>
-        <nav class="mobile-menu-list" aria-label="Menu mobile">
-          <a class="mobile-menu-link" href="{{ url_for('site.home') }}">Início</a>
-          {% for c in nav_categories[:7] %}
-            {% set short_name = c.name.split(' e ')[-1].strip() if ' e ' in c.name else c.name %}
-            <a class="mobile-menu-link" href="{{ url_for('site.category', slug=c.slug) }}">{{ short_name }}</a>
-          {% endfor %}
-        </nav>
-      </aside>
 
       <div class="header-topline desktop-topline">
         <nav class="main-nav" aria-label="Menu principal">
@@ -82,37 +65,51 @@
           </div>
 
           <div class="weather-box" id="meteorologia">
-            {% if live_embed_html %}
-              {{ live_embed_html|safe }}
-            {% else %}
-              <div class="weather-placeholder">Meteorologia</div>
-            {% endif %}
+            <div class="live-cam-host" id="liveCamHost">
+              {% if live_embed_html %}
+                {{ live_embed_html|safe }}
+              {% else %}
+                <div class="weather-placeholder">Meteorologia</div>
+              {% endif %}
+            </div>
           </div>
         </div>
       </div>
     </div>
   </header>
 
-  {% if live_embed_html %}
-    <div class="livecam-pip d-md-none" id="livecamPip" hidden aria-hidden="true">
-      <div class="livecam-pip-window" data-livecam-window>
-        <div class="livecam-pip-bar" data-livecam-drag>
-          <span><i class="bi bi-camera-video-fill" aria-hidden="true"></i> Câmera ao vivo</span>
-          <div class="livecam-pip-actions">
-            <button type="button" class="livecam-pip-btn" aria-label="Alternar tamanho" data-livecam-size>
-              <i class="bi bi-arrows-angle-expand" aria-hidden="true"></i>
-            </button>
-            <button type="button" class="livecam-pip-btn" aria-label="Fechar câmera" data-livecam-close>
-              <i class="bi bi-x-lg" aria-hidden="true"></i>
-            </button>
-          </div>
-        </div>
-        <div class="livecam-pip-body">
-          {{ live_embed_html|safe }}
+  <div class="mobile-drawer-backdrop" data-mobile-menu-close hidden></div>
+  <aside class="mobile-drawer" id="mobileDrawer" aria-hidden="true">
+    <div class="mobile-drawer-head">
+      <strong>Menu</strong>
+      <button class="mobile-drawer-close" type="button" aria-label="Fechar menu" data-mobile-menu-close>
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+    <nav class="mobile-drawer-nav" aria-label="Menu mobile">
+      <a class="mobile-drawer-link" href="{{ url_for('site.home') }}">Início</a>
+      {% for c in nav_categories[:12] %}
+        <a class="mobile-drawer-link" href="{{ url_for('site.category', slug=c.slug) }}">{{ (c.name.split(' e ')|last) if ' e ' in c.name else c.name }}</a>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <div class="live-pip" id="livePip" hidden aria-hidden="true">
+    <div class="live-pip-window live-pip-window--small" id="livePipWindow">
+      <div class="live-pip-bar" id="livePipHandle">
+        <span class="live-pip-title"><i class="bi bi-camera-video-fill" aria-hidden="true"></i> Ao vivo</span>
+        <div class="live-pip-actions">
+          <button class="live-pip-btn" type="button" aria-label="Aumentar ou reduzir" data-live-resize>
+            <i class="bi bi-arrows-angle-expand" aria-hidden="true"></i>
+          </button>
+          <button class="live-pip-btn" type="button" aria-label="Fechar transmissão" data-live-close>
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
         </div>
       </div>
+      <div class="live-pip-body" id="livePipBody"></div>
     </div>
-  {% endif %}
+  </div>
 
   <main class="container-xl main-wrap">
     {% block content %}{% endblock %}
