@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const pipRoot = document.getElementById('livecamPip');
   const pipWindow = pipRoot?.querySelector('[data-livecam-window]');
   const dragBar = pipRoot?.querySelector('[data-livecam-drag]');
-  const openBtn = document.querySelector('[data-livecam-open]');
+  const openButtons = Array.from(document.querySelectorAll('[data-livecam-open]'));
   const closeBtn = pipRoot?.querySelector('[data-livecam-close]');
   const sizeBtn = pipRoot?.querySelector('[data-livecam-size]');
   const video = document.getElementById('livecam');
@@ -72,8 +72,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const TZ = 'America/Sao_Paulo';
     const locations = ['Ponte Internacional da Amizade', 'Ciudad Del Este - PY'];
 
-    let posX = 14;
-    let posY = 94;
+    let posX = window.innerWidth <= 767 ? 14 : Math.max(12, window.innerWidth - 438);
+    let posY = window.innerWidth <= 767 ? 94 : 108;
     let activePointerId = null;
     let startX = 0;
     let startY = 0;
@@ -173,7 +173,10 @@ document.addEventListener('DOMContentLoaded', () => {
       video.pause();
     };
 
-    openBtn?.addEventListener('click', openPip);
+    openButtons.forEach((button) => button.addEventListener('click', (event) => {
+      event.preventDefault();
+      openPip();
+    }));
     closeBtn?.addEventListener('click', closePip);
     sizeBtn?.addEventListener('click', () => {
       pipWindow.classList.toggle('is-large');
