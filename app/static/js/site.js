@@ -1,46 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const mobileMenuDrawer = document.getElementById('mobileMenuDrawer');
-  const mobileMenuOverlay = document.querySelector('.mobile-menu-overlay');
-  const mobileMenuToggle = document.querySelector('[data-mobile-menu-toggle]');
-  const mobileMenuClosers = document.querySelectorAll('[data-mobile-menu-close]');
-
-  if (mobileMenuDrawer && mobileMenuOverlay && mobileMenuToggle) {
-    const closeMobileMenu = () => {
-      document.body.classList.remove('mobile-menu-open');
-      mobileMenuDrawer.classList.remove('is-open');
-      mobileMenuOverlay.classList.remove('is-open');
-      mobileMenuOverlay.hidden = true;
-      mobileMenuDrawer.setAttribute('aria-hidden', 'true');
-      mobileMenuToggle.setAttribute('aria-expanded', 'false');
-    };
-
-    const openMobileMenu = () => {
-      document.body.classList.add('mobile-menu-open');
-      mobileMenuDrawer.classList.add('is-open');
-      mobileMenuOverlay.classList.add('is-open');
-      mobileMenuOverlay.hidden = false;
-      mobileMenuDrawer.setAttribute('aria-hidden', 'false');
-      mobileMenuToggle.setAttribute('aria-expanded', 'true');
-    };
-
-    mobileMenuToggle.addEventListener('click', () => {
-      if (mobileMenuDrawer.classList.contains('is-open')) closeMobileMenu();
-      else openMobileMenu();
-    });
-
-    mobileMenuClosers.forEach((button) => {
-      button.addEventListener('click', closeMobileMenu);
-    });
-
-    mobileMenuDrawer.querySelectorAll('a').forEach((link) => {
-      link.addEventListener('click', closeMobileMenu);
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeMobileMenu();
-    });
-  }
-
   document.querySelectorAll('[data-rotative]').forEach((section) => {
     const track = section.querySelector('[data-rotative-track]');
     const title = section.querySelector('.rotative-title');
@@ -76,4 +34,101 @@ document.addEventListener('DOMContentLoaded', () => {
 
     syncTitle();
   });
+
+  const body = document.body;
+  const menuToggle = document.querySelector('[data-mobile-menu-toggle]');
+  const drawer = document.getElementById('mobileMenuDrawer');
+  const menuCloser = document.querySelectorAll('[data-mobile-menu-close]');
+
+  const closeMenu = () => {
+    body.classList.remove('mobile-menu-open');
+    if (drawer) drawer.setAttribute('aria-hidden', 'true');
+    if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
+  };
+
+  menuToggle?.addEventListener('click', () => {
+    const willOpen = !body.classList.contains('mobile-menu-open');
+    body.classList.toggle('mobile-menu-open', willOpen);
+    if (drawer) drawer.setAttribute('aria-hidden', String(!willOpen));
+    menuToggle.setAttribute('aria-expanded', String(willOpen));
+  });
+
+  menuCloser.forEach((item) => item.addEventListener('click', closeMenu));
+  drawer?.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeMenu));
+
+  const pipRoot = document.getElementById('livecamPip');
+  const pipWindow = pipRoot?.querySelector('[data-livecam-window]');
+  const dragBar = pipRoot?.querySelector('[data-livecam-drag]');
+  const openBtn = document.querySelector('[data-livecam-open]');
+  const closeBtn = pipRoot?.querySelector('[data-livecam-close]');
+  const sizeBtn = pipRoot?.querySelector('[data-livecam-size]');
+
+  if (pipRoot && pipWindow && dragBar) {
+    let posX = 14;
+    let posY = 94;
+    let activePointerId = null;
+    let startX = 0;
+    let startY = 0;
+    let originX = posX;
+    let originY = posY;
+
+    const clamp = () => {
+      const maxX = Math.max(12, window.innerWidth - pipWindow.offsetWidth - 12);
+      const maxY = Math.max(76, window.innerHeight - pipWindow.offsetHeight - 12);
+      posX = Math.min(Math.max(12, posX), maxX);
+      posY = Math.min(Math.max(76, posY), maxY);
+    };
+
+    const paint = () => {
+      clamp();
+      pipWindow.style.left = `${posX}px`;
+      pipWindow.style.top = `${posY}px`;
+    };
+
+    const openPip = () => {
+      pipRoot.hidden = false;
+      pipRoot.setAttribute('aria-hidden', 'false');
+      paint();
+    };
+
+    const closePip = () => {
+      pipRoot.hidden = true;
+      pipRoot.setAttribute('aria-hidden', 'true');
+    };
+
+    openBtn?.addEventListener('click', openPip);
+    closeBtn?.addEventListener('click', closePip);
+    sizeBtn?.addEventListener('click', () => {
+      pipWindow.classList.toggle('is-large');
+      paint();
+    });
+
+    dragBar.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('button')) return;
+      activePointerId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+      originX = posX;
+      originY = posY;
+      dragBar.setPointerCapture(activePointerId);
+    });
+
+    dragBar.addEventListener('pointermove', (event) => {
+      if (activePointerId !== event.pointerId) return;
+      posX = originX + (event.clientX - startX);
+      posY = originY + (event.clientY - startY);
+      paint();
+    });
+
+    const releaseDrag = (event) => {
+      if (activePointerId !== event.pointerId) return;
+      dragBar.releasePointerCapture(activePointerId);
+      activePointerId = null;
+    };
+
+    dragBar.addEventListener('pointerup', releaseDrag);
+    dragBar.addEventListener('pointercancel', releaseDrag);
+    window.addEventListener('resize', paint);
+    paint();
+  }
 });
