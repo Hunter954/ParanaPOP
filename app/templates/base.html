@@ -43,7 +43,7 @@
         <nav class="mobile-drawer-nav" aria-label="Menu principal mobile">
           <a class="mobile-drawer-link" href="{{ url_for('site.home') }}">Início</a>
           {% for c in nav_categories[:7] %}
-            <a class="mobile-drawer-link" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
+            <a class="mobile-drawer-link" href="{{ url_for('site.category', slug=c.slug) }}">{% if c.name|lower == 'ciência e tecnologia' or c.name|lower == 'ciencia e tecnologia' %}Tecnologia{% else %}{{ c.name.split(' e ')[-1] if ' e ' in c.name else c.name }}{% endif %}</a>
           {% endfor %}
         </nav>
       </aside>
