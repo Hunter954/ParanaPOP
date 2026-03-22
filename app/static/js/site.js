@@ -34,4 +34,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     syncTitle();
   });
+
+  const mobileMenuToggle = document.querySelector('[data-mobile-menu-toggle]');
+  const mobileMenu = document.getElementById('mobileSiteMenu');
+
+  if (mobileMenuToggle && mobileMenu) {
+    mobileMenuToggle.addEventListener('click', () => {
+      const isOpen = mobileMenu.classList.toggle('is-open');
+      mobileMenuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    mobileMenu.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 767) {
+          mobileMenu.classList.remove('is-open');
+          mobileMenuToggle.setAttribute('aria-expanded', 'false');
+        }
+      });
+    });
+  }
+
 });

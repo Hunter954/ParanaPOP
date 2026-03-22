@@ -23,6 +23,11 @@ img{max-width:100%;display:block}
 .site-header-container,.site-footer-container{padding-left:16px;padding-right:16px}
 
 .site-header{padding:20px 0 8px}
+.mobile-topbar{display:none}
+.mobile-icon-btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border:0;cursor:pointer;background:var(--accent);color:#fff;border-radius:999px;width:44px;height:44px;box-shadow:none;flex:0 0 44px}
+.mobile-icon-btn i{font-size:20px;line-height:1}
+.mobile-brand{min-width:0;justify-content:center}
+.mobile-brand img{max-height:62px;width:auto;object-fit:contain}
 .header-shell{display:flex;flex-direction:column;gap:18px}
 .header-topline{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .main-nav{display:flex;align-items:center;gap:20px;flex-wrap:nowrap;min-width:0}
@@ -256,10 +261,20 @@ img{max-width:100%;display:block}
 
 @media (max-width: 767px){
   .main-wrap{padding-bottom:32px}
+  .site-header{padding:14px 0 8px}
   .header-shell{gap:12px}
-  .main-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:10px 14px}
+  .mobile-topbar{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:10px;min-height:52px}
+  .mobile-brand{position:absolute;left:50%;transform:translateX(-50%);max-width:calc(100% - 116px)}
+  .mobile-brand img{max-height:56px;margin:0 auto}
+  .mobile-brand .brand-text{font-size:24px;align-items:center;text-align:center}
+  .header-topline{display:none;width:100%;background:var(--surface);border-radius:16px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+  .header-topline.is-open{display:flex}
+  .main-nav{display:grid;grid-template-columns:1fr 1fr;width:100%;gap:10px 12px}
   .nav-link{font-size:13px;white-space:normal}
-  .live-chip{font-size:11px;min-height:42px;min-width:132px}
+  .live-chip{display:none}
+  .brand-row{gap:14px}
+  .brand-row>.brand{display:none}
+  .header-panels{gap:14px}
   .brand-text{font-size:34px}
   .feature-thumb{height:220px}
   .news-card-row,.sidebar-stack{grid-template-columns:1fr}

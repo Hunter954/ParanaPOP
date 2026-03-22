@@ -14,7 +14,25 @@
 <body>
   <header class="site-header">
     <div class="container-xl site-header-container header-shell">
-      <div class="header-topline">
+      <div class="mobile-topbar">
+        <button class="mobile-icon-btn mobile-menu-btn" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="mobileSiteMenu" data-mobile-menu-toggle>
+          <i class="bi bi-list" aria-hidden="true"></i>
+        </button>
+
+        <a class="brand mobile-brand" href="{{ url_for('site.home') }}" aria-label="Home">
+          {% if logo_url %}
+            <img src="{{ logo_url }}" alt="{{ config.SITE_NAME }}" />
+          {% else %}
+            <span class="brand-text">Paraná <strong>POP</strong></span>
+          {% endif %}
+        </a>
+
+        <a class="mobile-icon-btn mobile-live-btn" href="#meteorologia" aria-label="Câmera ao vivo">
+          <i class="bi bi-camera-video-fill" aria-hidden="true"></i>
+        </a>
+      </div>
+
+      <div class="header-topline" id="mobileSiteMenu">
         <nav class="main-nav" aria-label="Menu principal">
           <a class="nav-link" href="{{ url_for('site.home') }}">Início</a>
           {% for c in nav_categories[:7] %}
