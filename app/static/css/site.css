@@ -23,11 +23,24 @@ img{max-width:100%;display:block}
 .site-header-container,.site-footer-container{padding-left:16px;padding-right:16px}
 
 .site-header{padding:20px 0 8px}
-.mobile-topbar{display:none}
-.mobile-icon-btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border:0;cursor:pointer;background:var(--accent);color:#fff;border-radius:999px;width:44px;height:44px;box-shadow:none;flex:0 0 44px}
-.mobile-icon-btn i{font-size:20px;line-height:1}
-.mobile-brand{min-width:0;justify-content:center}
-.mobile-brand img{max-height:62px;width:auto;object-fit:contain}
+.mobile-header-bar,.mobile-menu-overlay,.mobile-menu-drawer{display:none}
+.mobile-header-bar{position:relative;align-items:center;justify-content:space-between;min-height:72px;padding:6px 0}
+.mobile-brand{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);justify-content:center;max-width:calc(100% - 120px);z-index:1}
+.mobile-brand img{max-height:56px;width:auto;object-fit:contain}
+.mobile-icon-button{width:44px;height:44px;border:0;border-radius:999px;background:#111;color:#fff;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:20px;position:relative;z-index:2;box-shadow:0 10px 24px rgba(0,0,0,.18)}
+.mobile-icon-button:hover{opacity:.9;color:#fff}
+.mobile-live-button{background:var(--accent)}
+.mobile-menu-button{margin-left:auto}
+.mobile-menu-overlay{position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:1040}
+.mobile-menu-drawer{position:fixed;top:0;right:0;width:min(82vw,320px);height:100vh;background:#fff;z-index:1041;box-shadow:-18px 0 42px rgba(0,0,0,.22);padding:20px 18px 24px;transform:translateX(100%);transition:transform .26s ease;display:flex;flex-direction:column;gap:18px}
+.mobile-menu-drawer.is-open{transform:translateX(0)}
+.mobile-menu-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(0,0,0,.08)}
+.mobile-menu-drawer-head strong{font-size:18px;font-weight:900;text-transform:uppercase;letter-spacing:.02em}
+.mobile-drawer-close{width:38px;height:38px;border:0;border-radius:999px;background:#111;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:16px}
+.mobile-drawer-nav{display:flex;flex-direction:column;gap:8px}
+.mobile-drawer-link{text-decoration:none;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;padding:12px 10px;border-radius:12px;background:#f4f4f4}
+.mobile-drawer-link:hover{background:#ebebeb}
+body.mobile-menu-open{overflow:hidden}
 .header-shell{display:flex;flex-direction:column;gap:18px}
 .header-topline{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .main-nav{display:flex;align-items:center;gap:20px;flex-wrap:nowrap;min-width:0}
@@ -260,21 +273,14 @@ img{max-width:100%;display:block}
 }
 
 @media (max-width: 767px){
+  .site-header{padding-top:12px}
   .main-wrap{padding-bottom:32px}
-  .site-header{padding:14px 0 8px}
   .header-shell{gap:12px}
-  .mobile-topbar{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:10px;min-height:52px}
-  .mobile-brand{position:absolute;left:50%;transform:translateX(-50%);max-width:calc(100% - 116px)}
-  .mobile-brand img{max-height:56px;margin:0 auto}
-  .mobile-brand .brand-text{font-size:24px;align-items:center;text-align:center}
-  .header-topline{display:none;width:100%;background:var(--surface);border-radius:16px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
-  .header-topline.is-open{display:flex}
-  .main-nav{display:grid;grid-template-columns:1fr 1fr;width:100%;gap:10px 12px}
-  .nav-link{font-size:13px;white-space:normal}
-  .live-chip{display:none}
+  .mobile-header-bar{display:flex}
+  .mobile-menu-overlay.is-open,.mobile-menu-drawer{display:block}
+  .header-topline{display:none}
   .brand-row{gap:14px}
-  .brand-row>.brand{display:none}
-  .header-panels{gap:14px}
+  .brand-row > .brand{display:none}
   .brand-text{font-size:34px}
   .feature-thumb{height:220px}
   .news-card-row,.sidebar-stack{grid-template-columns:1fr}

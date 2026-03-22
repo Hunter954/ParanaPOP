@@ -14,10 +14,10 @@
 <body>
   <header class="site-header">
     <div class="container-xl site-header-container header-shell">
-      <div class="mobile-topbar">
-        <button class="mobile-icon-btn mobile-menu-btn" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="mobileSiteMenu" data-mobile-menu-toggle>
-          <i class="bi bi-list" aria-hidden="true"></i>
-        </button>
+      <div class="mobile-header-bar d-md-none">
+        <a class="mobile-icon-button mobile-live-button" href="#meteorologia" aria-label="Câmeras ao vivo">
+          <i class="bi bi-camera-video-fill" aria-hidden="true"></i>
+        </a>
 
         <a class="brand mobile-brand" href="{{ url_for('site.home') }}" aria-label="Home">
           {% if logo_url %}
@@ -27,12 +27,28 @@
           {% endif %}
         </a>
 
-        <a class="mobile-icon-btn mobile-live-btn" href="#meteorologia" aria-label="Câmera ao vivo">
-          <i class="bi bi-camera-video-fill" aria-hidden="true"></i>
-        </a>
+        <button class="mobile-icon-button mobile-menu-button" type="button" aria-label="Abrir menu" aria-controls="mobileMenuDrawer" aria-expanded="false" data-mobile-menu-toggle>
+          <i class="bi bi-list" aria-hidden="true"></i>
+        </button>
       </div>
 
-      <div class="header-topline" id="mobileSiteMenu">
+      <div class="mobile-menu-overlay d-md-none" hidden data-mobile-menu-close></div>
+      <aside class="mobile-menu-drawer d-md-none" id="mobileMenuDrawer" aria-hidden="true" aria-label="Menu mobile">
+        <div class="mobile-menu-drawer-head">
+          <strong>Menu</strong>
+          <button class="mobile-drawer-close" type="button" aria-label="Fechar menu" data-mobile-menu-close>
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </div>
+        <nav class="mobile-drawer-nav" aria-label="Menu principal mobile">
+          <a class="mobile-drawer-link" href="{{ url_for('site.home') }}">Início</a>
+          {% for c in nav_categories[:7] %}
+            <a class="mobile-drawer-link" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
+          {% endfor %}
+        </nav>
+      </aside>
+
+      <div class="header-topline">
         <nav class="main-nav" aria-label="Menu principal">
           <a class="nav-link" href="{{ url_for('site.home') }}">Início</a>
           {% for c in nav_categories[:7] %}
