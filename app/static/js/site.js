@@ -35,143 +35,181 @@ document.addEventListener('DOMContentLoaded', () => {
     syncTitle();
   });
 
-  const drawer = document.getElementById('mobileDrawer');
-  const drawerBackdrop = document.querySelector('.mobile-drawer-backdrop');
-  const menuOpenBtn = document.querySelector('[data-mobile-menu-open]');
-  const menuCloseBtns = document.querySelectorAll('[data-mobile-menu-close]');
+  const body = document.body;
+  const menuToggle = document.querySelector('[data-mobile-menu-toggle]');
+  const drawer = document.getElementById('mobileMenuDrawer');
+  const menuCloser = document.querySelectorAll('[data-mobile-menu-close]');
 
-  const openDrawer = () => {
-    if (!drawer || !drawerBackdrop) return;
-    drawer.hidden = false;
-    drawerBackdrop.hidden = false;
-    requestAnimationFrame(() => {
-      drawer.classList.add('is-open');
-      drawerBackdrop.classList.add('is-open');
-    });
-    drawer.setAttribute('aria-hidden', 'false');
-    menuOpenBtn?.setAttribute('aria-expanded', 'true');
-    document.body.style.overflow = 'hidden';
+  const closeMenu = () => {
+    body.classList.remove('mobile-menu-open');
+    if (drawer) drawer.setAttribute('aria-hidden', 'true');
+    if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
   };
 
-  const closeDrawer = () => {
-    if (!drawer || !drawerBackdrop) return;
-    drawer.classList.remove('is-open');
-    drawerBackdrop.classList.remove('is-open');
-    drawer.setAttribute('aria-hidden', 'true');
-    menuOpenBtn?.setAttribute('aria-expanded', 'false');
-    window.setTimeout(() => {
-      drawer.hidden = true;
-      drawerBackdrop.hidden = true;
-    }, 240);
-    document.body.style.overflow = '';
-  };
-
-  menuOpenBtn?.addEventListener('click', openDrawer);
-  menuCloseBtns.forEach((btn) => btn.addEventListener('click', closeDrawer));
-  drawer?.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeDrawer));
-
-  const pipRoot = document.getElementById('livePip');
-  const pipWindow = document.getElementById('livePipWindow');
-  const pipBody = document.getElementById('livePipBody');
-  const pipHandle = document.getElementById('livePipHandle');
-  const liveHost = document.getElementById('liveCamHost');
-  const liveOpenBtns = document.querySelectorAll('[data-live-open]');
-  const liveCloseBtn = document.querySelector('[data-live-close]');
-  const liveResizeBtn = document.querySelector('[data-live-resize]');
-
-  if (!liveHost || !pipRoot || !pipWindow || !pipBody) return;
-
-  const livePlaceholder = document.createElement('div');
-  livePlaceholder.style.display = 'none';
-  liveHost.parentNode?.insertBefore(livePlaceholder, liveHost);
-
-  const iconSwap = (expanded) => {
-    const icon = liveResizeBtn?.querySelector('i');
-    if (!icon) return;
-    icon.className = expanded ? 'bi bi-arrows-angle-contract' : 'bi bi-arrows-angle-expand';
-  };
-
-  const openPip = () => {
-    pipRoot.hidden = false;
-    pipRoot.setAttribute('aria-hidden', 'false');
-    pipBody.appendChild(liveHost);
-    pipWindow.style.right = '14px';
-    pipWindow.style.left = 'auto';
-    pipWindow.style.bottom = '90px';
-    pipWindow.style.top = 'auto';
-  };
-
-  const closePip = () => {
-    if (livePlaceholder.parentNode) {
-      livePlaceholder.parentNode.insertBefore(liveHost, livePlaceholder.nextSibling);
-    }
-    pipRoot.hidden = true;
-    pipRoot.setAttribute('aria-hidden', 'true');
-  };
-
-  liveOpenBtns.forEach((btn) => btn.addEventListener('click', (event) => {
-    event.preventDefault();
-    openPip();
-  }));
-
-  liveCloseBtn?.addEventListener('click', closePip);
-
-  liveResizeBtn?.addEventListener('click', () => {
-    const expanded = pipWindow.classList.toggle('live-pip-window--large');
-    iconSwap(expanded);
+  menuToggle?.addEventListener('click', () => {
+    const willOpen = !body.classList.contains('mobile-menu-open');
+    body.classList.toggle('mobile-menu-open', willOpen);
+    if (drawer) drawer.setAttribute('aria-hidden', String(!willOpen));
+    menuToggle.setAttribute('aria-expanded', String(willOpen));
   });
 
-  let dragState = null;
+  menuCloser.forEach((item) => item.addEventListener('click', closeMenu));
+  drawer?.querySelectorAll('a').forEach((link) => link.addEventListener('click', closeMenu));
 
-  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+  const pipRoot = document.getElementById('livecamPip');
+  const pipWindow = pipRoot?.querySelector('[data-livecam-window]');
+  const dragBar = pipRoot?.querySelector('[data-livecam-drag]');
+  const openBtn = document.querySelector('[data-livecam-open]');
+  const closeBtn = pipRoot?.querySelector('[data-livecam-close]');
+  const sizeBtn = pipRoot?.querySelector('[data-livecam-size]');
+  const video = document.getElementById('livecam');
+  const clockEl = document.getElementById('liveclock');
+  const locBox = document.getElementById('live-loc');
+  const locText = document.getElementById('loc-text');
 
-  const startDrag = (clientX, clientY) => {
-    const rect = pipWindow.getBoundingClientRect();
-    pipWindow.classList.add('is-dragging');
-    dragState = {
-      startX: clientX,
-      startY: clientY,
-      left: rect.left,
-      top: rect.top,
-      width: rect.width,
-      height: rect.height,
+  if (pipRoot && pipWindow && dragBar && video) {
+    const STREAM_URL = 'https://video04.logicahost.com.br/portovelhomamore/fozpontedaamizadesentidobrasil.stream/playlist.m3u8';
+    const TZ = 'America/Sao_Paulo';
+    const locations = ['Ponte Internacional da Amizade', 'Ciudad Del Este - PY'];
+
+    let posX = 14;
+    let posY = 94;
+    let activePointerId = null;
+    let startX = 0;
+    let startY = 0;
+    let originX = posX;
+    let originY = posY;
+    let liveHls = null;
+    let liveInitialized = false;
+    let rotationIndex = 0;
+    let locationTimer = null;
+
+    const ensurePlay = () => {
+      video.play().catch(() => {});
     };
-    pipWindow.style.left = `${rect.left}px`;
-    pipWindow.style.top = `${rect.top}px`;
-    pipWindow.style.right = 'auto';
-    pipWindow.style.bottom = 'auto';
-  };
 
-  const moveDrag = (clientX, clientY) => {
-    if (!dragState) return;
-    const margin = 8;
-    const maxLeft = window.innerWidth - dragState.width - margin;
-    const maxTop = window.innerHeight - dragState.height - margin;
-    const nextLeft = clamp(dragState.left + (clientX - dragState.startX), margin, maxLeft);
-    const nextTop = clamp(dragState.top + (clientY - dragState.startY), margin, maxTop);
-    pipWindow.style.left = `${nextLeft}px`;
-    pipWindow.style.top = `${nextTop}px`;
-  };
+    const tickClock = () => {
+      if (!clockEl) return;
+      try {
+        clockEl.textContent = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: TZ,
+          hour12: false,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        }).format(new Date());
+      } catch (error) {
+        const now = new Date();
+        const pad = (value) => String(value).padStart(2, '0');
+        clockEl.textContent = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      }
+    };
 
-  const endDrag = () => {
-    pipWindow.classList.remove('is-dragging');
-    dragState = null;
-  };
+    const startLocationRotation = () => {
+      if (!locBox || !locText || locationTimer) return;
+      locationTimer = window.setInterval(() => {
+        locBox.classList.add('fade');
+        window.setTimeout(() => {
+          rotationIndex = (rotationIndex + 1) % locations.length;
+          locText.textContent = locations[rotationIndex];
+          locBox.classList.remove('fade');
+        }, 450);
+      }, 5000);
+    };
 
-  pipHandle?.addEventListener('pointerdown', (event) => {
-    if (event.target.closest('button')) return;
-    startDrag(event.clientX, event.clientY);
-    pipHandle.setPointerCapture?.(event.pointerId);
-  });
+    const initLivecam = () => {
+      if (liveInitialized) {
+        ensurePlay();
+        return;
+      }
 
-  window.addEventListener('pointermove', (event) => moveDrag(event.clientX, event.clientY));
-  window.addEventListener('pointerup', endDrag);
-  window.addEventListener('pointercancel', endDrag);
+      tickClock();
+      window.setInterval(tickClock, 1000);
+      startLocationRotation();
 
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      closeDrawer();
-      closePip();
-    }
-  });
+      document.addEventListener('click', ensurePlay, { once: true });
+      document.addEventListener('touchstart', ensurePlay, { once: true });
+
+      if (window.Hls && window.Hls.isSupported()) {
+        liveHls = new window.Hls({ enableWorker: true });
+        liveHls.loadSource(STREAM_URL);
+        liveHls.attachMedia(video);
+        liveHls.on(window.Hls.Events.MEDIA_ATTACHED, ensurePlay);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = STREAM_URL;
+        video.addEventListener('canplay', ensurePlay, { once: true });
+      }
+
+      liveInitialized = true;
+    };
+
+    const clamp = () => {
+      const maxX = Math.max(12, window.innerWidth - pipWindow.offsetWidth - 12);
+      const maxY = Math.max(76, window.innerHeight - pipWindow.offsetHeight - 12);
+      posX = Math.min(Math.max(12, posX), maxX);
+      posY = Math.min(Math.max(76, posY), maxY);
+    };
+
+    const paint = () => {
+      clamp();
+      pipWindow.style.left = `${posX}px`;
+      pipWindow.style.top = `${posY}px`;
+    };
+
+    const openPip = () => {
+      initLivecam();
+      pipRoot.hidden = false;
+      pipRoot.setAttribute('aria-hidden', 'false');
+      paint();
+      ensurePlay();
+    };
+
+    const closePip = () => {
+      pipRoot.hidden = true;
+      pipRoot.setAttribute('aria-hidden', 'true');
+      video.pause();
+    };
+
+    openBtn?.addEventListener('click', openPip);
+    closeBtn?.addEventListener('click', closePip);
+    sizeBtn?.addEventListener('click', () => {
+      pipWindow.classList.toggle('is-large');
+      paint();
+    });
+
+    dragBar.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('button')) return;
+      activePointerId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+      originX = posX;
+      originY = posY;
+      dragBar.setPointerCapture(activePointerId);
+    });
+
+    dragBar.addEventListener('pointermove', (event) => {
+      if (activePointerId !== event.pointerId) return;
+      posX = originX + (event.clientX - startX);
+      posY = originY + (event.clientY - startY);
+      paint();
+    });
+
+    const releaseDrag = (event) => {
+      if (activePointerId !== event.pointerId) return;
+      try {
+        dragBar.releasePointerCapture(activePointerId);
+      } catch (error) {
+        // ignore
+      }
+      activePointerId = null;
+    };
+
+    dragBar.addEventListener('pointerup', releaseDrag);
+    dragBar.addEventListener('pointercancel', releaseDrag);
+    window.addEventListener('resize', paint);
+    paint();
+  }
 });
