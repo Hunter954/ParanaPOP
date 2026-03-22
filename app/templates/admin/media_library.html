@@ -1,0 +1,43 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Mídia{% endblock %}
+{% block page_title %}Biblioteca de mídia{% endblock %}
+{% block page_subtitle %}Envie logos, capas e banners para o volume persistente do Railway e use o link direto depois.{% endblock %}
+{% block admin_content %}
+<section class="panel-card">
+  <div class="panel-head"><div><h2>Upload para volume</h2><p>Os arquivos ficam salvos em <code>{{ admin_media_root }}</code>.</p></div></div>
+  <form method="post" action="{{ url_for('admin.media_upload') }}" enctype="multipart/form-data" class="upload-box">
+    <input class="form-control" type="file" name="files" multiple>
+    <button class="btn btn-dark" type="submit">Enviar arquivos</button>
+  </form>
+</section>
+
+<section class="panel-card mt-4">
+  <div class="panel-head"><div><h2>Arquivos enviados</h2><p>Você pode copiar o link final e usar na logo, matérias e anúncios.</p></div></div>
+  <div class="table-responsive">
+    <table class="table admin-table align-middle">
+      <thead><tr><th>Arquivo</th><th>Link</th><th>Tamanho</th><th>Atualizado</th><th></th></tr></thead>
+      <tbody>
+        {% for file in files %}
+        <tr>
+          <td><strong>{{ file.name }}</strong></td>
+          <td><input class="form-control form-control-sm" readonly value="{{ request.host_url[:-1] }}{{ file.url }}"></td>
+          <td>{{ file.size_kb }} KB</td>
+          <td>{{ file.updated_at.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td class="text-end">
+            <div class="d-flex gap-2 justify-content-end">
+              <a class="btn btn-sm btn-outline-dark" href="{{ file.url }}" target="_blank" rel="noopener">Abrir</a>
+              <form method="post" action="{{ url_for('admin.media_delete') }}" onsubmit="return confirm('Excluir este arquivo?');">
+                <input type="hidden" name="url" value="{{ file.url }}">
+                <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-5">Nenhum arquivo disponível ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

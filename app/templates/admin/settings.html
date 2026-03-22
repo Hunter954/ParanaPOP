@@ -1,0 +1,24 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Configurações{% endblock %}
+{% block page_title %}Configurações{% endblock %}
+{% block page_subtitle %}Área separada para branding, logo, nome do site e embed de AO VIVO.{% endblock %}
+{% block admin_content %}
+<section class="admin-grid-2">
+  <div class="panel-card">
+    <div class="panel-head"><div><h2>Identidade visual</h2><p>Use link ou arquivo para a logo.</p></div></div>
+    <form method="post" action="{{ url_for('admin.save_logo') }}" enctype="multipart/form-data" class="vstack gap-3">
+      <div><label class="form-label">Nome do site</label><input class="form-control" name="site_name" value="{{ site_name }}"></div>
+      <div><label class="form-label">Logo por link</label><input class="form-control" name="logo_url" value="{{ logo_url }}" placeholder="https://.../logo.png"></div>
+      <div><label class="form-label">Logo por arquivo</label><input class="form-control" type="file" name="logo_file" accept=".png,.jpg,.jpeg,.webp,.svg,.gif"></div>
+      <div class="d-flex justify-content-end"><button class="btn btn-dark" type="submit">Salvar branding</button></div>
+    </form>
+  </div>
+  <div class="panel-card">
+    <div class="panel-head"><div><h2>AO VIVO</h2><p>Iframe, script ou embed personalizado.</p></div></div>
+    <form method="post" action="{{ url_for('admin.save_live') }}">
+      <textarea class="form-control" name="live_embed_html" rows="11">{{ live_embed }}</textarea>
+      <div class="d-flex justify-content-end mt-3"><button class="btn btn-dark" type="submit">Salvar embed</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}

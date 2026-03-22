@@ -1,0 +1,25 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}{% if mode=='new' %}Nova categoria{% else %}Editar categoria{% endif %}{% endblock %}
+{% block page_title %}{% if mode=='new' %}Nova categoria{% else %}Editar categoria{% endif %}{% endblock %}
+{% block page_subtitle %}Crie ou ajuste editorias para deixar o portal mais organizado.{% endblock %}
+{% block admin_content %}
+<section class="panel-card form-narrow">
+  <form method="post">
+    {{ form.csrf_token }}
+    <div class="vstack gap-3">
+      <div><label class="form-label">Nome</label>{{ form.name(class='form-control') }}</div>
+      <div><label class="form-label">Slug</label>{{ form.slug(class='form-control', placeholder='gera automático se deixar vazio') }}</div>
+    </div>
+    <div class="d-flex gap-2 mt-4">
+      <button class="btn btn-dark" type="submit">Salvar categoria</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.categories_list') }}">Voltar</a>
+    </div>
+  </form>
+  {% if category %}
+  <hr>
+  <form method="post" action="{{ url_for('admin.categories_delete', category_id=category.id) }}" onsubmit="return confirm('Deseja excluir esta categoria?');">
+    <button class="btn btn-outline-danger" type="submit">Excluir categoria</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

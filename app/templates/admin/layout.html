@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block admin_title %}Admin{% endblock %} • Paraná POP</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+</head>
+<body class="admin-shell">
+  <div class="admin-app">
+    <aside class="admin-sidebar" id="adminSidebar">
+      <div class="admin-brand">
+        <div>
+          <span class="eyebrow">Painel administrativo</span>
+          <strong>Paraná POP</strong>
+        </div>
+        <button class="btn btn-sm btn-outline-light d-lg-none" type="button" data-admin-sidebar-close>
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <nav class="admin-nav">
+        <a class="admin-nav-link {% if section=='dashboard' %}active{% endif %}" href="{{ url_for('admin.dashboard') }}"><i class="bi bi-speedometer2"></i><span>Visão geral</span></a>
+        <a class="admin-nav-link {% if section=='posts' %}active{% endif %}" href="{{ url_for('admin.posts_list') }}"><i class="bi bi-newspaper"></i><span>Matérias</span></a>
+        <a class="admin-nav-link {% if section=='categories' %}active{% endif %}" href="{{ url_for('admin.categories_list') }}"><i class="bi bi-tags"></i><span>Categorias</span></a>
+        <a class="admin-nav-link {% if section=='media' %}active{% endif %}" href="{{ url_for('admin.media_library') }}"><i class="bi bi-images"></i><span>Biblioteca de mídia</span></a>
+        <a class="admin-nav-link {% if section in ['settings'] %}active{% endif %}" href="{{ url_for('admin.settings_page') }}"><i class="bi bi-sliders"></i><span>Configurações</span></a>
+        <a class="admin-nav-link {% if section=='ads' %}active{% endif %}" href="{{ url_for('admin.dashboard') }}#ads"><i class="bi bi-badge-ad"></i><span>Publicidade</span></a>
+      </nav>
+
+      <div class="admin-sidebar-footer">
+        <small>Uploads no Railway</small>
+        <code>{{ admin_media_root }}</code>
+      </div>
+    </aside>
+
+    <div class="admin-overlay" data-admin-sidebar-close></div>
+
+    <main class="admin-main">
+      <header class="admin-topbar">
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-outline-secondary d-lg-none" type="button" data-admin-sidebar-open>
+            <i class="bi bi-list"></i>
+          </button>
+          <div>
+            <div class="admin-title">{% block page_title %}Admin{% endblock %}</div>
+            <div class="admin-subtitle">{% block page_subtitle %}Gerencie o portal com mais controle e organização.{% endblock %}</div>
+          </div>
+        </div>
+        <div class="admin-top-actions">
+          <a class="btn btn-outline-dark" href="{{ url_for('site.home') }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Ver site</a>
+          <a class="btn btn-dark" href="{{ url_for('admin.logout') }}">Sair</a>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="admin-flashes">
+            {% for cat, msg in messages %}
+              <div class="alert alert-{{ cat }} mb-0">{{ msg }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block admin_content %}{% endblock %}
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</body>
+</html>

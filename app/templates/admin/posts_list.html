@@ -1,0 +1,42 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Matérias{% endblock %}
+{% block page_title %}Matérias{% endblock %}
+{% block page_subtitle %}Crie, edite e acompanhe conteúdos locais e importados em um só lugar.{% endblock %}
+{% block admin_content %}
+<section class="panel-card">
+  <div class="panel-head"><div><h2>Gerenciamento editorial</h2><p>Use filtros para separar matérias locais das sincronizadas.</p></div><a class="btn btn-dark" href="{{ url_for('admin.posts_new') }}">Nova matéria</a></div>
+  <form class="row g-3 align-items-end mb-3" method="get">
+    <div class="col-md-4"><label class="form-label">Buscar título</label><input class="form-control" name="q" value="{{ term }}" placeholder="Digite parte do título"></div>
+    <div class="col-md-3"><label class="form-label">Origem</label><select class="form-select" name="source"><option value="all" {% if source=='all' %}selected{% endif %}>Todas</option><option value="local" {% if source=='local' %}selected{% endif %}>Locais</option><option value="wp" {% if source=='wp' %}selected{% endif %}>WordPress</option></select></div>
+    <div class="col-md-5 d-flex gap-2"><button class="btn btn-dark" type="submit">Filtrar</button><a class="btn btn-outline-secondary" href="{{ url_for('admin.posts_list') }}">Limpar</a></div>
+  </form>
+  <div class="table-responsive">
+    <table class="table admin-table align-middle">
+      <thead><tr><th>Título</th><th>Categorias</th><th>Origem</th><th>Publicação</th><th></th></tr></thead>
+      <tbody>
+        {% for post in posts %}
+        <tr>
+          <td>
+            <strong>{{ post.title }}</strong>
+            <div class="text-muted small">/{{ post.slug }}</div>
+          </td>
+          <td>
+            {% for cat in post.categories[:3] %}<span class="badge text-bg-light border me-1">{{ cat.name }}</span>{% endfor %}
+          </td>
+          <td><span class="badge rounded-pill text-bg-{% if post.source == 'local' %}dark{% else %}secondary{% endif %}">{{ post.source }}</span></td>
+          <td>{{ format_date_br(post.published_at) if post.published_at else '—' }}</td>
+          <td class="text-end">
+            <div class="btn-group">
+              <a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.posts_edit', post_id=post.id) }}">Editar</a>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Ver</a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-5">Nenhuma matéria encontrada com esse filtro.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

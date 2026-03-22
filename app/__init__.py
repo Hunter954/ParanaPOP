@@ -1,4 +1,6 @@
+import os
 import threading, time
+from pathlib import Path
 from flask import Flask
 from flask_login import LoginManager
 from dotenv import load_dotenv
@@ -17,6 +19,7 @@ login_manager.login_view = "admin.login"
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+
 def _ensure_defaults():
     defaults = [
         ("header_top", "Publicidade (Topo - faixa)"),
@@ -30,14 +33,16 @@ def _ensure_defaults():
         if not AdSlot.query.filter_by(key=key).first():
             db.session.add(AdSlot(key=key, name=name, html="", is_active=True))
 
-    if not SiteSetting.query.filter_by(key="live_embed_html").first():
-        db.session.add(SiteSetting(key="live_embed_html", value=""))
-
-    # Logo do site (URL)
-    if not SiteSetting.query.filter_by(key="logo_url").first():
-        db.session.add(SiteSetting(key="logo_url", value=""))
+    for key, value in [
+        ("live_embed_html", ""),
+        ("logo_url", ""),
+        ("site_name", os.getenv("SITE_NAME", "News")),
+    ]:
+        if not SiteSetting.query.filter_by(key=key).first():
+            db.session.add(SiteSetting(key=key, value=value))
 
     db.session.commit()
+
 
 def _auto_sync_loop(app: Flask):
     with app.app_context():
@@ -50,10 +55,13 @@ def _auto_sync_loop(app: Flask):
                 pass
             time.sleep(app.config["AUTO_SYNC_INTERVAL"])
 
+
 def create_app():
     load_dotenv()
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    Path(app.config["MEDIA_ROOT"]).mkdir(parents=True, exist_ok=True)
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -61,7 +69,6 @@ def create_app():
     app.register_blueprint(site_bp)
     app.register_blueprint(admin_bp)
 
-    # utilitário para templates (data/hora)
     from datetime import datetime
     app.jinja_env.globals["now"] = datetime.now
 
@@ -69,10 +76,6 @@ def create_app():
         db.create_all()
         _ensure_defaults()
 
-        # ✅ ADMIN AUTOMÁTICO (IDEMPOTENTE)
-        # - se não existir: cria
-        # - se existir: garante is_admin e reseta senha
-        # Depois que logar, REMOVA este bloco e commite.
         admin_email = "admin@admin.com"
         admin_password = "senha123"
 

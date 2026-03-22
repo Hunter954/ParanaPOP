@@ -12,3 +12,7 @@ class Config:
 
     SITE_NAME = os.getenv("SITE_NAME", "News")
     LIVE_EMBED_TITLE = os.getenv("LIVE_EMBED_TITLE", "AO VIVO")
+
+    MEDIA_ROOT = os.getenv("MEDIA_ROOT", "/data/uploads")
+    MEDIA_URL_PREFIX = os.getenv("MEDIA_URL_PREFIX", "/media")
+    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(32 * 1024 * 1024)))

@@ -1,11 +1,20 @@
+import os
+import re
+import shutil
 from datetime import datetime, timedelta
+from pathlib import Path
+from uuid import uuid4
+from urllib.parse import urlparse
 
-from flask import Blueprint, render_template, redirect, url_for, request, flash
+from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort
 from flask_login import login_user, logout_user, login_required, current_user
-from sqlalchemy import func
+from sqlalchemy import func, desc
+from werkzeug.utils import secure_filename
 
-from .models import db, User, AdSlot, SiteSetting, PageView
-from .forms import LoginForm, AdSlotForm
+from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories
+from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
+from .wp_client import WPClient
+from .sync import sync_categories, sync_posts
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -17,6 +26,158 @@ def _require_admin():
         flash("Acesso negado.", "danger")
         return redirect(url_for("site.home"))
     return None
+
+
+def _slugify(value: str) -> str:
+    value = (value or "").strip().lower()
+    value = re.sub(r"[^a-z0-9à-úçãõâêîôûäëïöü\s-]", "", value)
+    repl = {
+        "á": "a", "à": "a", "â": "a", "ã": "a", "ä": "a",
+        "é": "e", "ê": "e", "ë": "e",
+        "í": "i", "î": "i", "ï": "i",
+        "ó": "o", "ô": "o", "õ": "o", "ö": "o",
+        "ú": "u", "û": "u", "ü": "u",
+        "ç": "c",
+    }
+    for src, dst in repl.items():
+        value = value.replace(src, dst)
+    value = re.sub(r"[\s_-]+", "-", value)
+    return value.strip("-") or f"item-{uuid4().hex[:8]}"
+
+
+def _ensure_unique_slug(model, desired: str, object_id=None) -> str:
+    base = _slugify(desired)
+    slug = base
+    i = 2
+    while True:
+        q = model.query.filter_by(slug=slug)
+        obj = q.first()
+        if not obj or (object_id and getattr(obj, "id", None) == object_id):
+            return slug
+        slug = f"{base}-{i}"
+        i += 1
+
+
+def _setting(key: str, default: str = "") -> str:
+    s = SiteSetting.query.filter_by(key=key).first()
+    return s.value if s and s.value is not None else default
+
+
+def _save_setting(key: str, value: str) -> None:
+    s = SiteSetting.query.filter_by(key=key).first()
+    if not s:
+        s = SiteSetting(key=key, value=value)
+        db.session.add(s)
+    else:
+        s.value = value
+
+
+def _media_root() -> Path:
+    path = Path(current_app.config["MEDIA_ROOT"]).resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _file_ext(filename: str) -> str:
+    name = secure_filename(filename or "")
+    _, ext = os.path.splitext(name)
+    return ext.lower()
+
+
+def _save_upload(file_storage, subdir: str = "general") -> str:
+    if not file_storage or not getattr(file_storage, "filename", ""):
+        return ""
+    ext = _file_ext(file_storage.filename) or ".bin"
+    day_dir = datetime.utcnow().strftime("%Y/%m/%d")
+    folder = _media_root() / subdir / day_dir
+    folder.mkdir(parents=True, exist_ok=True)
+    fname = f"{uuid4().hex}{ext}"
+    full_path = folder / fname
+    file_storage.save(full_path)
+    rel = full_path.relative_to(_media_root()).as_posix()
+    return f"{current_app.config['MEDIA_URL_PREFIX'].rstrip('/')}/{rel}"
+
+
+def _local_media_path_from_url(url: str) -> Path | None:
+    if not url:
+        return None
+    prefix = current_app.config["MEDIA_URL_PREFIX"].rstrip("/") + "/"
+    parsed = urlparse(url)
+    target_path = parsed.path or url
+    if not target_path.startswith(prefix):
+        return None
+    rel = target_path[len(prefix):].lstrip("/")
+    return _media_root() / rel
+
+
+def _delete_local_media(url: str) -> None:
+    path = _local_media_path_from_url(url)
+    if path and path.exists() and path.is_file():
+        try:
+            path.unlink()
+        except Exception:
+            pass
+
+
+def _dashboard_stats():
+    pv_total = db.session.query(func.count(PageView.id)).scalar() or 0
+    since = datetime.utcnow() - timedelta(hours=24)
+    pv_24h = db.session.query(func.count(PageView.id)).filter(PageView.created_at >= since).scalar() or 0
+    posts_total = db.session.query(func.count(Post.id)).scalar() or 0
+    local_posts = db.session.query(func.count(Post.id)).filter(Post.source == "local").scalar() or 0
+    wp_posts = db.session.query(func.count(Post.id)).filter(Post.source == "wp").scalar() or 0
+    categories_total = db.session.query(func.count(Category.id)).scalar() or 0
+    active_ads = db.session.query(func.count(AdSlot.id)).filter(AdSlot.is_active.is_(True)).scalar() or 0
+    recent_posts = Post.query.order_by(desc(Post.updated_at), desc(Post.published_at)).limit(8).all()
+    popular_posts = (
+        db.session.query(Post, func.count(PageView.id).label("views"))
+        .outerjoin(PageView, PageView.post_id == Post.id)
+        .group_by(Post.id)
+        .order_by(desc("views"), desc(Post.published_at))
+        .limit(8)
+        .all()
+    )
+    return {
+        "pv_total": pv_total,
+        "pv_24h": pv_24h,
+        "posts_total": posts_total,
+        "local_posts": local_posts,
+        "wp_posts": wp_posts,
+        "categories_total": categories_total,
+        "active_ads": active_ads,
+        "recent_posts": recent_posts,
+        "popular_posts": popular_posts,
+    }
+
+
+def _common_admin_context(section: str, **extra):
+    data = {
+        "section": section,
+        "stats": _dashboard_stats(),
+    }
+    data.update(extra)
+    return data
+
+
+def _bind_post_form_choices(form: PostAdminForm):
+    form.categories.choices = [(c.id, c.name) for c in Category.query.order_by(Category.name.asc()).all()]
+
+
+def _fill_post_form_from_obj(form: PostAdminForm, post: Post):
+    form.title.data = post.title
+    form.slug.data = post.slug
+    form.excerpt.data = post.excerpt
+    form.content_html.data = post.content_html
+    form.author_name.data = post.author_name
+    form.featured_image.data = post.featured_image
+    form.categories.data = [c.id for c in post.categories]
+    if post.published_at:
+        form.published_at.data = post.published_at
+
+
+@admin_bp.app_context_processor
+def inject_admin_helpers():
+    return {"admin_media_root": current_app.config.get("MEDIA_ROOT", "/data/uploads")}
 
 
 @admin_bp.get("/login")
@@ -50,25 +211,292 @@ def dashboard():
     r = _require_admin()
     if r:
         return r
-
-    pv_total = db.session.query(func.count(PageView.id)).scalar() or 0
-
-    # Funciona em Postgres/SQLite/etc (sem func.interval que dá erro no Railway)
-    since = datetime.utcnow() - timedelta(hours=24)
-    pv_24h = db.session.query(func.count(PageView.id)).filter(PageView.created_at >= since).scalar() or 0
-
     slots = AdSlot.query.order_by(AdSlot.key.asc()).all()
-    live_embed = SiteSetting.query.filter_by(key="live_embed_html").first()
-    logo_url = SiteSetting.query.filter_by(key="logo_url").first()
-
+    media_files = []
+    root = _media_root()
+    if root.exists():
+        for p in sorted([p for p in root.rglob("*") if p.is_file()], key=lambda x: x.stat().st_mtime, reverse=True)[:8]:
+            media_files.append({
+                "name": p.name,
+                "url": f"{current_app.config['MEDIA_URL_PREFIX'].rstrip('/')}/{p.relative_to(root).as_posix()}",
+                "size_kb": max(1, round(p.stat().st_size / 1024)),
+            })
     return render_template(
         "admin/dashboard.html",
-        pv_total=pv_total,
-        pv_24h=pv_24h,
         slots=slots,
-        live_embed=(live_embed.value if live_embed else ""),
-        logo_url=(logo_url.value if logo_url else ""),
+        live_embed=_setting("live_embed_html", ""),
+        logo_url=_setting("logo_url", ""),
+        site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
+        media_files=media_files,
+        **_common_admin_context("dashboard"),
     )
+
+
+@admin_bp.get("/posts")
+@login_required
+def posts_list():
+    r = _require_admin()
+    if r:
+        return r
+    source = (request.args.get("source") or "all").strip()
+    term = (request.args.get("q") or "").strip()
+    q = Post.query
+    if source in {"local", "wp"}:
+        q = q.filter(Post.source == source)
+    if term:
+        like = f"%{term}%"
+        q = q.filter(Post.title.ilike(like))
+    posts = q.order_by(desc(Post.published_at), desc(Post.updated_at)).limit(200).all()
+    return render_template("admin/posts_list.html", posts=posts, source=source, term=term, **_common_admin_context("posts"))
+
+
+@admin_bp.route("/posts/new", methods=["GET", "POST"])
+@login_required
+def posts_new():
+    r = _require_admin()
+    if r:
+        return r
+    form = PostAdminForm()
+    _bind_post_form_choices(form)
+    if request.method == "POST" and form.validate_on_submit():
+        slug = _ensure_unique_slug(Post, form.slug.data or form.title.data)
+        featured_image = (form.featured_image.data or "").strip()
+        if form.featured_image_file.data:
+            featured_image = _save_upload(form.featured_image_file.data, "posts")
+        publish_now = bool(form.publish_now.data)
+        published_at = form.published_at.data or (datetime.utcnow() if publish_now else datetime.utcnow())
+        post = Post(
+            source="local",
+            title=form.title.data.strip(),
+            slug=slug,
+            excerpt=form.excerpt.data,
+            content_html=form.content_html.data,
+            featured_image=featured_image,
+            author_name=(form.author_name.data or "").strip() or "Redação",
+            published_at=published_at,
+            updated_at=datetime.utcnow(),
+        )
+        if form.categories.data:
+            post.categories = Category.query.filter(Category.id.in_(form.categories.data)).all()
+        db.session.add(post)
+        db.session.commit()
+        flash("Matéria criada com sucesso.", "success")
+        return redirect(url_for("admin.posts_edit", post_id=post.id))
+    return render_template("admin/post_form.html", form=form, mode="new", **_common_admin_context("posts"))
+
+
+@admin_bp.route("/posts/<int:post_id>/edit", methods=["GET", "POST"])
+@login_required
+def posts_edit(post_id):
+    r = _require_admin()
+    if r:
+        return r
+    post = Post.query.get_or_404(post_id)
+    form = PostAdminForm()
+    _bind_post_form_choices(form)
+    if request.method == "GET":
+        _fill_post_form_from_obj(form, post)
+    if request.method == "POST" and form.validate_on_submit():
+        old_image = post.featured_image
+        post.title = form.title.data.strip()
+        post.slug = _ensure_unique_slug(Post, form.slug.data or form.title.data, object_id=post.id)
+        post.excerpt = form.excerpt.data
+        post.content_html = form.content_html.data
+        post.author_name = (form.author_name.data or "").strip() or "Redação"
+        featured_image = (form.featured_image.data or "").strip()
+        if form.featured_image_file.data:
+            featured_image = _save_upload(form.featured_image_file.data, "posts")
+        post.featured_image = featured_image
+        post.published_at = form.published_at.data or post.published_at or datetime.utcnow()
+        post.updated_at = datetime.utcnow()
+        post.categories = Category.query.filter(Category.id.in_(form.categories.data or [])).all()
+        db.session.commit()
+        if form.featured_image_file.data and old_image and old_image != featured_image:
+            _delete_local_media(old_image)
+        flash("Matéria atualizada.", "success")
+        return redirect(url_for("admin.posts_edit", post_id=post.id))
+    return render_template("admin/post_form.html", form=form, mode="edit", post=post, **_common_admin_context("posts"))
+
+
+@admin_bp.post("/posts/<int:post_id>/delete")
+@login_required
+def posts_delete(post_id):
+    r = _require_admin()
+    if r:
+        return r
+    post = Post.query.get_or_404(post_id)
+    if post.source != "local":
+        flash("Só é permitido excluir matérias locais pelo admin.", "warning")
+        return redirect(url_for("admin.posts_list"))
+    old_image = post.featured_image
+    db.session.delete(post)
+    db.session.commit()
+    _delete_local_media(old_image)
+    flash("Matéria removida.", "success")
+    return redirect(url_for("admin.posts_list", source="local"))
+
+
+@admin_bp.get("/categories")
+@login_required
+def categories_list():
+    r = _require_admin()
+    if r:
+        return r
+    categories = Category.query.order_by(Category.name.asc()).all()
+    counts = {
+        cid: total
+        for cid, total in db.session.query(Category.id, func.count(post_categories.c.post_id))
+        .outerjoin(post_categories, post_categories.c.category_id == Category.id)
+        .group_by(Category.id)
+        .all()
+    }
+    return render_template("admin/categories_list.html", categories=categories, counts=counts, **_common_admin_context("categories"))
+
+
+@admin_bp.route("/categories/new", methods=["GET", "POST"])
+@login_required
+def categories_new():
+    r = _require_admin()
+    if r:
+        return r
+    form = CategoryForm()
+    if request.method == "POST" and form.validate_on_submit():
+        slug = _ensure_unique_slug(Category, form.slug.data or form.name.data)
+        cat = Category(name=form.name.data.strip(), slug=slug)
+        db.session.add(cat)
+        db.session.commit()
+        flash("Categoria criada.", "success")
+        return redirect(url_for("admin.categories_list"))
+    return render_template("admin/category_form.html", form=form, mode="new", **_common_admin_context("categories"))
+
+
+@admin_bp.route("/categories/<int:category_id>/edit", methods=["GET", "POST"])
+@login_required
+def categories_edit(category_id):
+    r = _require_admin()
+    if r:
+        return r
+    category = Category.query.get_or_404(category_id)
+    form = CategoryForm(obj=category)
+    if request.method == "POST" and form.validate_on_submit():
+        category.name = form.name.data.strip()
+        category.slug = _ensure_unique_slug(Category, form.slug.data or form.name.data, object_id=category.id)
+        db.session.commit()
+        flash("Categoria atualizada.", "success")
+        return redirect(url_for("admin.categories_list"))
+    return render_template("admin/category_form.html", form=form, mode="edit", category=category, **_common_admin_context("categories"))
+
+
+@admin_bp.post("/categories/<int:category_id>/delete")
+@login_required
+def categories_delete(category_id):
+    r = _require_admin()
+    if r:
+        return r
+    category = Category.query.get_or_404(category_id)
+    if Post.query.join(Post.categories).filter(Category.id == category.id).first():
+        flash("Não foi possível excluir: existem matérias vinculadas a essa categoria.", "danger")
+        return redirect(url_for("admin.categories_list"))
+    db.session.delete(category)
+    db.session.commit()
+    flash("Categoria removida.", "success")
+    return redirect(url_for("admin.categories_list"))
+
+
+@admin_bp.get("/media")
+@login_required
+def media_library():
+    r = _require_admin()
+    if r:
+        return r
+    files = []
+    root = _media_root()
+    if root.exists():
+        for p in sorted([p for p in root.rglob("*") if p.is_file()], key=lambda x: x.stat().st_mtime, reverse=True):
+            rel = p.relative_to(root).as_posix()
+            files.append({
+                "name": p.name,
+                "relative": rel,
+                "url": f"{current_app.config['MEDIA_URL_PREFIX'].rstrip('/')}/{rel}",
+                "size_kb": max(1, round(p.stat().st_size / 1024)),
+                "updated_at": datetime.fromtimestamp(p.stat().st_mtime),
+            })
+    return render_template("admin/media_library.html", files=files[:300], **_common_admin_context("media"))
+
+
+@admin_bp.post("/media/upload")
+@login_required
+def media_upload():
+    r = _require_admin()
+    if r:
+        return r
+    files = request.files.getlist("files")
+    saved = 0
+    for f in files:
+        if f and getattr(f, "filename", ""):
+            _save_upload(f, "library")
+            saved += 1
+    flash(f"{saved} arquivo(s) enviado(s) para o volume.", "success")
+    return redirect(url_for("admin.media_library"))
+
+
+@admin_bp.post("/media/delete")
+@login_required
+def media_delete():
+    r = _require_admin()
+    if r:
+        return r
+    url = request.form.get("url", "")
+    _delete_local_media(url)
+    flash("Arquivo removido.", "success")
+    return redirect(url_for("admin.media_library"))
+
+
+@admin_bp.get("/settings")
+@login_required
+def settings_page():
+    r = _require_admin()
+    if r:
+        return r
+    return render_template(
+        "admin/settings.html",
+        live_embed=_setting("live_embed_html", ""),
+        logo_url=_setting("logo_url", ""),
+        site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
+        **_common_admin_context("settings"),
+    )
+
+
+@admin_bp.post("/settings/live")
+@login_required
+def save_live():
+    r = _require_admin()
+    if r:
+        return r
+    _save_setting("live_embed_html", request.form.get("live_embed_html", ""))
+    db.session.commit()
+    flash("Bloco AO VIVO atualizado.", "success")
+    return redirect(url_for("admin.settings_page"))
+
+
+@admin_bp.post("/settings/logo")
+@login_required
+def save_logo():
+    r = _require_admin()
+    if r:
+        return r
+    old_logo = _setting("logo_url", "")
+    logo_url = (request.form.get("logo_url", "") or "").strip()
+    logo_file = request.files.get("logo_file")
+    if logo_file and getattr(logo_file, "filename", ""):
+        logo_url = _save_upload(logo_file, "branding")
+    _save_setting("site_name", (request.form.get("site_name", "") or "").strip() or current_app.config.get("SITE_NAME", "News"))
+    _save_setting("logo_url", logo_url)
+    db.session.commit()
+    if logo_file and old_logo and old_logo != logo_url:
+        _delete_local_media(old_logo)
+    flash("Identidade visual atualizada.", "success")
+    return redirect(url_for("admin.settings_page"))
 
 
 @admin_bp.get("/ads/new")
@@ -79,7 +507,7 @@ def ads_new():
         return r
     form = AdSlotForm()
     form.is_active.data = True
-    return render_template("admin/ad_form.html", form=form, mode="new")
+    return render_template("admin/ad_form.html", form=form, mode="new", **_common_admin_context("ads"))
 
 
 @admin_bp.post("/ads/new")
@@ -92,26 +520,20 @@ def ads_new_post():
     if form.validate_on_submit():
         if AdSlot.query.filter_by(key=form.key.data.strip()).first():
             flash("Já existe um slot com essa chave.", "danger")
-            return render_template("admin/ad_form.html", form=form, mode="new")
-
+            return render_template("admin/ad_form.html", form=form, mode="new", **_common_admin_context("ads"))
         html = form.html.data or ""
         img = (form.image_url.data or "").strip()
+        if form.image_file.data:
+            img = _save_upload(form.image_file.data, "ads")
         link = (form.link_url.data or "").strip() or "#"
         if img:
-            html = f'<a href="{link}" target="_blank" rel="noopener"><img src="{img}" alt="" style="max-width:100%;height:auto;display:block;border-radius:6px;"></a>'
-
-        slot = AdSlot(
-            key=form.key.data.strip(),
-            name=form.name.data.strip(),
-            html=html,
-            is_active=bool(form.is_active.data),
-        )
+            html = f'<a href="{link}" target="_blank" rel="noopener"><img src="{img}" alt="" style="max-width:100%;height:auto;display:block;border-radius:10px;"></a>'
+        slot = AdSlot(key=form.key.data.strip(), name=form.name.data.strip(), html=html, is_active=bool(form.is_active.data))
         db.session.add(slot)
         db.session.commit()
         flash("Slot criado.", "success")
         return redirect(url_for("admin.dashboard"))
-
-    return render_template("admin/ad_form.html", form=form, mode="new")
+    return render_template("admin/ad_form.html", form=form, mode="new", **_common_admin_context("ads"))
 
 
 @admin_bp.get("/ads/<int:slot_id>/edit")
@@ -122,7 +544,7 @@ def ads_edit(slot_id):
         return r
     slot = AdSlot.query.get_or_404(slot_id)
     form = AdSlotForm(obj=slot)
-    return render_template("admin/ad_form.html", form=form, mode="edit", slot=slot)
+    return render_template("admin/ad_form.html", form=form, mode="edit", slot=slot, **_common_admin_context("ads"))
 
 
 @admin_bp.post("/ads/<int:slot_id>/edit")
@@ -138,53 +560,30 @@ def ads_edit_post(slot_id):
         slot.name = form.name.data.strip()
         html = form.html.data or ""
         img = (form.image_url.data or "").strip()
+        if form.image_file.data:
+            img = _save_upload(form.image_file.data, "ads")
         link = (form.link_url.data or "").strip() or "#"
         if img:
-            html = f'<a href="{link}" target="_blank" rel="noopener"><img src="{img}" alt="" style="max-width:100%;height:auto;display:block;border-radius:6px;"></a>'
+            html = f'<a href="{link}" target="_blank" rel="noopener"><img src="{img}" alt="" style="max-width:100%;height:auto;display:block;border-radius:10px;"></a>'
         slot.html = html
         slot.is_active = bool(form.is_active.data)
         db.session.commit()
         flash("Slot atualizado.", "success")
         return redirect(url_for("admin.dashboard"))
+    return render_template("admin/ad_form.html", form=form, mode="edit", slot=slot, **_common_admin_context("ads"))
 
-    return render_template("admin/ad_form.html", form=form, mode="edit", slot=slot)
 
-
-@admin_bp.post("/settings/live")
+@admin_bp.post("/sync/wp")
 @login_required
-def save_live():
+def sync_wp_now():
     r = _require_admin()
     if r:
         return r
-
-    html = request.form.get("live_embed_html", "")
-    s = SiteSetting.query.filter_by(key="live_embed_html").first()
-
-    if not s:
-        s = SiteSetting(key="live_embed_html", value=html)
-        db.session.add(s)
-    else:
-        s.value = html
-
-    db.session.commit()
-    flash("AO VIVO atualizado.", "success")
-    return redirect(url_for("admin.dashboard"))
-
-
-@admin_bp.post("/settings/logo")
-@login_required
-def save_logo():
-    r = _require_admin()
-    if r:
-        return r
-
-    logo_url = (request.form.get("logo_url", "") or "").strip()
-    s = SiteSetting.query.filter_by(key="logo_url").first()
-    if not s:
-        s = SiteSetting(key="logo_url", value=logo_url)
-        db.session.add(s)
-    else:
-        s.value = logo_url
-    db.session.commit()
-    flash("Logo atualizada.", "success")
+    try:
+        client = WPClient(current_app.config["WP_BASE_URL"])
+        sync_categories(client)
+        sync_posts(client, max_pages=50, per_page=current_app.config["WP_PER_PAGE"])
+        flash("Sincronização do WordPress concluída.", "success")
+    except Exception as e:
+        flash(f"Erro ao sincronizar: {e}", "danger")
     return redirect(url_for("admin.dashboard"))

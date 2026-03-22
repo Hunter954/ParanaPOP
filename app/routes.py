@@ -1,17 +1,20 @@
 from datetime import datetime, timedelta
 from html import unescape
+from pathlib import Path
 import re
 
-from flask import Blueprint, render_template, abort, request
+from flask import Blueprint, render_template, abort, request, current_app, send_from_directory
 from sqlalchemy import desc, func
 
 from .models import db, Post, Category, AdSlot, SiteSetting, PageView
 
 site_bp = Blueprint("site", __name__)
 
+
 def _get_ad(key: str) -> str:
     slot = AdSlot.query.filter_by(key=key, is_active=True).first()
     return slot.html if slot and slot.html else ""
+
 
 def _setting(key: str, default: str = "") -> str:
     s = SiteSetting.query.filter_by(key=key).first()
@@ -20,7 +23,6 @@ def _setting(key: str, default: str = "") -> str:
 
 @site_bp.app_context_processor
 def inject_site_globals():
-    # Navegação: lista de categorias
     cats = Category.query.order_by(Category.name.asc()).all()
     return {
         "nav_categories": cats,
@@ -28,6 +30,12 @@ def inject_site_globals():
         "clean_text": _clean_text,
         "format_date_br": _format_date_br,
     }
+
+
+@site_bp.get("/media/<path:filename>")
+def media(filename):
+    media_root = Path(current_app.config["MEDIA_ROOT"]).resolve()
+    return send_from_directory(media_root, filename)
 
 
 
@@ -43,6 +51,7 @@ def _clean_text(value: str, limit: int = 0) -> str:
     return text
 
 
+
 def _format_date_br(value):
     if not value:
         return ""
@@ -53,6 +62,7 @@ def _format_date_br(value):
     return f"{value.day} de {months[value.month - 1]} de {value.year}"
 
 
+
 def _track_view(post_id=None):
     try:
         pv = PageView(
@@ -60,11 +70,13 @@ def _track_view(post_id=None):
             path=request.path,
             ua=(request.headers.get("User-Agent") or "")[:400],
             ip=(request.headers.get("X-Forwarded-For") or request.remote_addr or "")[:80],
+            created_at=datetime.utcnow(),
         )
         db.session.add(pv)
         db.session.commit()
     except Exception:
         db.session.rollback()
+
 
 @site_bp.get("/")
 def home():
@@ -72,7 +84,6 @@ def home():
 
     latest = Post.query.order_by(desc(Post.published_at)).limit(18).all()
 
-    # tenta pegar categorias principais pelo slug (ajuste como quiser no admin depois)
     def cat_posts(slug, limit=6):
         cat = Category.query.filter_by(slug=slug).first()
         if not cat:
@@ -83,7 +94,6 @@ def home():
                  .limit(limit).all())
         return cat, posts
 
-    # seção rotativa por categoria
     selected_cat_slug = (request.args.get("cat") or "").strip() or "cidade"
     selected_cat, selected_posts = cat_posts(selected_cat_slug, 8)
 
@@ -101,7 +111,6 @@ def home():
         selected_posts = category_sections[0]["posts"]
         selected_cat_slug = selected_cat.slug
 
-    # Popular do dia (top posts com mais pageviews nas últimas 24h)
     since = datetime.utcnow() - timedelta(hours=24)
     popular_ids = (
         db.session.query(PageView.post_id, func.count(PageView.id).label("c"))
@@ -139,6 +148,7 @@ def home():
         ad_sidebar_1=_get_ad("sidebar_1"),
         ad_sidebar_2=_get_ad("sidebar_2"),
     )
+
 
 @site_bp.get("/p/<slug>")
 def post(slug):
@@ -186,6 +196,7 @@ def post(slug):
         ad_sidebar_2=_get_ad("sidebar_2"),
     )
 
+
 @site_bp.get("/c/<slug>")
 def category(slug):
     cat = Category.query.filter_by(slug=slug).first()
@@ -208,6 +219,7 @@ def category(slug):
         ad_sidebar_1=_get_ad("sidebar_1"),
         ad_sidebar_2=_get_ad("sidebar_2"),
     )
+
 
 @site_bp.get("/buscar")
 def search():
