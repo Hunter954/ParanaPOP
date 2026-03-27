@@ -4,14 +4,11 @@
 
 <div class="inner-grid article-layout">
   <article class="article">
-    <div class="section-head article-category-head">
-      <h2>{{ post.categories[0].name if post.categories else 'Notícias' }}</h2>
-      <div class="section-line"></div>
-    </div>
+    {% if post.featured_image %}
+      <img src="{{ post.featured_image }}" class="article-cover" alt="{{ post.title|striptags }}">
+    {% endif %}
 
-    <h1 class="article-title">{{ post.title|safe }}</h1>
-
-    <div class="article-meta">
+    <div class="article-meta article-meta--top">
       <div class="article-tags">
         {% for c in post.categories %}
           <a class="tag" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
@@ -22,9 +19,7 @@
       {% endif %}
     </div>
 
-    {% if post.featured_image %}
-      <img src="{{ post.featured_image }}" class="article-cover" alt="">
-    {% endif %}
+    <h1 class="article-title">{{ post.title|safe }}</h1>
 
     {% if post.excerpt %}
       <div class="article-excerpt">{{ post.excerpt|safe }}</div>

@@ -158,6 +158,7 @@ def inject_site_globals():
         "logo_url": _setting("logo_url", ""),
         "site_name_value": _site_name(),
         "favicon_url": _setting("favicon_url", ""),
+        "ad_home_bottom": _get_ad("home_bottom"),
         "clean_text": _clean_text,
         "format_date_br": _format_date_br,
         "display_category_name": _display_category_name,
