@@ -71,10 +71,13 @@ def _render_ad_from_payload(slot_key: str, payload: dict) -> str:
         )
     controls = ''
     if len(clean_banners) > 1:
-        dots = ''.join([
-            f'<button type="button" class="ad-rotator__dot{' active' if i == 0 else ''}" data-ad-dot aria-label="Banner {i+1}"></button>'
-            for i in range(len(clean_banners))
-        ])
+        dots_parts = []
+        for i in range(len(clean_banners)):
+            dot_class = "ad-rotator__dot active" if i == 0 else "ad-rotator__dot"
+            dots_parts.append(
+                f'<button type="button" class="{dot_class}" data-ad-dot aria-label="Banner {i+1}"></button>'
+            )
+        dots = ''.join(dots_parts)
         controls = f'<div class="ad-rotator__dots">{dots}</div>'
     script = ''
     if len(clean_banners) > 1:
