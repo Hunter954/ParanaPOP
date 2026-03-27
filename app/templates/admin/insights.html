@@ -66,7 +66,11 @@
     </div>
   </div>
 
-  <div class="insights-chart-wrap">
+  <div class="insights-chart-wrap" id="insightsChartWrap">
+    <div class="chart-hover-tooltip" id="chartHoverTooltip" aria-hidden="true">
+      <span class="chart-hover-date"></span>
+      <strong class="chart-hover-value"></strong>
+    </div>
     <svg viewBox="0 0 {{ metric_chart.width }} {{ metric_chart.height }}" class="insights-svg-chart" role="img" aria-label="Gráfico de {{ metric_label }}">
       {% for tick in metric_chart.y_grid %}
         <line x1="{{ metric_chart.pad_left }}" y1="{{ tick.y }}" x2="{{ metric_chart.width - metric_chart.pad_right }}" y2="{{ tick.y }}" class="chart-grid-line"></line>
@@ -76,7 +80,7 @@
       <polyline points="{{ metric_chart.polyline }}" class="chart-line"></polyline>
 
       {% for point in metric_chart.circles %}
-        <circle cx="{{ point.cx }}" cy="{{ point.cy }}" r="4.5" class="chart-point"></circle>
+        <circle cx="{{ point.cx }}" cy="{{ point.cy }}" r="4.5" class="chart-point" data-label="{{ point.label }}" data-value="{{ point.value }}"></circle>
       {% endfor %}
 
       {% for x_label in metric_chart.x_labels %}
@@ -84,16 +88,53 @@
       {% endfor %}
     </svg>
   </div>
-
-  <div class="insights-chart-legend">
-    {% for point in metric_chart.circles %}
-      <div class="chart-day-chip">
-        <span>{{ point.label }}</span>
-        <strong>{{ point.value }}</strong>
-      </div>
-    {% endfor %}
-  </div>
 </section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const wrap = document.getElementById('insightsChartWrap');
+    const tooltip = document.getElementById('chartHoverTooltip');
+    if (!wrap || !tooltip) return;
+
+    const dateEl = tooltip.querySelector('.chart-hover-date');
+    const valueEl = tooltip.querySelector('.chart-hover-value');
+    const points = wrap.querySelectorAll('.chart-point');
+
+    function positionTooltip(event) {
+      const rect = wrap.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top = Math.max(16, y - 14) + 'px';
+    }
+
+    points.forEach(function (point) {
+      point.addEventListener('mouseenter', function (event) {
+        dateEl.textContent = point.dataset.label || '';
+        valueEl.textContent = (point.dataset.value || '0') + ' {{ metric_label }}';
+        tooltip.classList.add('is-visible');
+        point.classList.add('is-hovered');
+        positionTooltip(event);
+      });
+
+      point.addEventListener('mousemove', function (event) {
+        positionTooltip(event);
+      });
+
+      point.addEventListener('mouseleave', function () {
+        tooltip.classList.remove('is-visible');
+        point.classList.remove('is-hovered');
+      });
+    });
+
+    wrap.addEventListener('mouseleave', function () {
+      tooltip.classList.remove('is-visible');
+      points.forEach(function (point) {
+        point.classList.remove('is-hovered');
+      });
+    });
+  });
+</script>
 
 <section class="admin-grid-2 mt-4">
   <div class="panel-card">
