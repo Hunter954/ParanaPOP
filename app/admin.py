@@ -1,7 +1,7 @@
 import os
 import re
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 from pathlib import Path
 from uuid import uuid4
 from urllib.parse import urlparse
@@ -119,19 +119,109 @@ def _delete_local_media(url: str) -> None:
             pass
 
 
+
+
+def _parse_date_input(value: str | None, fallback: date) -> date:
+    raw = (value or '').strip()
+    if not raw:
+        return fallback
+    try:
+        return datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        return fallback
+
+
+def _build_chart_data(daily_series, metric_key: str):
+    width = 980
+    height = 360
+    pad_left = 56
+    pad_right = 18
+    pad_top = 20
+    pad_bottom = 44
+    inner_w = max(1, width - pad_left - pad_right)
+    inner_h = max(1, height - pad_top - pad_bottom)
+
+    values = [int(day.get(metric_key, 0) or 0) for day in daily_series]
+    max_value = max(values) if values else 0
+    if max_value <= 0:
+        max_value = 1
+    y_max = max_value
+    if y_max <= 5:
+        step = 1
+    elif y_max <= 25:
+        step = 5
+    elif y_max <= 100:
+        step = 10
+    else:
+        rough = y_max / 4
+        magnitude = 10 ** max(0, len(str(int(rough))) - 1)
+        step = max(10, round(rough / magnitude) * magnitude)
+    y_max = ((max_value + step - 1) // step) * step
+    y_ticks = list(range(0, y_max + step, step))
+
+    count = len(daily_series)
+    points = []
+    circles = []
+    x_labels = []
+    for idx, day in enumerate(daily_series):
+        x = pad_left if count <= 1 else pad_left + (inner_w * idx / (count - 1))
+        value = int(day.get(metric_key, 0) or 0)
+        y = pad_top + inner_h - ((value / y_max) * inner_h if y_max else 0)
+        x = round(x, 2)
+        y = round(y, 2)
+        points.append(f"{x},{y}")
+        circles.append({"cx": x, "cy": y, "value": value, "label": day.get("label", ''), "iso": day.get('iso', '')})
+
+        show_label = count <= 10 or idx in {0, count - 1} or idx % max(1, round(count / 6)) == 0
+        if show_label:
+            x_labels.append({"x": x, "label": day.get("label_short", day.get("label", ''))})
+
+    y_grid = []
+    for tick in y_ticks:
+        y = round(pad_top + inner_h - ((tick / y_max) * inner_h if y_max else 0), 2)
+        y_grid.append({"y": y, "value": tick})
+
+    return {
+        "width": width,
+        "height": height,
+        "polyline": ' '.join(points),
+        "circles": circles,
+        "y_grid": y_grid,
+        "x_labels": x_labels,
+        "baseline": pad_top + inner_h,
+        "pad_left": pad_left,
+        "pad_right": pad_right,
+    }
+
 def _pct_delta(current: float, previous: float) -> float:
     if not previous:
         return 0.0 if not current else 100.0
     return round(((current - previous) / previous) * 100, 1)
 
 
-def _analytics_stats(days: int = 30):
-    now = datetime.utcnow()
-    current_start = now - timedelta(days=days)
-    previous_start = current_start - timedelta(days=days)
 
-    current_sessions = AnalyticsSession.query.filter(AnalyticsSession.created_at >= current_start).all()
-    previous_sessions = AnalyticsSession.query.filter(AnalyticsSession.created_at >= previous_start, AnalyticsSession.created_at < current_start).all()
+
+def _analytics_stats(days: int = 30, start_date: date | None = None, end_date: date | None = None):
+    today = datetime.utcnow().date()
+    end_day = end_date or today
+    start_day = start_date or (end_day - timedelta(days=max(days - 1, 0)))
+    if start_day > end_day:
+        start_day, end_day = end_day, start_day
+
+    window_days = max((end_day - start_day).days + 1, 1)
+    current_start = datetime.combine(start_day, time.min)
+    current_end = datetime.combine(end_day + timedelta(days=1), time.min)
+    previous_start = current_start - timedelta(days=window_days)
+    previous_end = current_start
+
+    current_sessions = AnalyticsSession.query.filter(
+        AnalyticsSession.created_at >= current_start,
+        AnalyticsSession.created_at < current_end,
+    ).all()
+    previous_sessions = AnalyticsSession.query.filter(
+        AnalyticsSession.created_at >= previous_start,
+        AnalyticsSession.created_at < previous_end,
+    ).all()
 
     def summarize(items):
         sessions = len(items)
@@ -170,8 +260,12 @@ def _analytics_stats(days: int = 30):
         })
 
     top_pages = (
-        db.session.query(AnalyticsSession.landing_path, func.count(AnalyticsSession.id).label("sessions"), func.sum(AnalyticsSession.pageviews).label("pageviews"))
-        .filter(AnalyticsSession.created_at >= current_start)
+        db.session.query(
+            AnalyticsSession.landing_path,
+            func.count(AnalyticsSession.id).label("sessions"),
+            func.sum(AnalyticsSession.pageviews).label("pageviews"),
+        )
+        .filter(AnalyticsSession.created_at >= current_start, AnalyticsSession.created_at < current_end)
         .group_by(AnalyticsSession.landing_path)
         .order_by(desc("pageviews"), desc("sessions"))
         .limit(12)
@@ -180,12 +274,44 @@ def _analytics_stats(days: int = 30):
 
     top_referrers = (
         db.session.query(AnalyticsSession.referrer, func.count(AnalyticsSession.id).label("sessions"))
-        .filter(AnalyticsSession.created_at >= current_start, AnalyticsSession.referrer.isnot(None), AnalyticsSession.referrer != "")
+        .filter(
+            AnalyticsSession.created_at >= current_start,
+            AnalyticsSession.created_at < current_end,
+            AnalyticsSession.referrer.isnot(None),
+            AnalyticsSession.referrer != "",
+        )
         .group_by(AnalyticsSession.referrer)
         .order_by(desc("sessions"))
         .limit(8)
         .all()
     )
+
+    by_day = {}
+    for offset in range(window_days):
+        day = start_day + timedelta(days=offset)
+        by_day[day] = {"sessions": 0, "pageviews": 0, "visitor_ids": set()}
+
+    for item in current_sessions:
+        item_day = item.created_at.date()
+        if item_day not in by_day:
+            continue
+        bucket = by_day[item_day]
+        bucket["sessions"] += 1
+        bucket["pageviews"] += int(item.pageviews or 0)
+        if item.visitor_id:
+            bucket["visitor_ids"].add(item.visitor_id)
+
+    daily_series = []
+    for day in sorted(by_day.keys()):
+        bucket = by_day[day]
+        daily_series.append({
+            "iso": day.isoformat(),
+            "label": day.strftime('%d/%m'),
+            "label_short": day.strftime('%d/%m'),
+            "sessions": bucket["sessions"],
+            "pageviews": bucket["pageviews"],
+            "total_users": len(bucket["visitor_ids"]),
+        })
 
     return {
         "cards": cards,
@@ -193,7 +319,10 @@ def _analytics_stats(days: int = 30):
         "previous": previous,
         "top_pages": top_pages,
         "top_referrers": top_referrers,
-        "window_days": days,
+        "window_days": window_days,
+        "start_date": start_day,
+        "end_date": end_day,
+        "daily_series": daily_series,
     }
 
 
@@ -318,9 +447,31 @@ def insights_page():
     r = _require_admin()
     if r:
         return r
+
+    end_default = datetime.utcnow().date()
+    start_default = end_default - timedelta(days=29)
+    start_day = _parse_date_input(request.args.get("from"), start_default)
+    end_day = _parse_date_input(request.args.get("to"), end_default)
+    insights = _analytics_stats(start_date=start_day, end_date=end_day)
+
+    allowed_metrics = {
+        "sessions": "Sessions",
+        "pageviews": "Pageviews",
+        "total_users": "Total Users",
+    }
+    selected_metric = (request.args.get("metric") or "sessions").strip().lower()
+    if selected_metric not in allowed_metrics:
+        selected_metric = "sessions"
+
+    metric_chart = _build_chart_data(insights["daily_series"], selected_metric)
+
     return render_template(
         "admin/insights.html",
-        insights=_analytics_stats(30),
+        insights=insights,
+        selected_metric=selected_metric,
+        metric_label=allowed_metrics[selected_metric],
+        metric_chart=metric_chart,
+        allowed_metrics=allowed_metrics,
         site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
         logo_url=_setting("logo_url", ""),
         favicon_url=_setting("favicon_url", ""),
