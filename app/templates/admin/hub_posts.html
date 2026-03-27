@@ -1,0 +1,58 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Hub Posts{% endblock %}
+{% block page_title %}Hub Posts{% endblock %}
+{% block page_subtitle %}Centralize as publicações e distribua automaticamente para os outros sites espelho.{% endblock %}
+{% block admin_content %}
+<form method="post" action="{{ url_for('admin.hub_posts_save') }}" class="vstack gap-4">
+  <section class="panel-card">
+    <div class="panel-head"><div><h2>Site atual</h2><p>Este projeto pode funcionar como painel principal ou como site espelho que recebe matérias.</p></div></div>
+    <div class="row g-3">
+      <div class="col-md-3"><div class="form-check mt-4">
+        <input class="form-check-input" type="checkbox" name="hub_enabled" id="hub_enabled" {% if hub.enabled %}checked{% endif %}>
+        <label class="form-check-label" for="hub_enabled">Ativar Hub Posts</label>
+      </div></div>
+      <div class="col-md-4"><label class="form-label">Identificador deste site</label><input class="form-control" name="hub_site_key" value="{{ hub.site_key }}" placeholder="ex: paranapop"></div>
+      <div class="col-md-5"><label class="form-label">Token para receber matérias</label><input class="form-control" name="hub_receive_token" value="{{ hub.receive_token }}" placeholder="crie um token forte para este site"></div>
+      <div class="col-12"><div class="form-check">
+        <input class="form-check-input" type="checkbox" name="hub_auto_push" id="hub_auto_push" {% if hub.auto_push %}checked{% endif %}>
+        <label class="form-check-label" for="hub_auto_push">Enviar automaticamente quando salvar ou excluir matéria local</label>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head"><div><h2>Sites espelho</h2><p>Cadastre até 3 destinos. Depois que você duplicar o projeto no Railway, preencha a URL final e o token de cada espelho.</p></div></div>
+    <div class="row g-4">
+      {% for remote in hub.remotes %}
+      {% set idx = loop.index %}
+      <div class="col-12">
+        <div class="border rounded-4 p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3"><strong>Espelho {{ idx }}</strong><div class="form-check"><input class="form-check-input" type="checkbox" name="remote_active_{{ idx }}" id="remote_active_{{ idx }}" {% if remote.active %}checked{% endif %}><label class="form-check-label" for="remote_active_{{ idx }}">Ativo</label></div></div>
+          <div class="row g-3">
+            <div class="col-md-3"><label class="form-label">Nome</label><input class="form-control" name="remote_name_{{ idx }}" value="{{ remote.name }}" placeholder="Site Brasil"></div>
+            <div class="col-md-3"><label class="form-label">Site key</label><input class="form-control" name="remote_site_key_{{ idx }}" value="{{ remote.site_key }}" placeholder="site-brasil"></div>
+            <div class="col-md-4"><label class="form-label">URL base</label><input class="form-control" name="remote_base_url_{{ idx }}" value="{{ remote.base_url }}" placeholder="https://site-espelho.up.railway.app"></div>
+            <div class="col-md-2"><label class="form-label">Token API</label><input class="form-control" name="remote_api_token_{{ idx }}" value="{{ remote.api_token }}" placeholder="token"></div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="d-flex gap-2 mt-4">
+      <button class="btn btn-dark" type="submit">Salvar Hub Posts</button>
+      <button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_all') }}" formmethod="post">Reenviar matérias locais</button>
+    </div>
+  </section>
+</form>
+
+<section class="panel-card">
+  <div class="panel-head"><div><h2>Como usar nos 3 sites</h2><p>Fluxo ideal para você duplicar este projeto sem manter 3 painéis diferentes.</p></div></div>
+  <ol class="mb-0 ps-3">
+    <li>Escolha um projeto para ser o painel principal.</li>
+    <li>Nos outros projetos duplicados, entre em <strong>Hub Posts</strong>, ative o recurso, defina um <strong>site key</strong> e um <strong>token para receber</strong>.</li>
+    <li>No painel principal, cadastre a URL e o token de cada espelho acima.</li>
+    <li>Faça as matérias somente no painel principal. Ao salvar, o sistema já envia para os espelhos.</li>
+    <li>Depois você só troca logo, domínio e visual da home de cada espelho.</li>
+  </ol>
+</section>
+{% endblock %}

@@ -1,6 +1,8 @@
 import os
 import re
 import shutil
+import json
+import requests
 from datetime import datetime, timedelta, date, time
 from pathlib import Path
 from uuid import uuid4
@@ -12,6 +14,7 @@ from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
+from .sync import download_external_image
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .wp_client import WPClient
 from .sync import sync_categories, sync_posts, localize_existing_wp_images
@@ -70,6 +73,167 @@ def _save_setting(key: str, value: str) -> None:
         db.session.add(s)
     else:
         s.value = value
+
+
+def _setting_bool(key: str, default: bool = False) -> bool:
+    raw = (_setting(key, '1' if default else '0') or '').strip().lower()
+    return raw in {'1', 'true', 'yes', 'on', 'sim'}
+
+
+def _setting_json(key: str, default):
+    raw = (_setting(key, '') or '').strip()
+    if not raw:
+        return default
+    try:
+        return json.loads(raw)
+    except Exception:
+        return default
+
+
+def _absolute_media_url(value: str) -> str:
+    if not value:
+        return ''
+    if value.startswith('http://') or value.startswith('https://'):
+        return value
+    base = request.url_root.rstrip('/')
+    return f"{base}{value if value.startswith('/') else '/' + value}"
+
+
+def _hub_config():
+    remotes = _setting_json('hub_remote_sites_json', [])
+    if not isinstance(remotes, list):
+        remotes = []
+    cleaned = []
+    for item in remotes:
+        if not isinstance(item, dict):
+            continue
+        cleaned.append({
+            'name': (item.get('name') or '').strip(),
+            'site_key': (item.get('site_key') or '').strip(),
+            'base_url': (item.get('base_url') or '').strip().rstrip('/'),
+            'api_token': (item.get('api_token') or '').strip(),
+            'active': bool(item.get('active')),
+        })
+    return {
+        'enabled': _setting_bool('hub_enabled', False),
+        'site_key': (_setting('hub_site_key', '') or '').strip(),
+        'site_name': (_setting('site_name', current_app.config.get('SITE_NAME', 'News')) or '').strip(),
+        'receive_token': (_setting('hub_receive_token', '') or '').strip(),
+        'auto_push': _setting_bool('hub_auto_push', True),
+        'remotes': cleaned,
+    }
+
+
+def _serialize_post_for_hub(post: Post) -> dict:
+    return {
+        'site_key': (_setting('hub_site_key', '') or '').strip(),
+        'site_name': (_setting('site_name', current_app.config.get('SITE_NAME', 'News')) or '').strip(),
+        'post': {
+            'title': post.title or '',
+            'slug': post.slug or '',
+            'excerpt': post.excerpt or '',
+            'content_html': post.content_html or '',
+            'featured_image': _absolute_media_url(post.featured_image or ''),
+            'author_name': post.author_name or 'Redação',
+            'published_at': post.published_at.isoformat() if post.published_at else '',
+            'updated_at': (post.updated_at or datetime.utcnow()).isoformat(),
+            'categories': [{'name': c.name, 'slug': c.slug} for c in (post.categories or [])],
+            'source': post.source or 'local',
+        }
+    }
+
+
+def _push_post_to_remote(post: Post, remote: dict) -> tuple[bool, str]:
+    base_url = (remote.get('base_url') or '').strip().rstrip('/')
+    token = (remote.get('api_token') or '').strip()
+    if not base_url or not token:
+        return False, 'URL ou token ausentes'
+    try:
+        response = requests.post(
+            f"{base_url}/api/hub/posts/upsert",
+            json=_serialize_post_for_hub(post),
+            headers={'X-Hub-Token': token, 'Content-Type': 'application/json'},
+            timeout=45,
+        )
+        if 200 <= response.status_code < 300:
+            return True, 'OK'
+        return False, f'HTTP {response.status_code}'
+    except Exception as exc:
+        return False, str(exc)[:180]
+
+
+def _push_delete_to_remote(post: Post, remote: dict) -> tuple[bool, str]:
+    base_url = (remote.get('base_url') or '').strip().rstrip('/')
+    token = (remote.get('api_token') or '').strip()
+    if not base_url or not token:
+        return False, 'URL ou token ausentes'
+    try:
+        response = requests.post(
+            f"{base_url}/api/hub/posts/delete",
+            json={'slug': post.slug, 'site_key': (_setting('hub_site_key', '') or '').strip()},
+            headers={'X-Hub-Token': token, 'Content-Type': 'application/json'},
+            timeout=30,
+        )
+        if 200 <= response.status_code < 300:
+            return True, 'OK'
+        return False, f'HTTP {response.status_code}'
+    except Exception as exc:
+        return False, str(exc)[:180]
+
+
+def _broadcast_post_to_hub(post: Post) -> dict:
+    cfg = _hub_config()
+    remotes = [item for item in cfg['remotes'] if item.get('active') and item.get('base_url')]
+    results = []
+    if not cfg['enabled'] or not remotes:
+        return {'sent': 0, 'ok': 0, 'results': results}
+    for remote in remotes:
+        ok, message = _push_post_to_remote(post, remote)
+        results.append({'name': remote.get('name') or remote.get('base_url'), 'ok': ok, 'message': message})
+    return {'sent': len(results), 'ok': sum(1 for r in results if r['ok']), 'results': results}
+
+
+def _broadcast_delete_to_hub(post: Post) -> dict:
+    cfg = _hub_config()
+    remotes = [item for item in cfg['remotes'] if item.get('active') and item.get('base_url')]
+    results = []
+    if not cfg['enabled'] or not remotes:
+        return {'sent': 0, 'ok': 0, 'results': results}
+    for remote in remotes:
+        ok, message = _push_delete_to_remote(post, remote)
+        results.append({'name': remote.get('name') or remote.get('base_url'), 'ok': ok, 'message': message})
+    return {'sent': len(results), 'ok': sum(1 for r in results if r['ok']), 'results': results}
+
+
+def _flash_hub_result(action_label: str, result: dict) -> None:
+    sent = int(result.get('sent', 0) or 0)
+    ok = int(result.get('ok', 0) or 0)
+    if not sent:
+        return
+    if ok == sent:
+        flash(f'{action_label}: sincronizado com {ok} site(s).', 'success')
+        return
+    fails = [f"{item['name']} ({item['message']})" for item in result.get('results', []) if not item.get('ok')]
+    flash(f"{action_label}: {ok}/{sent} site(s) sincronizados. Falhas: {'; '.join(fails[:3])}", 'warning')
+
+
+def _parse_remote_sites_from_form(form) -> list[dict]:
+    remotes = []
+    for idx in range(1, 4):
+        name = (form.get(f'remote_name_{idx}') or '').strip()
+        site_key = (form.get(f'remote_site_key_{idx}') or '').strip()
+        base_url = (form.get(f'remote_base_url_{idx}') or '').strip().rstrip('/')
+        api_token = (form.get(f'remote_api_token_{idx}') or '').strip()
+        active = bool(form.get(f'remote_active_{idx}'))
+        if name or site_key or base_url or api_token:
+            remotes.append({
+                'name': name or f'Site {idx}',
+                'site_key': site_key,
+                'base_url': base_url,
+                'api_token': api_token,
+                'active': active,
+            })
+    return remotes
 
 
 def _media_root() -> Path:
@@ -557,9 +721,10 @@ def posts_new():
             post.categories = Category.query.filter(Category.id.in_(form.categories.data)).all()
         db.session.add(post)
         db.session.commit()
+        _flash_hub_result('Publicação automática', _broadcast_post_to_hub(post) if _hub_config().get('auto_push') else {'sent': 0, 'ok': 0, 'results': []})
         flash("Matéria criada com sucesso.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
-    return render_template("admin/post_form.html", form=form, mode="new", **_common_admin_context("posts"))
+    return render_template("admin/post_form.html", form=form, mode="new", hub=_hub_config(), **_common_admin_context("posts"))
 
 
 @admin_bp.route("/posts/<int:post_id>/edit", methods=["GET", "POST"])
@@ -588,11 +753,12 @@ def posts_edit(post_id):
         post.updated_at = datetime.utcnow()
         post.categories = Category.query.filter(Category.id.in_(form.categories.data or [])).all()
         db.session.commit()
+        _flash_hub_result('Atualização automática', _broadcast_post_to_hub(post) if _hub_config().get('auto_push') else {'sent': 0, 'ok': 0, 'results': []})
         if form.featured_image_file.data and old_image and old_image != featured_image:
             _delete_local_media(old_image)
         flash("Matéria atualizada.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
-    return render_template("admin/post_form.html", form=form, mode="edit", post=post, **_common_admin_context("posts"))
+    return render_template("admin/post_form.html", form=form, mode="edit", post=post, hub=_hub_config(), **_common_admin_context("posts"))
 
 
 @admin_bp.post("/posts/<int:post_id>/delete")
@@ -606,8 +772,10 @@ def posts_delete(post_id):
         flash("Só é permitido excluir matérias locais pelo admin.", "warning")
         return redirect(url_for("admin.posts_list"))
     old_image = post.featured_image
+    delete_snapshot = Post(title=post.title, slug=post.slug)
     db.session.delete(post)
     db.session.commit()
+    _flash_hub_result('Remoção automática', _broadcast_delete_to_hub(delete_snapshot) if _hub_config().get('auto_push') else {'sent': 0, 'ok': 0, 'results': []})
     _delete_local_media(old_image)
     flash("Matéria removida.", "success")
     return redirect(url_for("admin.posts_list", source="local"))
@@ -893,6 +1061,66 @@ def ads_edit_post(slot_id):
     return render_template("admin/ad_form.html", form=form, mode="edit", slot=slot, **_common_admin_context("ads"))
 
 
+
+
+@admin_bp.get("/hub-posts")
+@login_required
+def hub_posts_page():
+    r = _require_admin()
+    if r:
+        return r
+    hub = _hub_config()
+    while len(hub['remotes']) < 3:
+        hub['remotes'].append({'name': '', 'site_key': '', 'base_url': '', 'api_token': '', 'active': False})
+    return render_template('admin/hub_posts.html', hub=hub, **_common_admin_context('hub_posts'))
+
+
+@admin_bp.post('/hub-posts/save')
+@login_required
+def hub_posts_save():
+    r = _require_admin()
+    if r:
+        return r
+    _save_setting('hub_enabled', '1' if request.form.get('hub_enabled') else '0')
+    _save_setting('hub_site_key', (request.form.get('hub_site_key') or '').strip())
+    _save_setting('hub_receive_token', (request.form.get('hub_receive_token') or '').strip())
+    _save_setting('hub_auto_push', '1' if request.form.get('hub_auto_push') else '0')
+    _save_setting('hub_remote_sites_json', json.dumps(_parse_remote_sites_from_form(request.form), ensure_ascii=False))
+    db.session.commit()
+    flash('Hub Posts atualizado.', 'success')
+    return redirect(url_for('admin.hub_posts_page'))
+
+
+@admin_bp.post('/hub-posts/push/<int:post_id>')
+@login_required
+def hub_posts_push_single(post_id):
+    r = _require_admin()
+    if r:
+        return r
+    post = Post.query.get_or_404(post_id)
+    result = _broadcast_post_to_hub(post)
+    _flash_hub_result('Envio manual', result)
+    return redirect(url_for('admin.posts_edit', post_id=post.id))
+
+
+@admin_bp.post('/hub-posts/push-all')
+@login_required
+def hub_posts_push_all():
+    r = _require_admin()
+    if r:
+        return r
+    posts = Post.query.filter(Post.source.in_(['local', 'hub'])).order_by(desc(Post.published_at), desc(Post.id)).limit(200).all()
+    total_sent = 0
+    total_ok = 0
+    for post in posts:
+        result = _broadcast_post_to_hub(post)
+        total_sent += int(result.get('sent', 0) or 0)
+        total_ok += int(result.get('ok', 0) or 0)
+    if total_sent:
+        flash(f'Reenvio concluído: {total_ok}/{total_sent} sincronizações OK.', 'success' if total_ok == total_sent else 'warning')
+    else:
+        flash('Nenhum site remoto ativo configurado para reenviar.', 'warning')
+    return redirect(url_for('admin.hub_posts_page'))
 
 
 @admin_bp.get("/wordpress")

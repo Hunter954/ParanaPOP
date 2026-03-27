@@ -34,6 +34,7 @@
     <div class="d-flex gap-2 mt-4">
       <button class="btn btn-dark" type="submit">Salvar matéria</button>
       {% if post %}<a class="btn btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Visualizar</a>{% endif %}
+      {% if post and hub.enabled and hub.remotes %}<button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_single', post_id=post.id) }}" formmethod="post">Enviar aos espelhos</button>{% endif %}
     </div>
   </section>
 </form>

@@ -51,6 +51,11 @@ def _ensure_defaults():
         ("youtube_url", ""),
         ("x_url", ""),
         ("site_keywords", "notícias, Paraná, Foz do Iguaçu, portal de notícias, atualidades"),
+        ("hub_enabled", "0"),
+        ("hub_site_key", ""),
+        ("hub_receive_token", ""),
+        ("hub_auto_push", "1"),
+        ("hub_remote_sites_json", "[]"),
     ]:
         if not SiteSetting.query.filter_by(key=key).first():
             db.session.add(SiteSetting(key=key, value=value))

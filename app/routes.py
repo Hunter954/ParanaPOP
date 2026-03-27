@@ -7,6 +7,7 @@ from flask import Blueprint, render_template, abort, request, current_app, send_
 from sqlalchemy import desc, func
 
 from .models import db, Post, Category, AdSlot, SiteSetting, PageView, AnalyticsSession
+from .sync import download_external_image
 
 site_bp = Blueprint("site", __name__)
 
@@ -131,6 +132,23 @@ def _display_category_name(value: str, max_len: int = 18) -> str:
     return first or text[:max_len].strip()
 
 
+
+
+def _parse_iso_datetime(value: str | None):
+    raw = (value or '').strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace('Z', ''))
+    except Exception:
+        return None
+
+
+def _hub_token_is_valid() -> bool:
+    expected = (_setting('hub_receive_token', '') or '').strip()
+    incoming = (request.headers.get('X-Hub-Token') or '').strip()
+    return bool(expected and incoming and incoming == expected)
+
 def _track_view(post_id=None):
     try:
         pv = PageView(
@@ -228,6 +246,77 @@ def sitemap_xml():
     response = make_response(''.join(xml))
     response.headers['Content-Type'] = 'application/xml; charset=utf-8'
     return response
+
+
+
+
+@site_bp.post('/api/hub/posts/upsert')
+def hub_posts_upsert_api():
+    if not _hub_token_is_valid():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    post_data = payload.get('post') or {}
+    slug = (post_data.get('slug') or '').strip()
+    title = (post_data.get('title') or '').strip()
+    if not slug or not title:
+        return jsonify({'ok': False, 'error': 'missing_slug_or_title'}), 400
+
+    post = Post.query.filter_by(slug=slug).first()
+    if not post:
+        post = Post(slug=slug, title=title, source='hub')
+        db.session.add(post)
+
+    post.title = title
+    post.excerpt = post_data.get('excerpt') or ''
+    post.content_html = post_data.get('content_html') or ''
+    post.author_name = (post_data.get('author_name') or '').strip() or 'Redação'
+    post.published_at = _parse_iso_datetime(post_data.get('published_at')) or post.published_at or datetime.utcnow()
+    post.updated_at = _parse_iso_datetime(post_data.get('updated_at')) or datetime.utcnow()
+    post.source = 'hub'
+
+    incoming_image = (post_data.get('featured_image') or '').strip()
+    if incoming_image:
+        try:
+            post.featured_image = download_external_image(incoming_image, folder='hub/featured') or incoming_image
+        except Exception:
+            post.featured_image = incoming_image
+
+    categories = []
+    for item in (post_data.get('categories') or []):
+        if not isinstance(item, dict):
+            continue
+        name = (item.get('name') or '').strip()
+        slug_value = (item.get('slug') or '').strip()
+        if not name or not slug_value:
+            continue
+        cat = Category.query.filter_by(slug=slug_value).first()
+        if not cat:
+            cat = Category(name=name, slug=slug_value)
+            db.session.add(cat)
+            db.session.flush()
+        else:
+            cat.name = name
+        categories.append(cat)
+    post.categories = categories
+    db.session.commit()
+    return jsonify({'ok': True, 'slug': post.slug})
+
+
+@site_bp.post('/api/hub/posts/delete')
+def hub_posts_delete_api():
+    if not _hub_token_is_valid():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    payload = request.get_json(silent=True) or {}
+    slug = (payload.get('slug') or '').strip()
+    if not slug:
+        return jsonify({'ok': False, 'error': 'missing_slug'}), 400
+    post = Post.query.filter_by(slug=slug).first()
+    if not post:
+        return jsonify({'ok': True, 'deleted': False})
+    db.session.delete(post)
+    db.session.commit()
+    return jsonify({'ok': True, 'deleted': True})
 
 
 @site_bp.get("/")
