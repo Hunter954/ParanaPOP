@@ -70,25 +70,16 @@ def _render_ad_from_payload(slot_key: str, payload: dict) -> str:
             f'<img src="{escape(item["image"], quote=True)}" alt="{escape(item["title"])}" loading="lazy"></a>'
         )
     controls = ''
-    if len(clean_banners) > 1:
-        dots_parts = []
-        for i in range(len(clean_banners)):
-            dot_class = "ad-rotator__dot active" if i == 0 else "ad-rotator__dot"
-            dots_parts.append(
-                f'<button type="button" class="{dot_class}" data-ad-dot aria-label="Banner {i+1}"></button>'
-            )
-        dots = ''.join(dots_parts)
-        controls = f'<div class="ad-rotator__dots">{dots}</div>'
     script = ''
     if len(clean_banners) > 1:
         interval_ms = seconds * 1000
         script = (
             '<script>(function(){'
             f'const root=document.getElementById("ad-rotator-{slot_id}");if(!root){{return;}}'
-            'const slides=[...root.querySelectorAll("[data-ad-slide]")];const dots=[...root.querySelectorAll("[data-ad-dot]")];'
+            'const slides=[...root.querySelectorAll("[data-ad-slide]")];'
             'if(slides.length<2){return;}let index=0;'
-            'const show=(i)=>{index=i;slides.forEach((slide,n)=>{slide.style.display=n===i?"block":"none";});dots.forEach((dot,n)=>dot.classList.toggle("active",n===i));};'
-            'dots.forEach((dot,n)=>dot.addEventListener("click",()=>show(n)));'
+            'const show=(i)=>{index=i;slides.forEach((slide,n)=>{slide.style.display=n===i?"block":"none";});};'
+            ''
             f'setInterval(()=>show((index+1)%slides.length),{interval_ms});'
             '})();</script>'
         )
