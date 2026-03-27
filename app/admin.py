@@ -131,15 +131,15 @@ def _default_slot_layout_meta() -> dict:
         },
         'sidebar_1': {
             'label': 'Lateral 1',
-            'hint': 'Primeiro banner lateral alto da sessão de categorias',
-            'shape': 'tall',
-            'dimensions': '300 × 520 px',
+            'hint': 'Primeiro banner lateral da sessão de categorias',
+            'shape': 'square',
+            'dimensions': '300 × 300 px',
         },
         'sidebar_2': {
             'label': 'Lateral 2',
-            'hint': 'Segundo banner lateral alto da sessão de categorias',
-            'shape': 'tall',
-            'dimensions': '300 × 520 px',
+            'hint': 'Segundo banner lateral da sessão de categorias',
+            'shape': 'square',
+            'dimensions': '300 × 300 px',
         },
     }
 

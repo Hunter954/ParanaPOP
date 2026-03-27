@@ -31,8 +31,8 @@ AD_SLOT_CLASSNAMES = {
     "home_top": "ad-slot-banner ad-slot-banner--wide",
     "home_mid": "ad-slot-banner ad-slot-banner--wide",
     "home_bottom": "ad-slot-banner ad-slot-banner--wide",
-    "sidebar_1": "ad-slot-banner ad-slot-banner--tall",
-    "sidebar_2": "ad-slot-banner ad-slot-banner--tall",
+    "sidebar_1": "ad-slot-banner ad-slot-banner--square",
+    "sidebar_2": "ad-slot-banner ad-slot-banner--square",
 }
 
 
