@@ -3,10 +3,10 @@ from html import unescape
 from pathlib import Path
 import re
 
-from flask import Blueprint, render_template, abort, request, current_app, send_from_directory
+from flask import Blueprint, render_template, abort, request, current_app, send_from_directory, jsonify, make_response, url_for
 from sqlalchemy import desc, func
 
-from .models import db, Post, Category, AdSlot, SiteSetting, PageView
+from .models import db, Post, Category, AdSlot, SiteSetting, PageView, AnalyticsSession
 
 site_bp = Blueprint("site", __name__)
 
@@ -21,12 +21,63 @@ def _setting(key: str, default: str = "") -> str:
     return s.value if s and s.value is not None else default
 
 
+def _absolute_url(value: str) -> str:
+    if not value:
+        return ""
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    return request.url_root.rstrip("/") + value
+
+
+def _site_name() -> str:
+    return _setting("site_name", current_app.config.get("SITE_NAME", "News"))
+
+
+def _site_tagline() -> str:
+    return _setting("site_tagline", "Portal de notícias do Oeste do Paraná")
+
+
+def _default_share_image() -> str:
+    return _absolute_url(_setting("default_share_image", _setting("logo_url", "")))
+
+
+def _meta_defaults():
+    return {
+        "site_name_value": _site_name(),
+        "favicon_url": _setting("favicon_url", ""),
+        "meta_title": _site_name(),
+        "meta_description": _setting("default_meta_description", _site_tagline()),
+        "meta_keywords": _setting("site_keywords", ""),
+        "meta_image": _default_share_image(),
+        "meta_url": request.url,
+        "meta_type": "website",
+        "facebook_app_id": _setting("facebook_app_id", ""),
+        "google_site_verification": _setting("google_site_verification", ""),
+        "google_analytics_id": _setting("google_analytics_id", ""),
+        "social_links": {
+            "instagram": _setting("instagram_url", ""),
+            "facebook": _setting("facebook_url", ""),
+            "youtube": _setting("youtube_url", ""),
+            "x": _setting("x_url", ""),
+        },
+        "organization_schema": {
+            "name": _site_name(),
+            "url": request.url_root.rstrip("/"),
+            "logo": _absolute_url(_setting("logo_url", "")) or _default_share_image(),
+            "email": _setting("contact_email", ""),
+            "telephone": _setting("contact_phone", ""),
+        },
+    }
+
+
 @site_bp.app_context_processor
 def inject_site_globals():
     cats = Category.query.order_by(Category.name.asc()).all()
     return {
         "nav_categories": cats,
         "logo_url": _setting("logo_url", ""),
+        "site_name_value": _site_name(),
+        "favicon_url": _setting("favicon_url", ""),
         "clean_text": _clean_text,
         "format_date_br": _format_date_br,
     }
@@ -76,6 +127,90 @@ def _track_view(post_id=None):
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+
+@site_bp.post("/analytics/collect")
+def analytics_collect():
+    payload = request.get_json(silent=True) or {}
+    session_id = (payload.get("session_id") or "").strip()[:120]
+    visitor_id = (payload.get("visitor_id") or "").strip()[:120]
+    if not session_id or not visitor_id:
+        return jsonify({"ok": False}), 400
+
+    event = (payload.get("event") or "pageview").strip()
+    page_path = (payload.get("page_path") or request.path or "/").strip()[:800]
+    referrer = (payload.get("referrer") or request.referrer or "").strip()[:800]
+    duration = max(0, min(int(payload.get("duration_seconds") or 0), 7200))
+    is_new_user = bool(payload.get("is_new_user"))
+
+    try:
+        session = AnalyticsSession.query.filter_by(session_id=session_id).first()
+        now = datetime.utcnow()
+        if not session:
+            session = AnalyticsSession(
+                session_id=session_id,
+                visitor_id=visitor_id,
+                landing_path=page_path,
+                referrer=referrer,
+                user_agent=(request.headers.get("User-Agent") or "")[:400],
+                pageviews=1,
+                duration_seconds=duration if event == "heartbeat" else 0,
+                is_bounce=True,
+                is_new_user=is_new_user,
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(session)
+        else:
+            if event == "pageview":
+                session.pageviews = max(1, (session.pageviews or 0) + 1)
+                session.is_bounce = session.pageviews <= 1
+            if event == "heartbeat":
+                session.duration_seconds = max(session.duration_seconds or 0, duration)
+                if duration >= 10 or (session.pageviews or 0) > 1:
+                    session.is_bounce = False
+            session.updated_at = now
+            if not session.referrer and referrer:
+                session.referrer = referrer
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({"ok": False}), 500
+
+
+@site_bp.get("/robots.txt")
+def robots_txt():
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        f"Sitemap: {request.url_root.rstrip('/')}{url_for('site.sitemap_xml')}",
+    ]
+    response = make_response("\n".join(lines))
+    response.headers["Content-Type"] = "text/plain; charset=utf-8"
+    return response
+
+
+@site_bp.get("/sitemap.xml")
+def sitemap_xml():
+    pages = [
+        (url_for('site.home', _external=True), datetime.utcnow()),
+        (url_for('site.search', _external=True), datetime.utcnow()),
+    ]
+    for cat in Category.query.order_by(Category.updated_at.desc() if hasattr(Category, 'updated_at') else Category.id.desc()).all():
+        pages.append((url_for('site.category', slug=cat.slug, _external=True), datetime.utcnow()))
+    for post in Post.query.order_by(desc(Post.updated_at), desc(Post.published_at)).limit(2000).all():
+        pages.append((url_for('site.post', slug=post.slug, _external=True), post.updated_at or post.published_at or datetime.utcnow()))
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for loc, lastmod in pages:
+        xml.append('<url>')
+        xml.append(f'<loc>{loc}</loc>')
+        xml.append(f'<lastmod>{lastmod.date().isoformat()}</lastmod>')
+        xml.append('</url>')
+    xml.append('</urlset>')
+    response = make_response(''.join(xml))
+    response.headers['Content-Type'] = 'application/xml; charset=utf-8'
+    return response
 
 
 @site_bp.get("/")
@@ -133,6 +268,7 @@ def home():
 
     return render_template(
         "home.html",
+        **_meta_defaults(),
         latest=latest,
         selected_cat=selected_cat,
         selected_posts=selected_posts,
@@ -184,9 +320,22 @@ def post(slug):
 
     related_label = post.categories[0].name if post.categories else "Notícias"
 
+    meta = _meta_defaults()
+    meta.update({
+        "meta_title": _clean_text(post.title, 110),
+        "meta_description": _clean_text(post.excerpt or post.content_html, 170) or _setting("default_meta_description", _site_tagline()),
+        "meta_keywords": ", ".join([c.name for c in post.categories]) or _setting("site_keywords", ""),
+        "meta_image": _absolute_url(post.featured_image or _setting("default_share_image", _setting("logo_url", ""))),
+        "meta_url": url_for("site.post", slug=post.slug, _external=True),
+        "meta_type": "article",
+        "article_published_time": post.published_at.isoformat() if post.published_at else "",
+        "article_modified_time": (post.updated_at or post.published_at).isoformat() if (post.updated_at or post.published_at) else "",
+    })
+
     return render_template(
         "post.html",
         post=post,
+        **meta,
         latest_posts=latest_posts,
         related_posts=related_posts,
         related_label=related_label,
@@ -211,9 +360,16 @@ def category(slug):
     pagination = q.paginate(page=page, per_page=per_page, error_out=False)
     _track_view(None)
 
+    meta = _meta_defaults()
+    meta.update({
+        "meta_title": f"{cat.name} | {_site_name()}",
+        "meta_description": f"Últimas matérias da editoria {cat.name} no {_site_name()}.",
+        "meta_url": url_for("site.category", slug=cat.slug, _external=True),
+    })
     return render_template(
         "category.html",
         cat=cat,
+        **meta,
         pagination=pagination,
         ad_header=_get_ad("header_top"),
         ad_sidebar_1=_get_ad("sidebar_1"),
@@ -235,9 +391,16 @@ def search():
     pagination = q.paginate(page=page, per_page=per_page, error_out=False)
     _track_view(None)
 
+    meta = _meta_defaults()
+    meta.update({
+        "meta_title": f"Buscar{' - ' + term if term else ''} | {_site_name()}",
+        "meta_description": f"Busca de notícias{' sobre ' + term if term else ''} no {_site_name()}.",
+        "meta_url": url_for("site.search", q=term, _external=True) if term else url_for("site.search", _external=True),
+    })
     return render_template(
         "search.html",
         term=term,
+        **meta,
         pagination=pagination,
         ad_header=_get_ad("header_top"),
         ad_sidebar_1=_get_ad("sidebar_1"),

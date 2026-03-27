@@ -11,7 +11,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
 
-from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories
+from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .wp_client import WPClient
 from .sync import sync_categories, sync_posts
@@ -119,6 +119,84 @@ def _delete_local_media(url: str) -> None:
             pass
 
 
+def _pct_delta(current: float, previous: float) -> float:
+    if not previous:
+        return 0.0 if not current else 100.0
+    return round(((current - previous) / previous) * 100, 1)
+
+
+def _analytics_stats(days: int = 30):
+    now = datetime.utcnow()
+    current_start = now - timedelta(days=days)
+    previous_start = current_start - timedelta(days=days)
+
+    current_sessions = AnalyticsSession.query.filter(AnalyticsSession.created_at >= current_start).all()
+    previous_sessions = AnalyticsSession.query.filter(AnalyticsSession.created_at >= previous_start, AnalyticsSession.created_at < current_start).all()
+
+    def summarize(items):
+        sessions = len(items)
+        pageviews = sum((item.pageviews or 0) for item in items)
+        total_users = len({item.visitor_id for item in items if item.visitor_id})
+        bounce_sessions = sum(1 for item in items if item.is_bounce)
+        new_users = len({item.visitor_id for item in items if item.is_new_user and item.visitor_id})
+        avg_duration = round(sum((item.duration_seconds or 0) for item in items) / sessions) if sessions else 0
+        bounce_rate = round((bounce_sessions / sessions) * 100, 1) if sessions else 0
+        return {
+            "sessions": sessions,
+            "pageviews": pageviews,
+            "avg_duration": avg_duration,
+            "total_users": total_users,
+            "bounce_rate": bounce_rate,
+            "new_users": new_users,
+        }
+
+    current = summarize(current_sessions)
+    previous = summarize(previous_sessions)
+    cards = []
+    labels = {
+        "sessions": "Sessions",
+        "pageviews": "Pageviews",
+        "avg_duration": "Avg. Session Duration",
+        "total_users": "Total Users",
+        "bounce_rate": "Bounce Rate",
+        "new_users": "New Users",
+    }
+    for key, label in labels.items():
+        cards.append({
+            "key": key,
+            "label": label,
+            "value": current[key],
+            "delta": _pct_delta(current[key], previous[key]),
+        })
+
+    top_pages = (
+        db.session.query(AnalyticsSession.landing_path, func.count(AnalyticsSession.id).label("sessions"), func.sum(AnalyticsSession.pageviews).label("pageviews"))
+        .filter(AnalyticsSession.created_at >= current_start)
+        .group_by(AnalyticsSession.landing_path)
+        .order_by(desc("pageviews"), desc("sessions"))
+        .limit(12)
+        .all()
+    )
+
+    top_referrers = (
+        db.session.query(AnalyticsSession.referrer, func.count(AnalyticsSession.id).label("sessions"))
+        .filter(AnalyticsSession.created_at >= current_start, AnalyticsSession.referrer.isnot(None), AnalyticsSession.referrer != "")
+        .group_by(AnalyticsSession.referrer)
+        .order_by(desc("sessions"))
+        .limit(8)
+        .all()
+    )
+
+    return {
+        "cards": cards,
+        "current": current,
+        "previous": previous,
+        "top_pages": top_pages,
+        "top_referrers": top_referrers,
+        "window_days": days,
+    }
+
+
 def _dashboard_stats():
     pv_total = db.session.query(func.count(PageView.id)).scalar() or 0
     since = datetime.utcnow() - timedelta(hours=24)
@@ -137,6 +215,7 @@ def _dashboard_stats():
         .limit(8)
         .all()
     )
+    analytics = _analytics_stats(30)
     return {
         "pv_total": pv_total,
         "pv_24h": pv_24h,
@@ -147,6 +226,7 @@ def _dashboard_stats():
         "active_ads": active_ads,
         "recent_posts": recent_posts,
         "popular_posts": popular_posts,
+        "analytics": analytics,
     }
 
 
@@ -229,6 +309,35 @@ def dashboard():
         site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
         media_files=media_files,
         **_common_admin_context("dashboard"),
+    )
+
+
+@admin_bp.get("/insights")
+@login_required
+def insights_page():
+    r = _require_admin()
+    if r:
+        return r
+    return render_template(
+        "admin/insights.html",
+        insights=_analytics_stats(30),
+        site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
+        logo_url=_setting("logo_url", ""),
+        favicon_url=_setting("favicon_url", ""),
+        default_share_image=_setting("default_share_image", ""),
+        default_meta_description=_setting("default_meta_description", ""),
+        google_analytics_id=_setting("google_analytics_id", ""),
+        facebook_app_id=_setting("facebook_app_id", ""),
+        google_site_verification=_setting("google_site_verification", ""),
+        site_keywords=_setting("site_keywords", ""),
+        site_tagline=_setting("site_tagline", ""),
+        contact_email=_setting("contact_email", ""),
+        contact_phone=_setting("contact_phone", ""),
+        instagram_url=_setting("instagram_url", ""),
+        facebook_url=_setting("facebook_url", ""),
+        youtube_url=_setting("youtube_url", ""),
+        x_url=_setting("x_url", ""),
+        **_common_admin_context("insights"),
     )
 
 
@@ -462,7 +571,21 @@ def settings_page():
         "admin/settings.html",
         live_embed=_setting("live_embed_html", ""),
         logo_url=_setting("logo_url", ""),
+        favicon_url=_setting("favicon_url", ""),
+        default_share_image=_setting("default_share_image", ""),
         site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
+        site_tagline=_setting("site_tagline", ""),
+        default_meta_description=_setting("default_meta_description", ""),
+        facebook_app_id=_setting("facebook_app_id", ""),
+        google_site_verification=_setting("google_site_verification", ""),
+        google_analytics_id=_setting("google_analytics_id", ""),
+        contact_email=_setting("contact_email", ""),
+        contact_phone=_setting("contact_phone", ""),
+        instagram_url=_setting("instagram_url", ""),
+        facebook_url=_setting("facebook_url", ""),
+        youtube_url=_setting("youtube_url", ""),
+        x_url=_setting("x_url", ""),
+        site_keywords=_setting("site_keywords", ""),
         **_common_admin_context("settings"),
     )
 
@@ -486,16 +609,45 @@ def save_logo():
     if r:
         return r
     old_logo = _setting("logo_url", "")
+    old_favicon = _setting("favicon_url", "")
+    old_share = _setting("default_share_image", "")
     logo_url = (request.form.get("logo_url", "") or "").strip()
+    favicon_url = (request.form.get("favicon_url", "") or "").strip()
+    default_share_image = (request.form.get("default_share_image", "") or "").strip()
     logo_file = request.files.get("logo_file")
+    favicon_file = request.files.get("favicon_file")
+    share_file = request.files.get("share_image_file")
     if logo_file and getattr(logo_file, "filename", ""):
         logo_url = _save_upload(logo_file, "branding")
+    if favicon_file and getattr(favicon_file, "filename", ""):
+        favicon_url = _save_upload(favicon_file, "branding")
+    if share_file and getattr(share_file, "filename", ""):
+        default_share_image = _save_upload(share_file, "branding")
+
     _save_setting("site_name", (request.form.get("site_name", "") or "").strip() or current_app.config.get("SITE_NAME", "News"))
+    _save_setting("site_tagline", (request.form.get("site_tagline", "") or "").strip())
+    _save_setting("default_meta_description", (request.form.get("default_meta_description", "") or "").strip())
+    _save_setting("facebook_app_id", (request.form.get("facebook_app_id", "") or "").strip())
+    _save_setting("google_site_verification", (request.form.get("google_site_verification", "") or "").strip())
+    _save_setting("google_analytics_id", (request.form.get("google_analytics_id", "") or "").strip())
+    _save_setting("contact_email", (request.form.get("contact_email", "") or "").strip())
+    _save_setting("contact_phone", (request.form.get("contact_phone", "") or "").strip())
+    _save_setting("instagram_url", (request.form.get("instagram_url", "") or "").strip())
+    _save_setting("facebook_url", (request.form.get("facebook_url", "") or "").strip())
+    _save_setting("youtube_url", (request.form.get("youtube_url", "") or "").strip())
+    _save_setting("x_url", (request.form.get("x_url", "") or "").strip())
+    _save_setting("site_keywords", (request.form.get("site_keywords", "") or "").strip())
     _save_setting("logo_url", logo_url)
+    _save_setting("favicon_url", favicon_url)
+    _save_setting("default_share_image", default_share_image)
     db.session.commit()
     if logo_file and old_logo and old_logo != logo_url:
         _delete_local_media(old_logo)
-    flash("Identidade visual atualizada.", "success")
+    if favicon_file and old_favicon and old_favicon != favicon_url:
+        _delete_local_media(old_favicon)
+    if share_file and old_share and old_share != default_share_image:
+        _delete_local_media(old_share)
+    flash("Configurações de branding, SEO e compartilhamento atualizadas.", "success")
     return redirect(url_for("admin.settings_page"))
 
 

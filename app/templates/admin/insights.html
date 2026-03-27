@@ -1,0 +1,98 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Insights{% endblock %}
+{% block page_title %}Insights do site{% endblock %}
+{% block page_subtitle %}Leitura de performance dos últimos {{ insights.window_days }} dias com foco em sessões, usuários, bounce e páginas de entrada.{% endblock %}
+{% block admin_content %}
+<section class="stats-grid insights-metrics-grid">
+  {% for card in insights.cards %}
+  <article class="stat-card">
+    <span>{{ card.label }}</span>
+    <strong>
+      {% if card.key == 'avg_duration' %}
+        {{ card.value }}s
+      {% elif card.key == 'bounce_rate' %}
+        {{ '%.1f'|format(card.value) }}%
+      {% else %}
+        {{ '{:,}'.format(card.value).replace(',', '.') }}
+      {% endif %}
+    </strong>
+    <small>
+      {% if card.delta > 0 %}
+        <span class="text-success">▲ {{ '%.1f'|format(card.delta) }}%</span>
+      {% elif card.delta < 0 %}
+        <span class="text-danger">▼ {{ '%.1f'|format(card.delta|abs) }}%</span>
+      {% else %}
+        <span class="text-muted">0%</span>
+      {% endif %}
+      vs. 30 dias anteriores
+    </small>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="admin-grid-2 mt-4">
+  <div class="panel-card">
+    <div class="panel-head"><div><h2>Páginas de entrada</h2><p>URLs que mais trouxeram sessões no período.</p></div></div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead><tr><th>Página</th><th>Sessões</th><th>Pageviews</th></tr></thead>
+        <tbody>
+          {% for path, sessions, pageviews in insights.top_pages %}
+          <tr>
+            <td><code>{{ path or '/' }}</code></td>
+            <td>{{ sessions }}</td>
+            <td>{{ pageviews or 0 }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="text-muted">Ainda não há dados suficientes.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel-card">
+    <div class="panel-head"><div><h2>Origem de tráfego</h2><p>Referrers captados automaticamente.</p></div></div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead><tr><th>Origem</th><th>Sessões</th></tr></thead>
+        <tbody>
+          {% for referrer, sessions in insights.top_referrers %}
+          <tr>
+            <td>{{ referrer }}</td>
+            <td>{{ sessions }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="2" class="text-muted">Sem origem registrada ainda.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="admin-grid-2 mt-4">
+  <div class="panel-card">
+    <div class="panel-head"><div><h2>Compartilhamento social</h2><p>Estado atual das principais configurações para link preview.</p></div></div>
+    <ul class="mb-0 ps-3">
+      <li><strong>Site:</strong> {{ site_name }}</li>
+      <li><strong>Logo:</strong> {{ 'OK' if logo_url else 'Pendente' }}</li>
+      <li><strong>Favicon:</strong> {{ 'OK' if favicon_url else 'Pendente' }}</li>
+      <li><strong>Imagem padrão:</strong> {{ 'OK' if default_share_image else 'Pendente' }}</li>
+      <li><strong>Descrição:</strong> {{ 'OK' if default_meta_description else 'Pendente' }}</li>
+      <li><strong>Google verification:</strong> {{ 'OK' if google_site_verification else 'Pendente' }}</li>
+      <li><strong>Google Analytics ID:</strong> {{ google_analytics_id or 'Não informado' }}</li>
+    </ul>
+  </div>
+  <div class="panel-card">
+    <div class="panel-head"><div><h2>O que foi habilitado nesta atualização</h2><p>Base para ranquear e compartilhar melhor automaticamente.</p></div></div>
+    <ul class="mb-0 ps-3">
+      <li>Meta title, description e keywords por página.</li>
+      <li>Open Graph e Twitter Card com thumbnail automática.</li>
+      <li>Canonical URL por home, categorias, busca e matéria.</li>
+      <li>JSON-LD de organização e artigo.</li>
+      <li>robots.txt e sitemap.xml automáticos.</li>
+      <li>Painel com sessões, usuários, bounce, pageviews e duração média.</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}

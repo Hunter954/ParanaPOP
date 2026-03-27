@@ -37,6 +37,20 @@ def _ensure_defaults():
         ("live_embed_html", ""),
         ("logo_url", ""),
         ("site_name", os.getenv("SITE_NAME", "News")),
+        ("favicon_url", ""),
+        ("default_share_image", ""),
+        ("site_tagline", "Portal de notícias do Oeste do Paraná"),
+        ("default_meta_description", "Últimas notícias, política, cidade, esportes e tudo que movimenta o Oeste do Paraná."),
+        ("facebook_app_id", ""),
+        ("google_site_verification", ""),
+        ("google_analytics_id", ""),
+        ("contact_email", ""),
+        ("contact_phone", ""),
+        ("instagram_url", ""),
+        ("facebook_url", ""),
+        ("youtube_url", ""),
+        ("x_url", ""),
+        ("site_keywords", "notícias, Paraná, Foz do Iguaçu, portal de notícias, atualidades"),
     ]:
         if not SiteSetting.query.filter_by(key=key).first():
             db.session.add(SiteSetting(key=key, value=value))

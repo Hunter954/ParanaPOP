@@ -3,13 +3,80 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ config.SITE_NAME }}{% block title %}{% endblock %}</title>
+  <title>{{ meta_title or site_name_value }}</title>
+  <meta name="description" content="{{ meta_description or '' }}">
+  {% if meta_keywords %}<meta name="keywords" content="{{ meta_keywords }}">{% endif %}
+  <meta name="robots" content="index,follow,max-image-preview:large">
+  <link rel="canonical" href="{{ meta_url or request.url }}">
+  {% if favicon_url %}<link rel="icon" href="{{ favicon_url }}">{% endif %}
+
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="{{ site_name_value }}">
+  <meta property="og:title" content="{{ meta_title or site_name_value }}">
+  <meta property="og:description" content="{{ meta_description or '' }}">
+  <meta property="og:type" content="{{ meta_type or 'website' }}">
+  <meta property="og:url" content="{{ meta_url or request.url }}">
+  {% if meta_image %}<meta property="og:image" content="{{ meta_image }}">{% endif %}
+  {% if facebook_app_id %}<meta property="fb:app_id" content="{{ facebook_app_id }}">{% endif %}
+  {% if article_published_time %}<meta property="article:published_time" content="{{ article_published_time }}">{% endif %}
+  {% if article_modified_time %}<meta property="article:modified_time" content="{{ article_modified_time }}">{% endif %}
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ meta_title or site_name_value }}">
+  <meta name="twitter:description" content="{{ meta_description or '' }}">
+  {% if meta_image %}<meta name="twitter:image" content="{{ meta_image }}">{% endif %}
+
+  {% if google_site_verification %}<meta name="google-site-verification" content="{{ google_site_verification }}">{% endif %}
+
+  <script type="application/ld+json">
+    {{ {
+      "@context": "https://schema.org",
+      "@type": "NewsMediaOrganization",
+      "name": organization_schema.name,
+      "url": organization_schema.url,
+      "logo": organization_schema.logo,
+      "email": organization_schema.email,
+      "telephone": organization_schema.telephone,
+      "sameAs": [social_links.instagram, social_links.facebook, social_links.youtube, social_links.x] | select | list
+    } | tojson }}
+  </script>
+  {% if meta_type == 'article' %}
+  <script type="application/ld+json">
+    {{ {
+      "@context": "https://schema.org",
+      "@type": "NewsArticle",
+      "headline": meta_title,
+      "description": meta_description,
+      "image": [meta_image] if meta_image else [],
+      "datePublished": article_published_time,
+      "dateModified": article_modified_time or article_published_time,
+      "mainEntityOfPage": meta_url,
+      "publisher": {
+        "@type": "Organization",
+        "name": organization_schema.name,
+        "logo": {
+          "@type": "ImageObject",
+          "url": organization_schema.logo
+        }
+      }
+    } | tojson }}
+  </script>
+  {% endif %}
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
+  {% if google_analytics_id %}
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ google_analytics_id }}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', '{{ google_analytics_id }}');
+  </script>
+  {% endif %}
 </head>
 <body>
   <header class="site-header">
@@ -21,7 +88,7 @@
 
         <a class="brand mobile-brand" href="{{ url_for('site.home') }}" aria-label="Home">
           {% if logo_url %}
-            <img src="{{ logo_url }}" alt="{{ config.SITE_NAME }}" />
+            <img src="{{ logo_url }}" alt="{{ site_name_value }}" />
           {% else %}
             <span class="brand-text">Paraná <strong>POP</strong></span>
           {% endif %}
@@ -66,7 +133,7 @@
       <div class="brand-row">
         <a class="brand desktop-brand" href="{{ url_for('site.home') }}" aria-label="Home">
           {% if logo_url %}
-            <img src="{{ logo_url }}" alt="{{ config.SITE_NAME }}" />
+            <img src="{{ logo_url }}" alt="{{ site_name_value }}" />
           {% else %}
             <span class="brand-text">Paraná <strong>POP</strong></span>
           {% endif %}
@@ -128,7 +195,7 @@
       <div class="footer-branding">
         <a class="brand footer-brand" href="{{ url_for('site.home') }}">
           {% if logo_url %}
-            <img src="{{ logo_url }}" alt="{{ config.SITE_NAME }}" />
+            <img src="{{ logo_url }}" alt="{{ site_name_value }}" />
           {% else %}
             <span class="brand-text">Paraná <strong>POP</strong></span>
           {% endif %}
@@ -160,6 +227,12 @@
     </div>
   </footer>
 
+  <script>
+    window.__SITE_ANALYTICS__ = {
+      endpoint: "{{ url_for('site.analytics_collect') }}",
+      path: "{{ request.path }}"
+    };
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script src="{{ url_for('static', filename='js/site.js') }}"></script>

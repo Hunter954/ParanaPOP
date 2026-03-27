@@ -73,3 +73,18 @@ class AdClick(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     slot_key = db.Column(db.String(80), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class AnalyticsSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(120), unique=True, index=True, nullable=False)
+    visitor_id = db.Column(db.String(120), index=True, nullable=False)
+    landing_path = db.Column(db.String(800), nullable=True)
+    referrer = db.Column(db.String(800), nullable=True)
+    user_agent = db.Column(db.String(400), nullable=True)
+    pageviews = db.Column(db.Integer, default=1, nullable=False)
+    duration_seconds = db.Column(db.Integer, default=0, nullable=False)
+    is_bounce = db.Column(db.Boolean, default=True, nullable=False)
+    is_new_user = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)

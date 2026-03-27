@@ -216,3 +216,66 @@ document.addEventListener('DOMContentLoaded', () => {
     paint();
   }
 });
+
+
+(function () {
+  const cfg = window.__SITE_ANALYTICS__;
+  if (!cfg || !cfg.endpoint || !window.fetch || !window.localStorage || !window.sessionStorage) return;
+
+  const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  const visitorKey = 'pp_visitor_id';
+  const sessionKey = 'pp_session_id';
+  const startedAtKey = 'pp_session_started_at';
+
+  let visitorId = localStorage.getItem(visitorKey);
+  let isNewUser = false;
+  if (!visitorId) {
+    visitorId = uid();
+    localStorage.setItem(visitorKey, visitorId);
+    isNewUser = true;
+  }
+
+  let sessionId = sessionStorage.getItem(sessionKey);
+  if (!sessionId) {
+    sessionId = uid();
+    sessionStorage.setItem(sessionKey, sessionId);
+    sessionStorage.setItem(startedAtKey, String(Date.now()));
+  }
+
+  const send = (eventName, durationSeconds = 0) => {
+    const payload = {
+      event: eventName,
+      session_id: sessionId,
+      visitor_id: visitorId,
+      page_path: cfg.path || window.location.pathname,
+      referrer: document.referrer || '',
+      duration_seconds: durationSeconds,
+      is_new_user: isNewUser,
+    };
+    const body = JSON.stringify(payload);
+    if (navigator.sendBeacon && eventName === 'heartbeat') {
+      navigator.sendBeacon(cfg.endpoint, new Blob([body], { type: 'application/json' }));
+      return;
+    }
+    fetch(cfg.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+      credentials: 'same-origin',
+    }).catch(() => {});
+  };
+
+  send('pageview', 0);
+
+  const flushDuration = () => {
+    const startedAt = parseInt(sessionStorage.getItem(startedAtKey) || String(Date.now()), 10);
+    const seconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+    send('heartbeat', seconds);
+  };
+
+  window.addEventListener('beforeunload', flushDuration);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushDuration();
+  });
+})();
