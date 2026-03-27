@@ -23,8 +23,8 @@ def load_user(user_id):
 def _ensure_defaults():
     defaults = [
         ("header_top", "Publicidade (Topo - faixa)"),
-        ("home_top", "Publicidade (Home - faixa superior)"),
-        ("home_mid", "Publicidade (Home - faixa meio)"),
+        ("home_top", "Publicidade (Home - faixa no meio)"),
+        ("home_mid", "Publicidade (Final da matéria)"),
         ("home_bottom", "Publicidade (Home - faixa inferior)"),
         ("sidebar_1", "Publicidade (Sidebar 1)"),
         ("sidebar_2", "Publicidade (Sidebar 2)"),

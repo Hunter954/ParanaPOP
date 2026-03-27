@@ -31,8 +31,8 @@ AD_SLOT_CLASSNAMES = {
     "home_top": "ad-slot-banner ad-slot-banner--wide",
     "home_mid": "ad-slot-banner ad-slot-banner--wide",
     "home_bottom": "ad-slot-banner ad-slot-banner--wide",
-    "sidebar_1": "ad-slot-banner ad-slot-banner--square",
-    "sidebar_2": "ad-slot-banner ad-slot-banner--square",
+    "sidebar_1": "ad-slot-banner ad-slot-banner--tall",
+    "sidebar_2": "ad-slot-banner ad-slot-banner--tall",
 }
 
 
@@ -477,8 +477,8 @@ def home():
         live_title=live_title,
         live_embed_html=live_embed_html,
         ad_header=_get_ad("header_top"),
-        ad_home_top=_get_ad("home_top"),
-        ad_home_mid=_get_ad("home_mid"),
+        ad_home_middle=_get_ad("home_top"),
+        ad_article_end=_get_ad("home_mid"),
         ad_home_bottom=_get_ad("home_bottom"),
         ad_sidebar_1=_get_ad("sidebar_1"),
         ad_sidebar_2=_get_ad("sidebar_2"),
@@ -539,7 +539,7 @@ def post(slug):
         related_posts=related_posts,
         related_label=related_label,
         ad_header=_get_ad("header_top"),
-        ad_home_mid=_get_ad("home_mid"),
+        ad_article_end=_get_ad("home_mid"),
         ad_sidebar_1=_get_ad("sidebar_1"),
         ad_sidebar_2=_get_ad("sidebar_2"),
     )

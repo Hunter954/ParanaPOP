@@ -45,6 +45,10 @@ img{max-width:100%;display:block}
 .weather-widget-embed > div[id^="ww_"]{width:100% !important;max-width:100% !important}
 .weather-box iframe{width:100% !important;border:0 !important}
 .weather-placeholder{display:flex;align-items:center;justify-content:center;background:var(--weather);font-weight:900;text-transform:uppercase;font-size:20px}
+.ad-slot-banner{position:relative;overflow:hidden;border-radius:14px;background:#e1e1e1}
+.ad-slot-banner img{width:100%;height:100%;display:block;object-fit:cover}
+.ad-slot-banner--wide{aspect-ratio:1170/250}
+.ad-slot-banner--tall{aspect-ratio:300/420}
 .main-wrap{padding:0 0 42px}
 
 .pp-section{margin-top:12px}
@@ -85,7 +89,7 @@ img{max-width:100%;display:block}
 .feature-thumb{height:228px}
 .thumb-small{height:146px;margin-bottom:10px}
 .story-meta-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
-.tag{display:inline-flex;align-items:center;min-height:21px;padding:0 10px;border-radius:999px;background:#ffc107;color:#000000;font-size:10px;font-weight:900;text-transform:uppercase;line-height:1;letter-spacing:.02em}
+.tag{display:inline-flex;align-items:center;min-height:21px;padding:0 10px;border-radius:999px;background:var(--ad);color:#111;font-size:10px;font-weight:900;text-transform:uppercase;line-height:1;letter-spacing:.02em}
 .date-label{font-size:11px;color:#6f6f6f;font-weight:500;text-align:right}
 .main-story-card h1,.news-tile-card h3,.side-story-card h3,.city-story-copy h3{margin:0;font-weight:900;letter-spacing:-.035em;color:#111}
 .main-story-card{padding-top:2px}
@@ -121,16 +125,16 @@ img{max-width:100%;display:block}
 .rotative-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
 .rotative-track::-webkit-scrollbar{display:none}
 .rotative-panel{min-width:100%;scroll-snap-align:start}
-.rotative-layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:28px;align-items:start}
+.rotative-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:28px;align-items:start}
 .rotative-main{min-width:0}
 .rotative-posts{display:flex;flex-direction:column;gap:18px}
 .city-story-row{display:grid;grid-template-columns:180px minmax(0,1fr);gap:18px;align-items:start}
 .city-thumb{height:94px}
 .city-story-copy h3{font-size:26px;line-height:1.02;margin-bottom:10px}
 .city-story-copy p{font-size:14px;color:#5a5a5a}
-.rotative-ads{display:flex;flex-direction:column;gap:20px}
-.ad-placeholder--square{height:228px;background:var(--ad)}
-.rotative-ad-box{height:228px}
+.rotative-ads{display:flex;flex-direction:column;gap:20px;align-self:stretch}
+.ad-placeholder--square,.ad-placeholder--tall{height:312px;background:var(--ad)}
+.rotative-ad-box{height:312px}
 
 .site-footer{padding:40px 0 48px;background:#dcdcdc;margin-top:20px}
 .footer-shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);gap:40px;align-items:start}
@@ -209,7 +213,7 @@ img{max-width:100%;display:block}
 
   .rotative-layout{grid-template-columns:minmax(0,1fr)}
   .rotative-ads{flex-direction:row}
-  .rotative-ad-box{flex:1}
+  .rotative-ad-box{flex:1;min-height:260px}
 
   .main-story-card h1{
     font-size:clamp(24px,2.5vw,32px);
@@ -278,7 +282,7 @@ img{max-width:100%;display:block}
 }
 
 .right-rail .ad-placeholder,.right-rail .ad-box{width:100%}
-.article-rail .ad-placeholder--square{height:228px}
+.article-rail .ad-placeholder--square,.article-rail .ad-placeholder--tall{height:312px}
 
 
 .mobile-topbar,.mobile-menu-backdrop,.mobile-menu-drawer{display:none}

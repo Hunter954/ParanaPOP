@@ -106,11 +106,11 @@ def _parse_ad_slot_payload(raw: str | None) -> dict | None:
 def _default_slot_layout_meta() -> dict:
     return {
         'header_top': {'label': 'Topo do site', 'hint': 'Faixa principal do cabeçalho', 'shape': 'wide'},
-        'home_top': {'label': 'Home superior', 'hint': 'Faixa logo no início da home', 'shape': 'wide'},
-        'home_mid': {'label': 'Home / matéria no meio', 'hint': 'Faixa no meio da home e dentro das matérias', 'shape': 'wide'},
+        'home_top': {'label': 'Meio da home', 'hint': 'Banner exibido no meio da página inicial', 'shape': 'wide'},
+        'home_mid': {'label': 'Final da matéria', 'hint': 'Banner exibido somente no fim das matérias', 'shape': 'wide'},
         'home_bottom': {'label': 'Rodapé', 'hint': 'Banner grande no rodapé do site', 'shape': 'wide'},
-        'sidebar_1': {'label': 'Sidebar 1', 'hint': 'Primeiro banner lateral', 'shape': 'square'},
-        'sidebar_2': {'label': 'Sidebar 2', 'hint': 'Segundo banner lateral', 'shape': 'square'},
+        'sidebar_1': {'label': 'Lateral 1', 'hint': 'Primeiro banner lateral alto da sessão de categorias', 'shape': 'tall'},
+        'sidebar_2': {'label': 'Lateral 2', 'hint': 'Segundo banner lateral alto da sessão de categorias', 'shape': 'tall'},
     }
 
 
