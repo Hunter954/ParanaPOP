@@ -151,7 +151,7 @@ def _hub_token_is_valid() -> bool:
 
 
 def _published_posts_query():
-    return Post.query.filter((Post.is_draft.is_(False)) | (Post.is_draft.is_(None)))
+    return Post.query.filter(Post.published_at.isnot(None))
 
 def _track_view(post_id=None):
     try:
@@ -276,7 +276,6 @@ def hub_posts_upsert_api():
     post.content_html = post_data.get('content_html') or ''
     post.author_name = (post_data.get('author_name') or '').strip() or 'Redação'
     post.published_at = _parse_iso_datetime(post_data.get('published_at')) or post.published_at or datetime.utcnow()
-    post.is_draft = bool(post_data.get('is_draft'))
     post.updated_at = _parse_iso_datetime(post_data.get('updated_at')) or datetime.utcnow()
     post.source = 'hub'
 

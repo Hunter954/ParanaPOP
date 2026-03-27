@@ -1,7 +1,7 @@
 {% extends 'admin/layout.html' %}
 {% block admin_title %}{% if mode=='new' %}Nova matéria{% else %}Editar matéria{% endif %}{% endblock %}
 {% block page_title %}{% if mode=='new' %}Nova matéria{% else %}Editar matéria{% endif %}{% endblock %}
-{% block page_subtitle %}Editor visual com publicação automática, slug gerado no código e opção de salvar como rascunho.{% endblock %}
+{% block page_subtitle %}Editor visual sem API externa, slug gerado no código e opção de salvar como rascunho.{% endblock %}
 {% block admin_content %}
 <form method="post" enctype="multipart/form-data" class="admin-grid-2 js-post-form">
   {{ form.csrf_token }}
@@ -12,8 +12,33 @@
       <div><label class="form-label">Resumo</label>{{ form.excerpt(class='form-control', rows='4', placeholder='Linha fina / resumo da matéria') }}</div>
       <div>
         <label class="form-label">Conteúdo da matéria</label>
-        {{ form.content_html(class='form-control editor-area js-rich-editor', rows='18', placeholder='<p>Conteúdo da matéria...</p>') }}
-        <div class="form-help mt-2">Você pode formatar texto, listas, alinhamento, links e mais direto no editor.</div>
+        <div class="custom-editor">
+          <div class="custom-editor-toolbar">
+            <button type="button" class="btn btn-sm btn-light" data-editor-action="undo" title="Desfazer"><i class="bi bi-arrow-counterclockwise"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-action="redo" title="Refazer"><i class="bi bi-arrow-clockwise"></i></button>
+            <select class="form-select form-select-sm editor-select" data-editor-style="block">
+              <option value="p">Parágrafo</option>
+              <option value="h2">Título 2</option>
+              <option value="h3">Título 3</option>
+              <option value="blockquote">Citação</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="bold" title="Negrito"><i class="bi bi-type-bold"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="italic" title="Itálico"><i class="bi bi-type-italic"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="underline" title="Sublinhado"><i class="bi bi-type-underline"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="strikeThrough" title="Riscado"><i class="bi bi-type-strikethrough"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="justifyLeft" title="Alinhar à esquerda"><i class="bi bi-text-left"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="justifyCenter" title="Centralizar"><i class="bi bi-text-center"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="justifyRight" title="Alinhar à direita"><i class="bi bi-text-right"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="insertUnorderedList" title="Lista"><i class="bi bi-list-ul"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="insertOrderedList" title="Lista numerada"><i class="bi bi-list-ol"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-action="link" title="Inserir link"><i class="bi bi-link-45deg"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="unlink" title="Remover link"><i class="bi bi-link"></i></button>
+            <button type="button" class="btn btn-sm btn-light" data-editor-cmd="removeFormat" title="Limpar formatação"><i class="bi bi-eraser"></i></button>
+          </div>
+          <div class="custom-editor-content js-editor-surface" contenteditable="true"></div>
+          {{ form.content_html(class='d-none js-editor-input') }}
+        </div>
+        <div class="form-help mt-2">Você pode formatar texto, listas, alinhamento e links direto no editor, sem API externa.</div>
       </div>
     </div>
   </section>
@@ -31,7 +56,7 @@
       </div>
       <div class="preview-box" style="padding:14px 16px;">
         <div class="small text-muted mb-1">Status atual</div>
-        <div><strong>{% if post and post.is_draft %}Rascunho{% else %}Publicado{% endif %}</strong></div>
+        <div><strong>{% if post and not post.published_at %}Rascunho{% else %}Publicado{% endif %}</strong></div>
       </div>
       <div><label class="form-label">Categorias</label>{{ form.categories(class='form-select', multiple=true, size='8') }}</div>
       <div><label class="form-label">Imagem por link</label>{{ form.featured_image(class='form-control', placeholder='https://.../imagem.jpg') }}</div>
@@ -46,8 +71,8 @@
     <div class="d-flex gap-2 mt-4 flex-wrap">
       <button class="btn btn-dark" type="submit" name="post_action" value="publish">Publicar agora</button>
       <button class="btn btn-outline-secondary" type="submit" name="post_action" value="draft">Salvar rascunho</button>
-      {% if post and not post.is_draft %}<a class="btn btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Visualizar</a>{% endif %}
-      {% if post and hub.enabled and hub.remotes and not post.is_draft %}<button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_single', post_id=post.id) }}" formmethod="post">Enviar aos espelhos</button>{% endif %}
+      {% if post and post.published_at %}<a class="btn btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Visualizar</a>{% endif %}
+      {% if post and hub.enabled and hub.remotes and post.published_at %}<button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_single', post_id=post.id) }}" formmethod="post">Enviar aos espelhos</button>{% endif %}
     </div>
   </section>
 </form>
@@ -64,33 +89,65 @@
 
 {% block extra_js %}
   {{ super() }}
-  <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
+  <style>
+    .custom-editor{border:1px solid var(--bs-border-color);border-radius:18px;overflow:hidden;background:#fff;}
+    .custom-editor-toolbar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;padding:.75rem;border-bottom:1px solid var(--bs-border-color);background:#f8f9fb;}
+    .custom-editor-toolbar .btn{min-width:38px;}
+    .custom-editor-toolbar .editor-select{width:auto;min-width:150px;}
+    .custom-editor-content{min-height:520px;padding:1.25rem;outline:none;font-size:1rem;line-height:1.75;}
+    .custom-editor-content:empty:before{content:'Escreva o conteúdo da matéria aqui...';color:#98a2b3;}
+    .custom-editor-content h2,.custom-editor-content h3{margin-top:1.5rem;margin-bottom:.75rem;}
+    .custom-editor-content p{margin-bottom:1rem;}
+    .custom-editor-content blockquote{border-left:4px solid #d0d5dd;padding-left:1rem;color:#475467;margin:1rem 0;}
+  </style>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
-      if (!document.querySelector('.js-rich-editor') || typeof tinymce === 'undefined') return;
-      tinymce.init({
-        selector: '.js-rich-editor',
-        height: 560,
-        menubar: false,
-        branding: false,
-        promotion: false,
-        convert_urls: false,
-        browser_spellcheck: true,
-        contextmenu: false,
-        plugins: 'advlist autolink lists link image charmap preview anchor searchreplace visualblocks code fullscreen insertdatetime media table wordcount quickbars',
-        toolbar: 'undo redo | blocks fontsize | bold italic underline strikethrough | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link table image media | removeformat code preview',
-        content_style: 'body { font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.7; padding: 16px; }',
-        setup: function (editor) {
-          const syncEditor = function () { editor.save(); };
-          editor.on('change input undo redo keyup', syncEditor);
-          const form = document.querySelector('.js-post-form');
-          if (form) {
-            form.addEventListener('submit', function () {
-              tinymce.triggerSave();
-            });
-          }
-        }
+      const form = document.querySelector('.js-post-form');
+      const surface = document.querySelector('.js-editor-surface');
+      const input = document.querySelector('.js-editor-input');
+      if (!form || !surface || !input) return;
+
+      surface.innerHTML = input.value || '';
+
+      const syncEditor = function () {
+        input.value = surface.innerHTML.trim();
+      };
+
+      document.querySelectorAll('[data-editor-cmd]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          const cmd = button.getAttribute('data-editor-cmd');
+          surface.focus();
+          document.execCommand(cmd, false, null);
+          syncEditor();
+        });
       });
+
+      document.querySelectorAll('[data-editor-action]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          const action = button.getAttribute('data-editor-action');
+          surface.focus();
+          if (action === 'undo' || action === 'redo') {
+            document.execCommand(action, false, null);
+          } else if (action === 'link') {
+            const url = window.prompt('Cole a URL do link:');
+            if (url) document.execCommand('createLink', false, url);
+          }
+          syncEditor();
+        });
+      });
+
+      document.querySelectorAll('[data-editor-style="block"]').forEach(function (select) {
+        select.addEventListener('change', function () {
+          const value = select.value || 'p';
+          surface.focus();
+          document.execCommand('formatBlock', false, value === 'p' ? 'p' : value);
+          syncEditor();
+        });
+      });
+
+      surface.addEventListener('input', syncEditor);
+      surface.addEventListener('blur', syncEditor);
+      form.addEventListener('submit', syncEditor);
     });
   </script>
 {% endblock %}

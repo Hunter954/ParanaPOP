@@ -43,7 +43,6 @@ class Post(db.Model):
 
     featured_image = db.Column(db.String(800), nullable=True)
     author_name = db.Column(db.String(190), nullable=True)
-    is_draft = db.Column(db.Boolean, default=False, nullable=False, index=True)
 
     published_at = db.Column(db.DateTime, index=True, nullable=True)
     updated_at = db.Column(db.DateTime, nullable=True)

@@ -139,7 +139,6 @@ def _serialize_post_for_hub(post: Post) -> dict:
             'updated_at': (post.updated_at or datetime.utcnow()).isoformat(),
             'categories': [{'name': c.name, 'slug': c.slug} for c in (post.categories or [])],
             'source': post.source or 'local',
-            'is_draft': bool(post.is_draft),
         }
     }
 
@@ -698,7 +697,7 @@ def posts_new():
     _bind_post_form_choices(form)
     if request.method == "POST" and form.validate_on_submit():
         action = (request.form.get("post_action") or "publish").strip().lower()
-        is_draft = action == "draft"
+        save_as_draft = action == "draft"
         slug = _ensure_unique_slug(Post, form.title.data)
         featured_image = (form.featured_image.data or "").strip()
         if form.featured_image_file.data:
@@ -712,17 +711,16 @@ def posts_new():
             content_html=form.content_html.data,
             featured_image=featured_image,
             author_name="Anônimo",
-            is_draft=is_draft,
-            published_at=None if is_draft else now,
+            published_at=None if save_as_draft else now,
             updated_at=now,
         )
         if form.categories.data:
             post.categories = Category.query.filter(Category.id.in_(form.categories.data)).all()
         db.session.add(post)
         db.session.commit()
-        if not post.is_draft:
+        if post.published_at:
             _flash_hub_result('Publicação automática', _broadcast_post_to_hub(post) if _hub_config().get('auto_push') else {'sent': 0, 'ok': 0, 'results': []})
-        flash('Rascunho salvo com sucesso.' if post.is_draft else 'Matéria publicada com sucesso.', 'success')
+        flash('Rascunho salvo com sucesso.' if save_as_draft else 'Matéria publicada com sucesso.', 'success')
         return redirect(url_for("admin.posts_edit", post_id=post.id))
     return render_template("admin/post_form.html", form=form, mode="new", hub=_hub_config(), **_common_admin_context("posts"))
 
@@ -741,7 +739,7 @@ def posts_edit(post_id):
     if request.method == "POST" and form.validate_on_submit():
         action = (request.form.get("post_action") or "publish").strip().lower()
         old_image = post.featured_image
-        was_draft = bool(post.is_draft)
+        was_draft = post.published_at is None
         post.title = form.title.data.strip()
         post.slug = _ensure_unique_slug(Post, form.title.data, object_id=post.id)
         post.excerpt = form.excerpt.data
@@ -751,19 +749,19 @@ def posts_edit(post_id):
         if form.featured_image_file.data:
             featured_image = _save_upload(form.featured_image_file.data, "posts")
         post.featured_image = featured_image
-        post.is_draft = action == "draft"
-        if post.is_draft:
+        save_as_draft = action == "draft"
+        if save_as_draft:
             post.published_at = None
         elif post.published_at is None or was_draft:
             post.published_at = datetime.utcnow()
         post.updated_at = datetime.utcnow()
         post.categories = Category.query.filter(Category.id.in_(form.categories.data or [])).all()
         db.session.commit()
-        if not post.is_draft:
+        if post.published_at:
             _flash_hub_result('Atualização automática', _broadcast_post_to_hub(post) if _hub_config().get('auto_push') else {'sent': 0, 'ok': 0, 'results': []})
         if form.featured_image_file.data and old_image and old_image != featured_image:
             _delete_local_media(old_image)
-        flash('Rascunho atualizado.' if post.is_draft else 'Matéria publicada com sucesso.', 'success')
+        flash('Rascunho atualizado.' if save_as_draft else 'Matéria publicada com sucesso.', 'success')
         return redirect(url_for("admin.posts_edit", post_id=post.id))
     return render_template("admin/post_form.html", form=form, mode="edit", post=post, hub=_hub_config(), **_common_admin_context("posts"))
 
