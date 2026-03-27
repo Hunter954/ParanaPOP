@@ -146,7 +146,7 @@ body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFo
 .ads-preview-slot:hover { transform: translateY(-2px); border-color: #c7d2fe; box-shadow: 0 20px 50px rgba(15, 23, 42, .10); }
 .ads-preview-slot--wide .ads-preview-art { aspect-ratio: 1170 / 250; }
 .ads-preview-slot--square .ads-preview-art { aspect-ratio: 1 / 1; }
-.ads-preview-slot--tall .ads-preview-art { aspect-ratio: 300 / 420; }
+.ads-preview-slot--tall .ads-preview-art { aspect-ratio: 300 / 520; }
 .ads-preview-badge { display: inline-flex; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #334155; background: #eef2ff; margin-bottom: 12px; }
 .ads-preview-art { display: grid; place-items: center; overflow: hidden; border-radius: 18px; background: repeating-linear-gradient(135deg, #edf2f7, #edf2f7 16px, #f8fafc 16px, #f8fafc 32px); border: 1px dashed #cbd5e1; }
 .ads-preview-art.has-image { border-style: solid; background: #fff; }
@@ -179,3 +179,17 @@ body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFo
 .ad-rotator__dot.active { background: #fff; }
 @media (max-width: 1199px) { .ads-visual-layout, .ads-manage-layout { grid-template-columns: 1fr; } }
 @media (max-width: 991px) { .ads-guide-grid, .ads-home-preview-grid { grid-template-columns: 1fr; } }
+
+.ads-manage-specs { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.ads-spec-card { border: 1px solid var(--admin-line); border-radius: 18px; background: #fbfcff; padding: 16px 18px; display:flex; flex-direction:column; gap:6px; }
+.ads-spec-card span { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--admin-muted); }
+.ads-spec-card strong { font-size: 22px; letter-spacing: -.03em; }
+.ads-spec-card--switch { cursor: pointer; }
+.ads-spec-card--switch:hover { border-color: #c7d2fe; }
+.ads-switch { padding: 0; border: 0; border-radius: 0; width: auto; min-height: 0; display:flex; align-items:center; gap:12px; margin:0; }
+.ads-switch .form-check-input { float:none; margin:0; width: 3rem; height: 1.6rem; cursor:pointer; }
+.ads-switch .form-check-label, .ads-switch span.form-check-label { margin:0; font-weight: 800; color: var(--admin-text); }
+.ads-manage-note strong { font-weight: 800; }
+@media (max-width: 991px) {
+  .ads-manage-specs { grid-template-columns: 1fr; }
+}

@@ -105,12 +105,42 @@ def _parse_ad_slot_payload(raw: str | None) -> dict | None:
 
 def _default_slot_layout_meta() -> dict:
     return {
-        'header_top': {'label': 'Topo do site', 'hint': 'Faixa principal do cabeçalho', 'shape': 'wide'},
-        'home_top': {'label': 'Meio da home', 'hint': 'Banner exibido no meio da página inicial', 'shape': 'wide'},
-        'home_mid': {'label': 'Final da matéria', 'hint': 'Banner exibido somente no fim das matérias', 'shape': 'wide'},
-        'home_bottom': {'label': 'Rodapé', 'hint': 'Banner grande no rodapé do site', 'shape': 'wide'},
-        'sidebar_1': {'label': 'Lateral 1', 'hint': 'Primeiro banner lateral alto da sessão de categorias', 'shape': 'tall'},
-        'sidebar_2': {'label': 'Lateral 2', 'hint': 'Segundo banner lateral alto da sessão de categorias', 'shape': 'tall'},
+        'header_top': {
+            'label': 'Topo do site',
+            'hint': 'Faixa principal do cabeçalho',
+            'shape': 'wide',
+            'dimensions': '1170 × 250 px',
+        },
+        'home_top': {
+            'label': 'Meio da home',
+            'hint': 'Banner exibido no meio da página inicial',
+            'shape': 'wide',
+            'dimensions': '1170 × 250 px',
+        },
+        'home_mid': {
+            'label': 'Final da matéria',
+            'hint': 'Banner exibido somente no fim das matérias',
+            'shape': 'wide',
+            'dimensions': '1170 × 250 px',
+        },
+        'home_bottom': {
+            'label': 'Rodapé',
+            'hint': 'Banner grande no rodapé do site',
+            'shape': 'wide',
+            'dimensions': '420 × 170 px',
+        },
+        'sidebar_1': {
+            'label': 'Lateral 1',
+            'hint': 'Primeiro banner lateral alto da sessão de categorias',
+            'shape': 'tall',
+            'dimensions': '300 × 520 px',
+        },
+        'sidebar_2': {
+            'label': 'Lateral 2',
+            'hint': 'Segundo banner lateral alto da sessão de categorias',
+            'shape': 'tall',
+            'dimensions': '300 × 520 px',
+        },
     }
 
 
@@ -150,6 +180,7 @@ def _slot_card_data(slot: AdSlot) -> dict:
         'label': meta.get('label', slot.name),
         'hint': meta.get('hint', 'Gerencie as artes desse espaço.'),
         'shape': meta.get('shape', 'wide'),
+        'dimensions': meta.get('dimensions', 'Consulte a arte usada no site'),
         'interval_seconds': payload['interval_seconds'],
         'banner_count': len(payload['banners']),
         'cover_image': payload['banners'][0]['image'] if payload['banners'] else '',

@@ -13,7 +13,7 @@
     <div>
       <span class="ads-guide-step">2</span>
       <strong>Envie as artes</strong>
-      <p>Adicione uma ou várias imagens para o mesmo banner.</p>
+      <p>Adicione uma ou várias imagens e siga a medida indicada em cada espaço.</p>
     </div>
     <div>
       <span class="ads-guide-step">3</span>
@@ -37,8 +37,8 @@
       {% for item in slot_cards if item.slot.key == 'header_top' %}
       <a class="ads-preview-slot ads-preview-slot--wide" href="{{ url_for('admin.ads_manage', slot_id=item.slot.id) }}">
         <span class="ads-preview-badge">{{ item.label }}</span>
-        <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }}</small>{% endif %}</div>
-        <div class="ads-preview-meta"><strong>{{ item.banner_count }} banner(s)</strong><span>{{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
+        <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }} • {{ item.dimensions }}</small>{% endif %}</div>
+        <div class="ads-preview-meta"><strong>{{ item.dimensions }}</strong><span>{{ item.banner_count }} banner(s) • {{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
       </a>
       {% endfor %}
 
@@ -48,8 +48,8 @@
             {% for item in slot_cards if item.slot.key == key %}
             <a class="ads-preview-slot ads-preview-slot--wide" href="{{ url_for('admin.ads_manage', slot_id=item.slot.id) }}">
               <span class="ads-preview-badge">{{ item.label }}</span>
-              <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }}</small>{% endif %}</div>
-              <div class="ads-preview-meta"><strong>{{ item.banner_count }} banner(s)</strong><span>{{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
+              <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }} • {{ item.dimensions }}</small>{% endif %}</div>
+              <div class="ads-preview-meta"><strong>{{ item.dimensions }}</strong><span>{{ item.banner_count }} banner(s) • {{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
             </a>
             {% endfor %}
           {% endfor %}
@@ -60,8 +60,8 @@
             {% for item in slot_cards if item.slot.key == key %}
             <a class="ads-preview-slot ads-preview-slot--square" href="{{ url_for('admin.ads_manage', slot_id=item.slot.id) }}">
               <span class="ads-preview-badge">{{ item.label }}</span>
-              <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }}</small>{% endif %}</div>
-              <div class="ads-preview-meta"><strong>{{ item.banner_count }} banner(s)</strong><span>{{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
+              <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }} • {{ item.dimensions }}</small>{% endif %}</div>
+              <div class="ads-preview-meta"><strong>{{ item.dimensions }}</strong><span>{{ item.banner_count }} banner(s) • {{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
             </a>
             {% endfor %}
           {% endfor %}
@@ -79,7 +79,7 @@
       <a class="ads-slot-list-item" href="{{ url_for('admin.ads_manage', slot_id=item.slot.id) }}">
         <div>
           <strong>{{ item.label }}</strong>
-          <small>{{ item.hint }}</small>
+          <small>{{ item.hint }} • {{ item.dimensions }}</small>
         </div>
         <span>{{ item.banner_count }} banner(s)</span>
       </a>
