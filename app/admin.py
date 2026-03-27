@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .wp_client import WPClient
-from .sync import sync_categories, sync_posts
+from .sync import sync_categories, sync_posts, localize_existing_wp_images
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -382,6 +382,23 @@ def _fill_post_form_from_obj(form: PostAdminForm, post: Post):
     form.categories.data = [c.id for c in post.categories]
     if post.published_at:
         form.published_at.data = post.published_at
+
+
+def _wp_stats():
+    total_wp_posts = db.session.query(func.count(Post.id)).filter(Post.source == "wp").scalar() or 0
+    localized_images = db.session.query(func.count(Post.id)).filter(Post.source == "wp", Post.featured_image.like('/media/%')).scalar() or 0
+    external_images = db.session.query(func.count(Post.id)).filter(Post.source == "wp", Post.featured_image.isnot(None), ~Post.featured_image.like('/media/%')).scalar() or 0
+    without_images = db.session.query(func.count(Post.id)).filter(Post.source == "wp").filter((Post.featured_image.is_(None)) | (Post.featured_image == "")).scalar() or 0
+    recent_posts = (Post.query.filter(Post.source == "wp")
+                    .order_by(desc(Post.published_at), desc(Post.id))
+                    .limit(30).all())
+    return {
+        "total_wp_posts": total_wp_posts,
+        "localized_images": localized_images,
+        "external_images": external_images,
+        "without_images": without_images,
+        "recent_posts": recent_posts,
+    }
 
 
 @admin_bp.app_context_processor
@@ -876,6 +893,64 @@ def ads_edit_post(slot_id):
     return render_template("admin/ad_form.html", form=form, mode="edit", slot=slot, **_common_admin_context("ads"))
 
 
+
+
+@admin_bp.get("/wordpress")
+@login_required
+def wordpress_manager():
+    r = _require_admin()
+    if r:
+        return r
+    stats = _wp_stats()
+    return render_template("admin/wordpress.html", wp=stats, **_common_admin_context("wordpress"))
+
+
+@admin_bp.post("/wordpress/sync")
+@login_required
+def wordpress_sync_page():
+    r = _require_admin()
+    if r:
+        return r
+    try:
+        client = WPClient(current_app.config["WP_BASE_URL"])
+        sync_categories(client)
+        sync_posts(client, max_pages=50, per_page=current_app.config["WP_PER_PAGE"], download_images=True)
+        flash("Importação do WordPress concluída com imagens salvas no servidor.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro na importação do WordPress: {e}", "danger")
+    return redirect(url_for("admin.wordpress_manager"))
+
+
+@admin_bp.post("/wordpress/localize-images")
+@login_required
+def wordpress_localize_images():
+    r = _require_admin()
+    if r:
+        return r
+    try:
+        report = localize_existing_wp_images()
+        flash(
+            f"Imagens processadas. Posts atualizados: {report['updated_posts']}. Capa baixada: {report['featured_downloaded']}. Conteúdo atualizado: {report['content_updated']}.",
+            "success",
+        )
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro ao baixar imagens pendentes: {e}", "danger")
+    return redirect(url_for("admin.wordpress_manager"))
+
+
+@admin_bp.post("/wordpress/clear")
+@login_required
+def wordpress_clear_posts():
+    r = _require_admin()
+    if r:
+        return r
+    removed = Post.query.filter(Post.source == "wp").delete(synchronize_session=False)
+    db.session.commit()
+    flash(f"Posts importados do WordPress removidos: {removed}.", "warning")
+    return redirect(url_for("admin.wordpress_manager"))
+
 @admin_bp.post("/sync/wp")
 @login_required
 def sync_wp_now():
@@ -885,7 +960,7 @@ def sync_wp_now():
     try:
         client = WPClient(current_app.config["WP_BASE_URL"])
         sync_categories(client)
-        sync_posts(client, max_pages=50, per_page=current_app.config["WP_PER_PAGE"])
+        sync_posts(client, max_pages=50, per_page=current_app.config["WP_PER_PAGE"], download_images=True)
         flash("Sincronização do WordPress concluída.", "success")
     except Exception as e:
         flash(f"Erro ao sincronizar: {e}", "danger")

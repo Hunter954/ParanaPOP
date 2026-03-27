@@ -1,0 +1,80 @@
+{% extends "admin/layout.html" %}
+{% block admin_title %}WordPress{% endblock %}
+{% block page_title %}WordPress{% endblock %}
+{% block page_subtitle %}Gerencie a importação, baixe as imagens para o servidor e limpe os posts antigos importados do WordPress.{% endblock %}
+{% block admin_content %}
+<section class="admin-section">
+  <div class="admin-grid admin-grid-3">
+    <article class="metric-card"><span>Total importado</span><strong>{{ wp.total_wp_posts }}</strong></article>
+    <article class="metric-card"><span>Imagens locais</span><strong>{{ wp.localized_images }}</strong></article>
+    <article class="metric-card"><span>Imagens externas</span><strong>{{ wp.external_images }}</strong></article>
+  </div>
+
+  <div class="card shadow-sm border-0 mt-4">
+    <div class="card-body d-flex flex-wrap gap-2 align-items-center justify-content-between">
+      <div>
+        <h5 class="mb-1">Ferramentas do WordPress</h5>
+        <p class="text-muted mb-0">Use a importação completa para trazer as matérias e salvar as imagens dentro do seu próprio servidor.</p>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <form method="post" action="{{ url_for('admin.wordpress_sync_page') }}">
+          <button class="btn btn-dark" type="submit"><i class="bi bi-cloud-download me-1"></i>Importação completa</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.wordpress_localize_images') }}">
+          <button class="btn btn-outline-dark" type="submit"><i class="bi bi-image me-1"></i>Baixar imagens pendentes</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.wordpress_clear_posts') }}" onsubmit="return confirm('Tem certeza que deseja remover todos os posts vindos do WordPress?');">
+          <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash3 me-1"></i>Limpar posts WordPress</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0 mt-4">
+    <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+          <h5 class="mb-1">Últimos posts importados</h5>
+          <p class="text-muted mb-0">Posts com imagem local aparecem prontos mesmo se o WordPress for desligado.</p>
+        </div>
+        <span class="badge text-bg-light">Sem imagem: {{ wp.without_images }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr>
+              <th>Matéria</th>
+              <th>Fonte da imagem</th>
+              <th>Data</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for post in wp.recent_posts %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ post.title }}</div>
+                <div class="text-muted small">/{{ post.slug }}</div>
+              </td>
+              <td class="small text-break">{{ post.featured_image or 'Sem imagem' }}</td>
+              <td>{{ format_date_br(post.published_at) }}</td>
+              <td>
+                {% if post.featured_image and post.featured_image.startswith('/media/') %}
+                  <span class="badge text-bg-success">Local</span>
+                {% elif post.featured_image %}
+                  <span class="badge text-bg-warning">Externa</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">Sem imagem</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted py-4">Nenhum post importado do WordPress ainda.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

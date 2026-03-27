@@ -351,3 +351,7 @@ img{max-width:100%;display:block}
 }
 
 @keyframes livecamPulse{0%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.6)}100%{opacity:1;transform:scale(1)}}
+
+
+.main-story-link{display:block;text-decoration:none;color:inherit;}
+.main-story-link:hover h1,.main-story-link:hover h3{opacity:.92;}

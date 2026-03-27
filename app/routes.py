@@ -80,6 +80,7 @@ def inject_site_globals():
         "favicon_url": _setting("favicon_url", ""),
         "clean_text": _clean_text,
         "format_date_br": _format_date_br,
+        "display_category_name": _display_category_name,
     }
 
 
@@ -112,6 +113,22 @@ def _format_date_br(value):
     ]
     return f"{value.day} de {months[value.month - 1]} de {value.year}"
 
+
+
+def _display_category_name(value: str, max_len: int = 18) -> str:
+    if not value:
+        return "Notícias"
+    text = re.sub(r"\s+", " ", unescape(value)).strip()
+    if len(text) <= max_len:
+        return text
+    for token in [" contra ", " e ", " / ", " | ", " - "]:
+        if token in text.lower():
+            idx = text.lower().find(token)
+            short = text[:idx].strip()
+            if short:
+                return short
+    first = text.split()[0].strip()
+    return first or text[:max_len].strip()
 
 
 def _track_view(post_id=None):
@@ -217,17 +234,23 @@ def sitemap_xml():
 def home():
     _track_view(None)
 
-    latest = Post.query.order_by(desc(Post.published_at)).limit(18).all()
+    latest = Post.query.order_by(desc(Post.published_at), desc(Post.id)).limit(24).all()
+    lead_post = latest[0] if latest else None
+    latest_queue = latest[1:4] if len(latest) > 1 else []
+    excluded_ids = {p.id for p in [lead_post, *latest_queue] if p}
 
-    def cat_posts(slug, limit=6):
+    def cat_posts(slug, limit=6, exclude_ids=None):
         cat = Category.query.filter_by(slug=slug).first()
         if not cat:
             return None, []
-        posts = (Post.query.join(Post.categories)
-                 .filter(Category.id == cat.id)
-                 .order_by(desc(Post.published_at))
-                 .limit(limit).all())
+        q = (Post.query.join(Post.categories)
+             .filter(Category.id == cat.id))
+        if exclude_ids:
+            q = q.filter(~Post.id.in_(list(exclude_ids)))
+        posts = q.order_by(desc(Post.published_at), desc(Post.id)).limit(limit).all()
         return cat, posts
+
+    brasil_cat, brasil_posts = cat_posts("brasil", 6, excluded_ids)
 
     selected_cat_slug = (request.args.get("cat") or "").strip() or "cidade"
     selected_cat, selected_posts = cat_posts(selected_cat_slug, 8)
@@ -236,7 +259,7 @@ def home():
     for cat in Category.query.order_by(Category.name.asc()).limit(8).all():
         posts = (Post.query.join(Post.categories)
                  .filter(Category.id == cat.id)
-                 .order_by(desc(Post.published_at))
+                 .order_by(desc(Post.published_at), desc(Post.id))
                  .limit(6).all())
         if posts:
             category_sections.append({"category": cat, "posts": posts})
@@ -270,6 +293,10 @@ def home():
         "home.html",
         **_meta_defaults(),
         latest=latest,
+        lead_post=lead_post,
+        latest_queue=latest_queue,
+        brasil_posts=brasil_posts,
+        brasil_category=brasil_cat,
         selected_cat=selected_cat,
         selected_posts=selected_posts,
         popular_posts=popular_posts,

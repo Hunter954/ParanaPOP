@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-{% set destaque = latest[0] if latest|length > 0 else none %}
-{% set principal = latest[1] if latest|length > 1 else destaque %}
-{% set brasil_posts = popular_posts if popular_posts else latest[2:5] %}
-{% set grid_posts = latest[2:5] %}
+{% set destaque = lead_post %}
+{% set principal = lead_post %}
+{% set grid_posts = latest_queue %}
 {% set cidade_sections = category_sections if category_sections else ([{"category": selected_cat, "posts": selected_posts}] if selected_cat else []) %}
 
 <section class="pp-section">
@@ -14,7 +13,7 @@
     </div>
 
     <div class="section-head pp-head side-head news-side-head">
-      <h2>Brasil</h2>
+      <h2>{{ brasil_category.name if brasil_category else 'Brasil' }}</h2>
       <div class="section-line"></div>
     </div>
 
@@ -28,14 +27,14 @@
 
     <div class="news-feature-copy">
       {% if principal %}
-      <article class="main-story-card">
+      <a class="main-story-card main-story-link" href="{{ url_for('site.post', slug=principal.slug) }}">
         <div class="story-meta-row">
-          <span class="tag">{{ (principal.categories[0].name if principal.categories else 'Notícias') }}</span>
+          <span class="tag">{{ display_category_name(principal.categories[0].name if principal.categories else 'Notícias') }}</span>
           <span class="date-label">{{ format_date_br(principal.published_at) }}</span>
         </div>
         <h1>{{ clean_text(principal.title, 120) }}</h1>
         <p>{{ clean_text(principal.excerpt or principal.content_html, 210) }}</p>
-      </article>
+      </a>
       {% endif %}
     </div>
 
@@ -45,7 +44,7 @@
         <a class="side-story-card" href="{{ url_for('site.post', slug=p.slug) }}">
           <div class="thumb-card-image side-thumb" style="background-image:url('{{ p.featured_image or '' }}')"></div>
           <div class="story-meta-row">
-            <span class="tag">{{ (p.categories[0].name if p.categories else 'Notícias') }}</span>
+            <span class="tag">{{ display_category_name(p.categories[0].name if p.categories else 'Notícias') }}</span>
             <span class="date-label">{{ format_date_br(p.published_at) }}</span>
           </div>
           <h3>{{ clean_text(p.title, 80) }}</h3>
@@ -59,7 +58,7 @@
       <a class="news-tile-card" href="{{ url_for('site.post', slug=p.slug) }}">
         <div class="thumb-card-image thumb-small" style="background-image:url('{{ p.featured_image or '' }}')"></div>
         <div class="story-meta-row">
-          <span class="tag">{{ (p.categories[0].name if p.categories else 'Notícias') }}</span>
+          <span class="tag">{{ display_category_name(p.categories[0].name if p.categories else 'Notícias') }}</span>
           <span class="date-label">{{ format_date_br(p.published_at) }}</span>
         </div>
         <h3>{{ clean_text(p.title, 70) }}</h3>
