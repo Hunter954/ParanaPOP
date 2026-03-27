@@ -88,17 +88,17 @@
   </div>
 
   <div class="panel-card" id="ads">
-    <div class="panel-head"><div><h2>Slots de anúncio</h2><p>Gerencie banners, HTML e mídia comercial.</p></div><a class="btn btn-sm btn-dark" href="{{ url_for('admin.ads_new') }}">Novo slot</a></div>
+    <div class="panel-head"><div><h2>Publicidade</h2><p>Abra o editor visual para gerenciar banners por espaço do site, sem colar código.</p></div><a class="btn btn-sm btn-dark" href="{{ url_for('admin.ads_editor') }}">Abrir editor visual</a></div>
     <div class="table-responsive">
       <table class="table admin-table align-middle">
-        <thead><tr><th>Key</th><th>Nome</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Local</th><th>Nome</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {% for s in slots %}
           <tr>
             <td><code>{{ s.key }}</code></td>
             <td>{{ s.name }}</td>
             <td>{% if s.is_active %}<span class="badge text-bg-success">Ativo</span>{% else %}<span class="badge text-bg-secondary">Off</span>{% endif %}</td>
-            <td class="text-end"><a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.ads_edit', slot_id=s.id) }}">Editar</a></td>
+            <td class="text-end"><a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.ads_manage', slot_id=s.id) }}">Gerenciar</a></td>
           </tr>
           {% endfor %}
         </tbody>

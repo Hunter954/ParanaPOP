@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
-from html import unescape
+from html import unescape, escape
 from pathlib import Path
 import re
+import json
 
 from flask import Blueprint, render_template, abort, request, current_app, send_from_directory, jsonify, make_response, url_for
 from sqlalchemy import desc, func
@@ -12,9 +13,90 @@ from .sync import download_external_image
 site_bp = Blueprint("site", __name__)
 
 
+def _parse_ad_payload(raw: str | None) -> dict | None:
+    value = (raw or "").strip()
+    if not value.startswith("__ADCFG__"):
+        return None
+    try:
+        payload = json.loads(value[len("__ADCFG__"):])
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        return None
+    return None
+
+
+AD_SLOT_CLASSNAMES = {
+    "header_top": "ad-slot-banner ad-slot-banner--wide",
+    "home_top": "ad-slot-banner ad-slot-banner--wide",
+    "home_mid": "ad-slot-banner ad-slot-banner--wide",
+    "home_bottom": "ad-slot-banner ad-slot-banner--wide",
+    "sidebar_1": "ad-slot-banner ad-slot-banner--square",
+    "sidebar_2": "ad-slot-banner ad-slot-banner--square",
+}
+
+
+def _render_ad_from_payload(slot_key: str, payload: dict) -> str:
+    banners = payload.get("banners") or []
+    clean_banners = []
+    for item in banners:
+        if not isinstance(item, dict):
+            continue
+        image = (item.get("image") or "").strip()
+        if not image:
+            continue
+        clean_banners.append({
+            "image": image,
+            "link": (item.get("link") or "").strip() or "#",
+            "title": (item.get("title") or "").strip() or payload.get("name") or "Publicidade",
+        })
+    if not clean_banners:
+        return ""
+
+    seconds = payload.get("interval_seconds", 5)
+    try:
+        seconds = max(1, min(int(seconds), 120))
+    except Exception:
+        seconds = 5
+
+    slot_id = re.sub(r'[^a-z0-9_-]+', '-', (slot_key or 'ad').lower())
+    wrapper_class = AD_SLOT_CLASSNAMES.get(slot_key, 'ad-slot-banner ad-slot-banner--wide')
+    slides_html = []
+    for idx, item in enumerate(clean_banners):
+        display = 'block' if idx == 0 else 'none'
+        slides_html.append(
+            f'<a href="{escape(item["link"], quote=True)}" target="_blank" rel="noopener sponsored" '
+            f'class="ad-rotator__slide" data-ad-slide style="display:{display};">'
+            f'<img src="{escape(item["image"], quote=True)}" alt="{escape(item["title"])}" loading="lazy"></a>'
+        )
+    controls = ''
+    if len(clean_banners) > 1:
+        dots = ''.join([f'<button type="button" class="ad-rotator__dot{' active' if i == 0 else ''}" data-ad-dot aria-label="Banner {i+1}"></button>' for i in range(len(clean_banners))])
+        controls = f'<div class="ad-rotator__dots">{dots}</div>'
+    script = ''
+    if len(clean_banners) > 1:
+        interval_ms = seconds * 1000
+        script = (
+            '<script>(function(){'
+            f'const root=document.getElementById("ad-rotator-{slot_id}");if(!root){{return;}}'
+            'const slides=[...root.querySelectorAll("[data-ad-slide]")];const dots=[...root.querySelectorAll("[data-ad-dot]")];'
+            'if(slides.length<2){return;}let index=0;'
+            'const show=(i)=>{index=i;slides.forEach((slide,n)=>{slide.style.display=n===i?"block":"none";});dots.forEach((dot,n)=>dot.classList.toggle("active",n===i));};'
+            'dots.forEach((dot,n)=>dot.addEventListener("click",()=>show(n)));'
+            f'setInterval(()=>show((index+1)%slides.length),{interval_ms});'
+            '})();</script>'
+        )
+    return f'<div class="ad-rotator {wrapper_class}" id="ad-rotator-{slot_id}">{"".join(slides_html)}{controls}</div>{script}'
+
+
 def _get_ad(key: str) -> str:
     slot = AdSlot.query.filter_by(key=key, is_active=True).first()
-    return slot.html if slot and slot.html else ""
+    if not slot or not slot.html:
+        return ""
+    payload = _parse_ad_payload(slot.html)
+    if payload:
+        return _render_ad_from_payload(key, payload)
+    return slot.html
 
 
 def _setting(key: str, default: str = "") -> str:

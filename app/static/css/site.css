@@ -355,3 +355,13 @@ img{max-width:100%;display:block}
 
 .main-story-link{display:block;text-decoration:none;color:inherit;}
 .main-story-link:hover h1,.main-story-link:hover h3{opacity:.92;}
+
+
+.ad-rotator{position:relative;width:100%;max-width:100%;overflow:hidden;border-radius:10px;background:#eef2f7}
+.ad-slot-banner--wide{aspect-ratio:1170 / 250}
+.ad-slot-banner--square{aspect-ratio:1 / 1}
+.ad-rotator__slide{position:absolute;inset:0;display:block}
+.ad-rotator__slide img{width:100%;height:100%;display:block;object-fit:cover}
+.ad-rotator__dots{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:inline-flex;gap:8px;padding:8px 10px;border-radius:999px;background:rgba(15,23,42,.42);backdrop-filter:blur(8px)}
+.ad-rotator__dot{width:10px;height:10px;border:0;border-radius:999px;background:rgba(255,255,255,.45);padding:0}
+.ad-rotator__dot.active{background:#fff}

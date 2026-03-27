@@ -1,0 +1,90 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Publicidade{% endblock %}
+{% block page_title %}Editor visual de publicidade{% endblock %}
+{% block page_subtitle %}Clique em um espaço do site para subir banners, links e definir o intervalo da rotação.{% endblock %}
+{% block admin_content %}
+<section class="panel-card ads-guide-card">
+  <div class="ads-guide-grid">
+    <div>
+      <span class="ads-guide-step">1</span>
+      <strong>Escolha o local</strong>
+      <p>Clique no espaço que deseja editar.</p>
+    </div>
+    <div>
+      <span class="ads-guide-step">2</span>
+      <strong>Envie as artes</strong>
+      <p>Adicione uma ou várias imagens para o mesmo banner.</p>
+    </div>
+    <div>
+      <span class="ads-guide-step">3</span>
+      <strong>Defina o intervalo</strong>
+      <p>Informe em segundos quanto tempo cada banner ficará na tela.</p>
+    </div>
+  </div>
+</section>
+
+<section class="ads-visual-layout">
+  <div class="panel-card ads-visual-canvas">
+    <div class="ads-visual-topline">
+      <div>
+        <h2>Prévia dos espaços</h2>
+        <p>Visual semelhante ao site para facilitar a edição, mesmo para quem não entende de código.</p>
+      </div>
+      <a class="btn btn-outline-dark" href="{{ url_for('site.home') }}" target="_blank" rel="noopener">Ver site real</a>
+    </div>
+
+    <div class="ads-site-preview">
+      {% for item in slot_cards if item.slot.key == 'header_top' %}
+      <a class="ads-preview-slot ads-preview-slot--wide" href="{{ url_for('admin.ads_manage', slot_id=item.slot.id) }}">
+        <span class="ads-preview-badge">{{ item.label }}</span>
+        <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }}</small>{% endif %}</div>
+        <div class="ads-preview-meta"><strong>{{ item.banner_count }} banner(s)</strong><span>{{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
+      </a>
+      {% endfor %}
+
+      <div class="ads-home-preview-grid">
+        <div class="ads-home-preview-main">
+          {% for key in ['home_top', 'home_mid', 'home_bottom'] %}
+            {% for item in slot_cards if item.slot.key == key %}
+            <a class="ads-preview-slot ads-preview-slot--wide" href="{{ url_for('admin.ads_manage', slot_id=item.slot.id) }}">
+              <span class="ads-preview-badge">{{ item.label }}</span>
+              <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }}</small>{% endif %}</div>
+              <div class="ads-preview-meta"><strong>{{ item.banner_count }} banner(s)</strong><span>{{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
+            </a>
+            {% endfor %}
+          {% endfor %}
+        </div>
+
+        <div class="ads-home-preview-side">
+          {% for key in ['sidebar_1', 'sidebar_2'] %}
+            {% for item in slot_cards if item.slot.key == key %}
+            <a class="ads-preview-slot ads-preview-slot--square" href="{{ url_for('admin.ads_manage', slot_id=item.slot.id) }}">
+              <span class="ads-preview-badge">{{ item.label }}</span>
+              <div class="ads-preview-art {% if item.cover_image %}has-image{% endif %}">{% if item.cover_image %}<img src="{{ item.cover_image }}" alt="{{ item.label }}">{% else %}<strong>{{ item.label }}</strong><small>{{ item.hint }}</small>{% endif %}</div>
+              <div class="ads-preview-meta"><strong>{{ item.banner_count }} banner(s)</strong><span>{{ item.interval_seconds }}s • {{ 'Ativo' if item.slot.is_active else 'Desativado' }}</span></div>
+            </a>
+            {% endfor %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-card ads-slot-list-card">
+    <div class="panel-head">
+      <div><h2>Todos os espaços</h2><p>Lista rápida para acesso direto.</p></div>
+    </div>
+    <div class="ads-slot-list">
+      {% for item in slot_cards %}
+      <a class="ads-slot-list-item" href="{{ url_for('admin.ads_manage', slot_id=item.slot.id) }}">
+        <div>
+          <strong>{{ item.label }}</strong>
+          <small>{{ item.hint }}</small>
+        </div>
+        <span>{{ item.banner_count }} banner(s)</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

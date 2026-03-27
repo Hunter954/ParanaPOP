@@ -90,6 +90,119 @@ def _setting_json(key: str, default):
         return default
 
 
+def _parse_ad_slot_payload(raw: str | None) -> dict | None:
+    value = (raw or '').strip()
+    if not value.startswith('__ADCFG__'):
+        return None
+    try:
+        payload = json.loads(value[len('__ADCFG__'):])
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        return None
+    return None
+
+
+def _default_slot_layout_meta() -> dict:
+    return {
+        'header_top': {'label': 'Topo do site', 'hint': 'Faixa principal do cabeçalho', 'shape': 'wide'},
+        'home_top': {'label': 'Home superior', 'hint': 'Faixa logo no início da home', 'shape': 'wide'},
+        'home_mid': {'label': 'Home / matéria no meio', 'hint': 'Faixa no meio da home e dentro das matérias', 'shape': 'wide'},
+        'home_bottom': {'label': 'Rodapé', 'hint': 'Banner grande no rodapé do site', 'shape': 'wide'},
+        'sidebar_1': {'label': 'Sidebar 1', 'hint': 'Primeiro banner lateral', 'shape': 'square'},
+        'sidebar_2': {'label': 'Sidebar 2', 'hint': 'Segundo banner lateral', 'shape': 'square'},
+    }
+
+
+def _slot_visual_payload(slot: AdSlot) -> dict:
+    payload = _parse_ad_slot_payload(slot.html) or {}
+    banners = payload.get('banners') if isinstance(payload.get('banners'), list) else []
+    clean_banners = []
+    for item in banners:
+        if not isinstance(item, dict):
+            continue
+        image = (item.get('image') or '').strip()
+        if not image:
+            continue
+        clean_banners.append({
+            'image': image,
+            'link': (item.get('link') or '').strip(),
+            'title': (item.get('title') or '').strip(),
+        })
+    interval_seconds = payload.get('interval_seconds', 5)
+    try:
+        interval_seconds = max(1, min(int(interval_seconds), 120))
+    except Exception:
+        interval_seconds = 5
+    return {
+        'mode': 'visual' if payload else ('html' if (slot.html or '').strip() else 'empty'),
+        'interval_seconds': interval_seconds,
+        'banners': clean_banners,
+        'raw_html': '' if payload else (slot.html or ''),
+    }
+
+
+def _slot_card_data(slot: AdSlot) -> dict:
+    meta = _default_slot_layout_meta().get(slot.key, {})
+    payload = _slot_visual_payload(slot)
+    return {
+        'slot': slot,
+        'label': meta.get('label', slot.name),
+        'hint': meta.get('hint', 'Gerencie as artes desse espaço.'),
+        'shape': meta.get('shape', 'wide'),
+        'interval_seconds': payload['interval_seconds'],
+        'banner_count': len(payload['banners']),
+        'cover_image': payload['banners'][0]['image'] if payload['banners'] else '',
+        'mode': payload['mode'],
+    }
+
+
+def _build_slot_payload_from_request(slot: AdSlot):
+    titles = request.form.getlist('banner_title[]')
+    links = request.form.getlist('banner_link[]')
+    existing_images = request.form.getlist('banner_existing_image[]')
+    uploads = request.files.getlist('banner_image[]')
+    total = max(len(titles), len(links), len(existing_images), len(uploads))
+    banners = []
+    old_local_images = set()
+    existing_payload = _slot_visual_payload(slot)
+    for item in existing_payload.get('banners', []):
+        image = (item.get('image') or '').strip()
+        if image.startswith('/media/'):
+            old_local_images.add(image)
+
+    kept_local_images = set()
+    for idx in range(total):
+        title = (titles[idx] if idx < len(titles) else '').strip()
+        link = (links[idx] if idx < len(links) else '').strip()
+        existing_image = (existing_images[idx] if idx < len(existing_images) else '').strip()
+        upload = uploads[idx] if idx < len(uploads) else None
+        image = existing_image
+        if upload and getattr(upload, 'filename', ''):
+            image = _save_upload(upload, 'ads')
+        if not image:
+            continue
+        if image.startswith('/media/'):
+            kept_local_images.add(image)
+        banners.append({'title': title, 'link': link, 'image': image})
+
+    interval_raw = (request.form.get('interval_seconds') or '5').strip()
+    try:
+        interval_seconds = max(1, min(int(interval_raw), 120))
+    except Exception:
+        interval_seconds = 5
+
+    payload = {
+        'version': 1,
+        'name': slot.name,
+        'interval_seconds': interval_seconds,
+        'banners': banners,
+    }
+
+    removed_local_images = sorted(old_local_images - kept_local_images)
+    return payload, removed_local_images
+
+
 def _absolute_media_url(value: str) -> str:
     if not value:
         return ''
@@ -990,6 +1103,54 @@ def save_logo():
         _delete_local_media(old_share)
     flash("Configurações de branding, SEO e compartilhamento atualizadas.", "success")
     return redirect(url_for("admin.settings_page"))
+
+
+@admin_bp.get("/ads")
+@login_required
+def ads_editor():
+    r = _require_admin()
+    if r:
+        return r
+    slots = AdSlot.query.order_by(AdSlot.key.asc()).all()
+    slot_cards = [_slot_card_data(slot) for slot in slots]
+    return render_template("admin/ads_editor.html", slot_cards=slot_cards, **_common_admin_context("ads"))
+
+
+@admin_bp.get("/ads/<int:slot_id>/manage")
+@login_required
+def ads_manage(slot_id):
+    r = _require_admin()
+    if r:
+        return r
+    slot = AdSlot.query.get_or_404(slot_id)
+    slot_data = _slot_card_data(slot)
+    payload = _slot_visual_payload(slot)
+    if not payload['banners']:
+        payload['banners'] = [{'title': '', 'link': '', 'image': ''}]
+    return render_template("admin/ads_manage.html", slot=slot, slot_data=slot_data, payload=payload, **_common_admin_context("ads"))
+
+
+@admin_bp.post("/ads/<int:slot_id>/manage")
+@login_required
+def ads_manage_post(slot_id):
+    r = _require_admin()
+    if r:
+        return r
+    slot = AdSlot.query.get_or_404(slot_id)
+    slot.name = (request.form.get('name') or slot.name or '').strip() or slot.name
+    slot.is_active = bool(request.form.get('is_active'))
+    payload, removed_local_images = _build_slot_payload_from_request(slot)
+    if not payload['banners']:
+        flash('Adicione pelo menos um banner com imagem para esse espaço.', 'danger')
+        slot_data = _slot_card_data(slot)
+        payload['banners'] = [{'title': '', 'link': '', 'image': ''}]
+        return render_template("admin/ads_manage.html", slot=slot, slot_data=slot_data, payload=payload, **_common_admin_context("ads"))
+    slot.html = '__ADCFG__' + json.dumps(payload, ensure_ascii=False)
+    db.session.commit()
+    for image in removed_local_images:
+        _delete_local_media(image)
+    flash('Publicidade atualizada com sucesso.', 'success')
+    return redirect(url_for('admin.ads_manage', slot_id=slot.id))
 
 
 @admin_bp.get("/ads/new")

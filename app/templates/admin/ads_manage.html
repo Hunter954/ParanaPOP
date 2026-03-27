@@ -1,0 +1,160 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Gerenciar publicidade{% endblock %}
+{% block page_title %}{{ slot_data.label }}{% endblock %}
+{% block page_subtitle %}{{ slot_data.hint }}{% endblock %}
+{% block admin_content %}
+<section class="ads-manage-layout">
+  <form class="panel-card" method="post" enctype="multipart/form-data" id="adsManageForm">
+    <div class="panel-head">
+      <div>
+        <h2>Configurar banners</h2>
+        <p>Envie uma ou várias imagens para esse local e informe o link de clique de cada uma.</p>
+      </div>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.ads_editor') }}">Voltar</a>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <label class="form-label">Nome do espaço</label>
+        <input class="form-control" type="text" name="name" value="{{ slot.name }}">
+      </div>
+      <div class="col-lg-3">
+        <label class="form-label">Chave técnica</label>
+        <input class="form-control" type="text" value="{{ slot.key }}" disabled>
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label">Intervalo</label>
+        <div class="input-group">
+          <input class="form-control" type="number" min="1" max="120" name="interval_seconds" value="{{ payload.interval_seconds or 5 }}">
+          <span class="input-group-text">seg</span>
+        </div>
+      </div>
+      <div class="col-lg-2 d-flex align-items-end">
+        <div class="form-check form-switch ads-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="adActive" name="is_active" {% if slot.is_active %}checked{% endif %}>
+          <label class="form-check-label" for="adActive">Espaço ativo</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="ads-manage-note">
+      <i class="bi bi-info-circle"></i> Pode deixar mais de um banner nesse mesmo local. O sistema faz a rotação automaticamente no site.
+    </div>
+
+    <div class="ads-banner-list" data-banner-list>
+      {% for banner in payload.banners %}
+      <div class="ads-banner-item" data-banner-item>
+        <div class="ads-banner-item-head">
+          <strong>Banner</strong>
+          <button class="btn btn-sm btn-outline-danger" type="button" data-remove-banner>Remover</button>
+        </div>
+        <div class="row g-3">
+          <div class="col-lg-4">
+            <label class="form-label">Imagem atual</label>
+            <div class="ads-current-image {% if banner.image %}has-image{% endif %}">
+              {% if banner.image %}<img src="{{ banner.image }}" alt="Banner">{% else %}<span>Sem imagem enviada</span>{% endif %}
+            </div>
+            <input type="hidden" name="banner_existing_image[]" value="{{ banner.image }}">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Trocar / enviar imagem</label>
+            <input class="form-control" type="file" name="banner_image[]" accept=".jpg,.jpeg,.png,.webp,.gif,.svg">
+            <div class="form-text">Envie uma nova imagem somente se quiser substituir a atual.</div>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Título interno</label>
+            <input class="form-control" type="text" name="banner_title[]" value="{{ banner.title }}" placeholder="Ex: Campanha Itaipu">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Link do clique</label>
+            <input class="form-control" type="url" name="banner_link[]" value="{{ banner.link }}" placeholder="https://cliente.com.br">
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <button class="btn btn-outline-dark" type="button" data-add-banner><i class="bi bi-plus-lg me-1"></i>Adicionar outro banner</button>
+      <button class="btn btn-dark" type="submit">Salvar publicidade</button>
+    </div>
+
+    {% if payload.mode == 'html' and payload.raw_html %}
+    <div class="ads-legacy-warning">
+      <strong>Importante:</strong> esse espaço tinha HTML manual salvo antes. Ao salvar por aqui, ele será convertido para o novo modo visual.
+    </div>
+    {% endif %}
+  </form>
+
+  <aside class="panel-card ads-manage-preview">
+    <div class="panel-head">
+      <div><h2>Prévia rápida</h2><p>Referência visual do formato desse espaço.</p></div>
+    </div>
+    <div class="ads-preview-slot ads-preview-slot--{{ slot_data.shape }} is-static">
+      <span class="ads-preview-badge">{{ slot_data.label }}</span>
+      <div class="ads-preview-art {% if payload.banners and payload.banners[0].image %}has-image{% endif %}">{% if payload.banners and payload.banners[0].image %}<img src="{{ payload.banners[0].image }}" alt="{{ slot_data.label }}">{% else %}<strong>{{ slot_data.label }}</strong><small>{{ slot_data.hint }}</small>{% endif %}</div>
+      <div class="ads-preview-meta"><strong>{{ payload.banners|length }} banner(s)</strong><span>{{ payload.interval_seconds or 5 }}s de rotação</span></div>
+    </div>
+  </aside>
+</section>
+
+<template id="bannerItemTemplate">
+  <div class="ads-banner-item" data-banner-item>
+    <div class="ads-banner-item-head">
+      <strong>Banner</strong>
+      <button class="btn btn-sm btn-outline-danger" type="button" data-remove-banner>Remover</button>
+    </div>
+    <div class="row g-3">
+      <div class="col-lg-4">
+        <label class="form-label">Imagem atual</label>
+        <div class="ads-current-image"><span>Sem imagem enviada</span></div>
+        <input type="hidden" name="banner_existing_image[]" value="">
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label">Enviar imagem</label>
+        <input class="form-control" type="file" name="banner_image[]" accept=".jpg,.jpeg,.png,.webp,.gif,.svg">
+        <div class="form-text">Envie a arte desse banner.</div>
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label">Título interno</label>
+        <input class="form-control" type="text" name="banner_title[]" placeholder="Ex: Campanha Itaipu">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Link do clique</label>
+        <input class="form-control" type="url" name="banner_link[]" placeholder="https://cliente.com.br">
+      </div>
+    </div>
+  </div>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const list = document.querySelector('[data-banner-list]');
+  const addBtn = document.querySelector('[data-add-banner]');
+  const template = document.getElementById('bannerItemTemplate');
+  if (!list || !addBtn || !template) return;
+
+  function bindRemove(root){
+    root.querySelectorAll('[data-remove-banner]').forEach((btn)=>{
+      btn.onclick = () => {
+        const items = list.querySelectorAll('[data-banner-item]');
+        if (items.length <= 1) {
+          alert('Este espaço precisa ter pelo menos um banner.');
+          return;
+        }
+        btn.closest('[data-banner-item]').remove();
+      };
+    });
+  }
+
+  bindRemove(document);
+  addBtn.addEventListener('click', () => {
+    const fragment = template.content.cloneNode(true);
+    list.appendChild(fragment);
+    bindRemove(list);
+  });
+})();
+</script>
+{% endblock %}
