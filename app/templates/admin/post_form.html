@@ -1,26 +1,38 @@
 {% extends 'admin/layout.html' %}
 {% block admin_title %}{% if mode=='new' %}Nova matéria{% else %}Editar matéria{% endif %}{% endblock %}
 {% block page_title %}{% if mode=='new' %}Nova matéria{% else %}Editar matéria{% endif %}{% endblock %}
-{% block page_subtitle %}Área completa para título, conteúdo, imagem destacada, data e categorias.{% endblock %}
+{% block page_subtitle %}Editor visual com publicação automática, slug gerado no código e opção de salvar como rascunho.{% endblock %}
 {% block admin_content %}
-<form method="post" enctype="multipart/form-data" class="admin-grid-2">
+<form method="post" enctype="multipart/form-data" class="admin-grid-2 js-post-form">
   {{ form.csrf_token }}
   <section class="panel-card">
-    <div class="panel-head"><div><h2>Conteúdo principal</h2><p>Monte a matéria com estrutura editorial completa.</p></div></div>
+    <div class="panel-head"><div><h2>Conteúdo principal</h2><p>Monte a matéria com um editor visual parecido com Word.</p></div></div>
     <div class="vstack gap-3">
       <div><label class="form-label">Título</label>{{ form.title(class='form-control', placeholder='Digite o título da matéria') }}</div>
-      <div><label class="form-label">Slug</label>{{ form.slug(class='form-control', placeholder='gera automático se deixar vazio') }}</div>
       <div><label class="form-label">Resumo</label>{{ form.excerpt(class='form-control', rows='4', placeholder='Linha fina / resumo da matéria') }}</div>
-      <div><label class="form-label">Conteúdo HTML</label>{{ form.content_html(class='form-control editor-area', rows='16', placeholder='<p>Conteúdo da matéria...</p>') }}</div>
+      <div>
+        <label class="form-label">Conteúdo da matéria</label>
+        {{ form.content_html(class='form-control editor-area js-rich-editor', rows='18', placeholder='<p>Conteúdo da matéria...</p>') }}
+        <div class="form-help mt-2">Você pode formatar texto, listas, alinhamento, links e mais direto no editor.</div>
+      </div>
     </div>
   </section>
 
   <section class="panel-card">
-    <div class="panel-head"><div><h2>Publicação e mídia</h2><p>Defina autoria, data, categorias e imagem destacada.</p></div></div>
+    <div class="panel-head"><div><h2>Publicação e mídia</h2><p>Autor fica como <strong>Anônimo</strong>, data é automática e o slug é gerado sozinho.</p></div></div>
     <div class="vstack gap-3">
-      <div><label class="form-label">Autor</label>{{ form.author_name(class='form-control', placeholder='Ex: Redação Paraná POP') }}</div>
-      <div><label class="form-label">Data de publicação</label>{{ form.published_at(class='form-control') }}</div>
-      <div class="form-check">{{ form.publish_now(class='form-check-input') }} <label class="form-check-label">Publicar agora</label></div>
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-1">Autor padrão</div>
+        <div><strong>Anônimo</strong></div>
+      </div>
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-1">Data da publicação</div>
+        <div><strong>{% if post and post.published_at %}{{ post.published_at.strftime('%d/%m/%Y %H:%M') }}{% else %}Automática no momento da publicação{% endif %}</strong></div>
+      </div>
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-1">Status atual</div>
+        <div><strong>{% if post and post.is_draft %}Rascunho{% else %}Publicado{% endif %}</strong></div>
+      </div>
       <div><label class="form-label">Categorias</label>{{ form.categories(class='form-select', multiple=true, size='8') }}</div>
       <div><label class="form-label">Imagem por link</label>{{ form.featured_image(class='form-control', placeholder='https://.../imagem.jpg') }}</div>
       <div><label class="form-label">ou enviar arquivo</label>{{ form.featured_image_file(class='form-control') }}</div>
@@ -31,10 +43,11 @@
       </div>
       {% endif %}
     </div>
-    <div class="d-flex gap-2 mt-4">
-      <button class="btn btn-dark" type="submit">Salvar matéria</button>
-      {% if post %}<a class="btn btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Visualizar</a>{% endif %}
-      {% if post and hub.enabled and hub.remotes %}<button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_single', post_id=post.id) }}" formmethod="post">Enviar aos espelhos</button>{% endif %}
+    <div class="d-flex gap-2 mt-4 flex-wrap">
+      <button class="btn btn-dark" type="submit" name="post_action" value="publish">Publicar agora</button>
+      <button class="btn btn-outline-secondary" type="submit" name="post_action" value="draft">Salvar rascunho</button>
+      {% if post and not post.is_draft %}<a class="btn btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Visualizar</a>{% endif %}
+      {% if post and hub.enabled and hub.remotes and not post.is_draft %}<button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_single', post_id=post.id) }}" formmethod="post">Enviar aos espelhos</button>{% endif %}
     </div>
   </section>
 </form>
@@ -47,4 +60,37 @@
   </form>
 </section>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (!document.querySelector('.js-rich-editor') || typeof tinymce === 'undefined') return;
+      tinymce.init({
+        selector: '.js-rich-editor',
+        height: 560,
+        menubar: false,
+        branding: false,
+        promotion: false,
+        convert_urls: false,
+        browser_spellcheck: true,
+        contextmenu: false,
+        plugins: 'advlist autolink lists link image charmap preview anchor searchreplace visualblocks code fullscreen insertdatetime media table wordcount quickbars',
+        toolbar: 'undo redo | blocks fontsize | bold italic underline strikethrough | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link table image media | removeformat code preview',
+        content_style: 'body { font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.7; padding: 16px; }',
+        setup: function (editor) {
+          const syncEditor = function () { editor.save(); };
+          editor.on('change input undo redo keyup', syncEditor);
+          const form = document.querySelector('.js-post-form');
+          if (form) {
+            form.addEventListener('submit', function () {
+              tinymce.triggerSave();
+            });
+          }
+        }
+      });
+    });
+  </script>
 {% endblock %}

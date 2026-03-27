@@ -149,6 +149,10 @@ def _hub_token_is_valid() -> bool:
     incoming = (request.headers.get('X-Hub-Token') or '').strip()
     return bool(expected and incoming and incoming == expected)
 
+
+def _published_posts_query():
+    return Post.query.filter((Post.is_draft.is_(False)) | (Post.is_draft.is_(None)))
+
 def _track_view(post_id=None):
     try:
         pv = PageView(
@@ -234,7 +238,7 @@ def sitemap_xml():
     ]
     for cat in Category.query.order_by(Category.updated_at.desc() if hasattr(Category, 'updated_at') else Category.id.desc()).all():
         pages.append((url_for('site.category', slug=cat.slug, _external=True), datetime.utcnow()))
-    for post in Post.query.order_by(desc(Post.updated_at), desc(Post.published_at)).limit(2000).all():
+    for post in _published_posts_query().order_by(desc(Post.updated_at), desc(Post.published_at)).limit(2000).all():
         pages.append((url_for('site.post', slug=post.slug, _external=True), post.updated_at or post.published_at or datetime.utcnow()))
     xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for loc, lastmod in pages:
@@ -262,7 +266,7 @@ def hub_posts_upsert_api():
     if not slug or not title:
         return jsonify({'ok': False, 'error': 'missing_slug_or_title'}), 400
 
-    post = Post.query.filter_by(slug=slug).first()
+    post = _published_posts_query().filter_by(slug=slug).first()
     if not post:
         post = Post(slug=slug, title=title, source='hub')
         db.session.add(post)
@@ -272,6 +276,7 @@ def hub_posts_upsert_api():
     post.content_html = post_data.get('content_html') or ''
     post.author_name = (post_data.get('author_name') or '').strip() or 'Redação'
     post.published_at = _parse_iso_datetime(post_data.get('published_at')) or post.published_at or datetime.utcnow()
+    post.is_draft = bool(post_data.get('is_draft'))
     post.updated_at = _parse_iso_datetime(post_data.get('updated_at')) or datetime.utcnow()
     post.source = 'hub'
 
@@ -311,7 +316,7 @@ def hub_posts_delete_api():
     slug = (payload.get('slug') or '').strip()
     if not slug:
         return jsonify({'ok': False, 'error': 'missing_slug'}), 400
-    post = Post.query.filter_by(slug=slug).first()
+    post = _published_posts_query().filter_by(slug=slug).first()
     if not post:
         return jsonify({'ok': True, 'deleted': False})
     db.session.delete(post)
@@ -323,7 +328,7 @@ def hub_posts_delete_api():
 def home():
     _track_view(None)
 
-    latest = Post.query.order_by(desc(Post.published_at), desc(Post.id)).limit(24).all()
+    latest = _published_posts_query().order_by(desc(Post.published_at), desc(Post.id)).limit(24).all()
     lead_post = latest[0] if latest else None
     latest_queue = latest[1:4] if len(latest) > 1 else []
     excluded_ids = {p.id for p in [lead_post, *latest_queue] if p}
@@ -332,7 +337,7 @@ def home():
         cat = Category.query.filter_by(slug=slug).first()
         if not cat:
             return None, []
-        q = (Post.query.join(Post.categories)
+        q = (_published_posts_query().join(Post.categories)
              .filter(Category.id == cat.id))
         if exclude_ids:
             q = q.filter(~Post.id.in_(list(exclude_ids)))
@@ -346,7 +351,7 @@ def home():
 
     category_sections = []
     for cat in Category.query.order_by(Category.name.asc()).limit(8).all():
-        posts = (Post.query.join(Post.categories)
+        posts = (_published_posts_query().join(Post.categories)
                  .filter(Category.id == cat.id)
                  .order_by(desc(Post.published_at), desc(Post.id))
                  .limit(6).all())
@@ -371,7 +376,7 @@ def home():
     popular_map = {pid: c for pid, c in popular_ids if pid}
     popular_posts = []
     if popular_map:
-        posts = Post.query.filter(Post.id.in_(list(popular_map.keys()))).all()
+        posts = _published_posts_query().filter(Post.id.in_(list(popular_map.keys()))).all()
         posts_by_id = {p.id: p for p in posts}
         popular_posts = [posts_by_id[pid] for pid, _ in popular_ids if pid in posts_by_id]
 
@@ -404,13 +409,13 @@ def home():
 
 @site_bp.get("/p/<slug>")
 def post(slug):
-    post = Post.query.filter_by(slug=slug).first()
+    post = _published_posts_query().filter_by(slug=slug).first()
     if not post:
         abort(404)
     _track_view(post.id)
 
     category_ids = [c.id for c in post.categories]
-    latest_posts = (Post.query
+    latest_posts = (_published_posts_query()
                     .filter(Post.id != post.id)
                     .order_by(desc(Post.published_at))
                     .limit(4)
@@ -418,7 +423,7 @@ def post(slug):
 
     related_posts = []
     if category_ids:
-        related_posts = (Post.query.join(Post.categories)
+        related_posts = (_published_posts_query().join(Post.categories)
                          .filter(Category.id.in_(category_ids), Post.id != post.id)
                          .order_by(desc(Post.published_at))
                          .limit(6)
@@ -427,7 +432,7 @@ def post(slug):
     if len(related_posts) < 6:
         existing_ids = {p.id for p in related_posts}
         existing_ids.add(post.id)
-        complement = (Post.query
+        complement = (_published_posts_query()
                       .filter(~Post.id.in_(list(existing_ids)))
                       .order_by(desc(Post.published_at))
                       .limit(6 - len(related_posts))
@@ -470,7 +475,7 @@ def category(slug):
 
     page = max(int(request.args.get("page", "1")), 1)
     per_page = 12
-    q = (Post.query.join(Post.categories)
+    q = (_published_posts_query().join(Post.categories)
          .filter(Category.id == cat.id)
          .order_by(desc(Post.published_at)))
     pagination = q.paginate(page=page, per_page=per_page, error_out=False)
@@ -499,7 +504,7 @@ def search():
     page = max(int(request.args.get("page", "1")), 1)
     per_page = 12
 
-    q = Post.query
+    q = _published_posts_query()
     if term:
         like = f"%{term}%"
         q = q.filter(Post.title.ilike(like))

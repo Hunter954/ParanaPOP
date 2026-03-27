@@ -12,7 +12,7 @@
   </form>
   <div class="table-responsive">
     <table class="table admin-table align-middle">
-      <thead><tr><th>Título</th><th>Categorias</th><th>Origem</th><th>Publicação</th><th></th></tr></thead>
+      <thead><tr><th>Título</th><th>Categorias</th><th>Origem</th><th>Status</th><th>Publicação</th><th></th></tr></thead>
       <tbody>
         {% for post in posts %}
         <tr>
@@ -24,16 +24,17 @@
             {% for cat in post.categories[:3] %}<span class="badge text-bg-light border me-1">{{ cat.name }}</span>{% endfor %}
           </td>
           <td><span class="badge rounded-pill text-bg-{% if post.source == 'local' %}dark{% else %}secondary{% endif %}">{{ post.source }}</span></td>
+          <td><span class="badge rounded-pill {% if post.is_draft %}text-bg-warning{% else %}text-bg-success{% endif %}">{% if post.is_draft %}Rascunho{% else %}Publicado{% endif %}</span></td>
           <td>{{ format_date_br(post.published_at) if post.published_at else '—' }}</td>
           <td class="text-end">
             <div class="btn-group">
               <a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.posts_edit', post_id=post.id) }}">Editar</a>
-              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Ver</a>
+              {% if not post.is_draft %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Ver</a>{% endif %}
             </div>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="text-center text-muted py-5">Nenhuma matéria encontrada com esse filtro.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-5">Nenhuma matéria encontrada com esse filtro.</td></tr>
         {% endfor %}
       </tbody>
     </table>

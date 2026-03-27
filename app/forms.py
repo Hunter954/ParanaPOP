@@ -6,7 +6,6 @@ from wtforms import (
     BooleanField,
     TextAreaField,
     SelectMultipleField,
-    DateTimeLocalField,
 )
 from wtforms.validators import DataRequired, Email, Length, Optional
 
@@ -33,12 +32,8 @@ class CategoryForm(FlaskForm):
 
 class PostAdminForm(FlaskForm):
     title = StringField("Título", validators=[DataRequired(), Length(max=500)])
-    slug = StringField("Slug", validators=[Optional(), Length(max=220)])
     excerpt = TextAreaField("Resumo", validators=[Optional()])
     content_html = TextAreaField("Conteúdo", validators=[Optional()])
-    author_name = StringField("Autor", validators=[Optional(), Length(max=190)])
     featured_image = StringField("Imagem destacada (URL)", validators=[Optional(), Length(max=800)])
     featured_image_file = FileField("Imagem destacada (arquivo)", validators=[Optional(), FileAllowed(["jpg", "jpeg", "png", "webp", "gif", "svg"], "Envie uma imagem válida.")])
     categories = SelectMultipleField("Categorias", coerce=int, validators=[Optional()])
-    published_at = DateTimeLocalField("Data de publicação", format="%Y-%m-%dT%H:%M", validators=[Optional()])
-    publish_now = BooleanField("Publicar agora")
