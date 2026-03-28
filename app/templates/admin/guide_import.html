@@ -1,0 +1,66 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Guia Comercial / Importar{% endblock %}
+{% block page_title %}Guia Comercial / Importar empresas{% endblock %}
+{% block page_subtitle %}Busque no Google Places, revise os resultados e importe só o que realmente deve entrar no guia.{% endblock %}
+{% block admin_content %}
+<section class="panel-card">
+  <div class="panel-head">
+    <div><h2>Importador inteligente</h2><p>Exemplo de busca: auto vidros, hotel, hamburgueria, farmácia, oficina, pizzaria.</p></div>
+    <a class="btn btn-outline-dark" href="{{ url_for('admin.settings_page') }}">Configurar API</a>
+  </div>
+  <form method="post" class="row g-3 align-items-end">
+    <input type="hidden" name="action" value="search">
+    <div class="col-lg-5">
+      <label class="form-label">Termo da busca</label>
+      <input class="form-control" name="search_query" value="{{ search_query }}" placeholder="Ex.: auto vidros">
+    </div>
+    <div class="col-lg-3">
+      <label class="form-label">Categoria do guia</label>
+      <select class="form-select" name="category_id">
+        <option value="">Selecione a categoria para depois importar</option>
+        {% for category in categories %}
+          <option value="{{ category.id }}" {% if selected_category_id == category.id|string %}selected{% endif %}>{{ category.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Cidade base</label>
+      <input class="form-control" value="{{ import_settings.city }}/{{ import_settings.state }}" disabled>
+    </div>
+    <div class="col-lg-2 d-grid">
+      <button class="btn btn-dark" type="submit">Buscar no Google</button>
+    </div>
+  </form>
+</section>
+
+{% if results %}
+<form method="post" class="panel-card mt-4">
+  <div class="panel-head">
+    <div><h2>Resultados encontrados</h2><p>Selecione os estabelecimentos corretos para salvar no Guia Comercial.</p></div>
+    <button class="btn btn-dark" type="submit">Importar selecionados</button>
+  </div>
+  <input type="hidden" name="action" value="import">
+  <input type="hidden" name="search_query" value="{{ search_query }}">
+  <input type="hidden" name="category_id" value="{{ selected_category_id }}">
+  <textarea name="raw_payload" class="d-none">{{ raw_payload }}</textarea>
+  <div class="alert alert-warning">Antes de importar, confira se a categoria está certa e se os telefones/endereço realmente pertencem a Foz do Iguaçu.</div>
+  <div class="vstack gap-3">
+    {% for item in results %}
+      <label class="settings-category-option align-items-start gap-3">
+        <input type="checkbox" name="selected_items" value="{{ loop.index0 }}" checked>
+        <span class="w-100">
+          <strong>{{ item.name }}</strong>
+          <small class="d-block mt-1">{{ item.formatted_address or 'Endereço não informado' }}</small>
+          <small class="d-block mt-1">Telefone: {{ item.phone or 'não informado' }}{% if item.website %} • Site: {{ item.website }}{% endif %}</small>
+          <small class="d-block mt-1">Coordenadas: {{ item.latitude or '—' }}, {{ item.longitude or '—' }}</small>
+        </span>
+      </label>
+    {% endfor %}
+  </div>
+  <div class="d-flex justify-content-end gap-2 mt-4">
+    <a class="btn btn-outline-dark" href="{{ url_for('admin.guide_import_page') }}">Limpar</a>
+    <button class="btn btn-dark" type="submit">Importar selecionados</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

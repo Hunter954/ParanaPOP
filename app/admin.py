@@ -18,6 +18,7 @@ from .sync import download_external_image
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .wp_client import WPClient
 from .sync import sync_categories, sync_posts, localize_existing_wp_images
+from html import unescape
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -950,6 +951,283 @@ def users_toggle_admin(user_id):
     return redirect(url_for('admin.users_list'))
 
 
+def _only_digits(value: str | None) -> str:
+    return re.sub(r"\D+", "", value or "")
+
+
+def _normalize_brazil_phone(value: str | None) -> str:
+    digits = _only_digits(value)
+    if not digits:
+        return ""
+    if digits.startswith("55"):
+        return digits
+    if len(digits) in {10, 11}:
+        return f"55{digits}"
+    return digits
+
+
+def _is_foz_location(candidate: dict) -> bool:
+    joined = ' '.join([
+        candidate.get('formatted_address', '') or '',
+        candidate.get('city', '') or '',
+        candidate.get('state', '') or '',
+        candidate.get('country', '') or '',
+    ]).lower()
+    return 'foz do iguacu' in joined or 'foz do iguaçu' in joined
+
+
+def _build_maps_route_url(address: str = '', latitude: str = '', longitude: str = '') -> str:
+    if latitude and longitude:
+        return f"https://www.google.com/maps/dir/?api=1&destination={latitude},{longitude}"
+    if address:
+        return f"https://www.google.com/maps/dir/?api=1&destination={requests.utils.quote(address)}"
+    return ''
+
+
+def _extract_place_address_components(components: list[dict] | None) -> dict:
+    data = {'city': '', 'state': '', 'country': '', 'postal_code': '', 'neighborhood': ''}
+    for item in components or []:
+        types = item.get('types') or []
+        long_name = (item.get('long_name') or '').strip()
+        short_name = (item.get('short_name') or '').strip()
+        if 'administrative_area_level_2' in types and not data['city']:
+            data['city'] = long_name
+        elif 'locality' in types and not data['city']:
+            data['city'] = long_name
+        elif 'administrative_area_level_1' in types and not data['state']:
+            data['state'] = short_name or long_name
+        elif 'country' in types and not data['country']:
+            data['country'] = long_name
+        elif 'postal_code' in types and not data['postal_code']:
+            data['postal_code'] = long_name
+        elif ('sublocality' in types or 'sublocality_level_1' in types or 'neighborhood' in types) and not data['neighborhood']:
+            data['neighborhood'] = long_name
+    return data
+
+
+def _guide_import_settings() -> dict:
+    return {
+        'api_key': (_setting('guide_google_places_api_key', '') or '').strip(),
+        'city': (_setting('guide_import_city', 'Foz do Iguaçu') or 'Foz do Iguaçu').strip(),
+        'state': (_setting('guide_import_state', 'PR') or 'PR').strip(),
+        'country': (_setting('guide_import_country', 'Brasil') or 'Brasil').strip(),
+        'language': (_setting('guide_import_language', 'pt-BR') or 'pt-BR').strip(),
+        'region': (_setting('guide_import_region', 'br') or 'br').strip(),
+        'limit': max(1, min(20, int((_setting('guide_import_limit', '12') or '12').strip() or '12'))),
+    }
+
+
+def _guide_place_details(place_id: str, settings: dict) -> dict:
+    if not place_id or not settings.get('api_key'):
+        return {}
+    response = requests.get(
+        'https://maps.googleapis.com/maps/api/place/details/json',
+        params={
+            'place_id': place_id,
+            'fields': 'place_id,name,formatted_address,international_phone_number,formatted_phone_number,website,url,geometry,address_component',
+            'language': settings.get('language', 'pt-BR'),
+            'region': settings.get('region', 'br'),
+            'key': settings['api_key'],
+        },
+        timeout=25,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get('status') not in {'OK', 'ZERO_RESULTS'}:
+        raise RuntimeError(payload.get('error_message') or payload.get('status') or 'Falha ao consultar detalhes do local.')
+    return payload.get('result') or {}
+
+
+def _guide_search_places(raw_query: str, settings: dict) -> list[dict]:
+    query = (raw_query or '').strip()
+    if not query:
+        raise ValueError('Informe um termo para importar empresas.')
+    if not settings.get('api_key'):
+        raise ValueError('Cadastre a chave da Google Places API nas configurações do portal antes de importar.')
+
+    city = settings.get('city', 'Foz do Iguaçu')
+    state = settings.get('state', 'PR')
+    country = settings.get('country', 'Brasil')
+    full_query = f"{query} {city} {state} {country}"
+    response = requests.get(
+        'https://maps.googleapis.com/maps/api/place/textsearch/json',
+        params={
+            'query': full_query,
+            'language': settings.get('language', 'pt-BR'),
+            'region': settings.get('region', 'br'),
+            'key': settings['api_key'],
+        },
+        timeout=25,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get('status') not in {'OK', 'ZERO_RESULTS'}:
+        raise RuntimeError(payload.get('error_message') or payload.get('status') or 'Falha ao consultar o Google Places.')
+
+    items = []
+    for base in (payload.get('results') or [])[: settings.get('limit', 12)]:
+        details = _guide_place_details(base.get('place_id', ''), settings) if base.get('place_id') else {}
+        addr = _extract_place_address_components(details.get('address_components') or base.get('address_components') or [])
+        lat = str((((details.get('geometry') or {}).get('location') or {}).get('lat')) or (((base.get('geometry') or {}).get('location') or {}).get('lat')) or '').strip()
+        lng = str((((details.get('geometry') or {}).get('location') or {}).get('lng')) or (((base.get('geometry') or {}).get('location') or {}).get('lng')) or '').strip()
+        phone = details.get('international_phone_number') or details.get('formatted_phone_number') or ''
+        formatted_address = details.get('formatted_address') or base.get('formatted_address') or ''
+        candidate = {
+            'source_provider': 'google_places',
+            'source_ref': details.get('place_id') or base.get('place_id') or '',
+            'name': unescape((details.get('name') or base.get('name') or '').strip()),
+            'formatted_address': formatted_address,
+            'address': formatted_address,
+            'city': addr.get('city') or city,
+            'state': addr.get('state') or state,
+            'country': addr.get('country') or country,
+            'postal_code': addr.get('postal_code') or '',
+            'neighborhood': addr.get('neighborhood') or '',
+            'phone': _normalize_brazil_phone(phone),
+            'whatsapp': _normalize_brazil_phone(phone),
+            'website': (details.get('website') or '').strip(),
+            'maps_url': (details.get('url') or '').strip(),
+            'latitude': lat,
+            'longitude': lng,
+            'route_url': _build_maps_route_url(formatted_address, lat, lng),
+            'source_query': query,
+        }
+        if _is_foz_location(candidate):
+            items.append(candidate)
+    return items
+
+
+def _guide_existing_listing_for_import(category_id: int, source_ref: str, name: str, phone: str):
+    if source_ref:
+        row = GuideListing.query.filter_by(source_provider='google_places', source_ref=source_ref).first()
+        if row:
+            return row
+    q = GuideListing.query.filter(GuideListing.category_id == category_id, func.lower(GuideListing.name) == (name or '').strip().lower())
+    if phone:
+        row = q.filter(GuideListing.phone == phone).first()
+        if row:
+            return row
+    return q.first()
+
+
+def _apply_import_payload_to_listing(listing: GuideListing, category_id: int, payload: dict) -> None:
+    listing.category_id = category_id
+    listing.name = (payload.get('name') or '').strip()
+    listing.slug = _ensure_unique_slug(GuideListing, payload.get('name') or listing.name, object_id=getattr(listing, 'id', None))
+    listing.phone = _normalize_brazil_phone(payload.get('phone'))
+    listing.whatsapp = _normalize_brazil_phone(payload.get('whatsapp') or payload.get('phone'))
+    listing.address = (payload.get('address') or payload.get('formatted_address') or '').strip()
+    listing.neighborhood = (payload.get('neighborhood') or '').strip()
+    listing.city = (payload.get('city') or 'Foz do Iguaçu').strip() or 'Foz do Iguaçu'
+    listing.state = (payload.get('state') or 'PR').strip() or 'PR'
+    listing.postal_code = (payload.get('postal_code') or '').strip()
+    listing.latitude = (payload.get('latitude') or '').strip()
+    listing.longitude = (payload.get('longitude') or '').strip()
+    listing.website = (payload.get('website') or '').strip()
+    listing.description = (payload.get('description') or listing.description or '').strip()
+    listing.route_url = (payload.get('route_url') or _build_maps_route_url(listing.address, listing.latitude, listing.longitude)).strip()
+    listing.maps_url = (payload.get('maps_url') or '').strip()
+    listing.source_provider = (payload.get('source_provider') or 'google_places').strip()
+    listing.source_ref = (payload.get('source_ref') or '').strip()
+    listing.source_query = (payload.get('source_query') or '').strip()
+    listing.last_imported_at = datetime.utcnow()
+    listing.is_active = True if listing.is_active is None else listing.is_active
+
+
+@admin_bp.get("/guia-comercial/importar")
+@login_required
+def guide_import_page():
+    r = _require_admin()
+    if r:
+        return r
+    settings = _guide_import_settings()
+    return render_template(
+        "admin/guide_import.html",
+        categories=GuideCategory.query.filter_by(is_active=True).order_by(GuideCategory.name.asc()).all(),
+        import_settings=settings,
+        search_query='',
+        selected_category_id='',
+        results=[],
+        raw_payload='[]',
+        **_common_admin_context("guide_import"),
+    )
+
+
+@admin_bp.post("/guia-comercial/importar")
+@login_required
+def guide_import_run():
+    r = _require_admin()
+    if r:
+        return r
+    settings = _guide_import_settings()
+    categories = GuideCategory.query.filter_by(is_active=True).order_by(GuideCategory.name.asc()).all()
+    search_query = (request.form.get('search_query') or '').strip()
+    selected_category_id = (request.form.get('category_id') or '').strip()
+    action = (request.form.get('action') or 'search').strip().lower()
+    results = []
+    raw_payload = request.form.get('raw_payload') or '[]'
+
+    if action == 'search':
+        try:
+            results = _guide_search_places(search_query, settings)
+            raw_payload = json.dumps(results, ensure_ascii=False)
+            if not results:
+                flash('Nenhuma empresa válida de Foz do Iguaçu foi encontrada para esse termo.', 'warning')
+            else:
+                flash(f'{len(results)} resultado(s) pronto(s) para revisão/importação.', 'success')
+        except Exception as exc:
+            flash(str(exc), 'danger')
+    elif action == 'import':
+        if not selected_category_id.isdigit() or not GuideCategory.query.get(int(selected_category_id)):
+            flash('Selecione uma categoria válida para importar os resultados.', 'danger')
+        else:
+            try:
+                results = json.loads(raw_payload or '[]')
+            except Exception:
+                results = []
+            selected_indexes = []
+            for raw_idx in request.form.getlist('selected_items'):
+                try:
+                    selected_indexes.append(int(raw_idx))
+                except Exception:
+                    continue
+            if not selected_indexes:
+                flash('Selecione pelo menos uma empresa para importar.', 'danger')
+            else:
+                imported = 0
+                updated = 0
+                category_id = int(selected_category_id)
+                for idx in selected_indexes:
+                    if idx < 0 or idx >= len(results):
+                        continue
+                    payload = results[idx] or {}
+                    name = (payload.get('name') or '').strip()
+                    if not name:
+                        continue
+                    phone = _normalize_brazil_phone(payload.get('phone'))
+                    row = _guide_existing_listing_for_import(category_id, (payload.get('source_ref') or '').strip(), name, phone)
+                    is_new = row is None
+                    if is_new:
+                        row = GuideListing(category_id=category_id, name=name, slug=_ensure_unique_slug(GuideListing, name), is_active=True)
+                        db.session.add(row)
+                    _apply_import_payload_to_listing(row, category_id, payload)
+                    imported += 1 if is_new else 0
+                    updated += 0 if is_new else 1
+                db.session.commit()
+                flash(f'Importação concluída: {imported} nova(s) empresa(s) e {updated} atualizada(s).', 'success')
+                return redirect(url_for('admin.guide_listings_list'))
+    return render_template(
+        "admin/guide_import.html",
+        categories=categories,
+        import_settings=settings,
+        search_query=search_query,
+        selected_category_id=selected_category_id,
+        results=results,
+        raw_payload=raw_payload,
+        **_common_admin_context("guide_import"),
+    )
+
+
 @admin_bp.get("/guia-comercial/categorias")
 @login_required
 def guide_categories_list():
@@ -1397,6 +1675,13 @@ def settings_page():
         youtube_url=_setting("youtube_url", ""),
         x_url=_setting("x_url", ""),
         site_keywords=_setting("site_keywords", ""),
+        guide_google_places_api_key=_setting("guide_google_places_api_key", ""),
+        guide_import_city=_setting("guide_import_city", "Foz do Iguaçu"),
+        guide_import_state=_setting("guide_import_state", "PR"),
+        guide_import_country=_setting("guide_import_country", "Brasil"),
+        guide_import_language=_setting("guide_import_language", "pt-BR"),
+        guide_import_region=_setting("guide_import_region", "br"),
+        guide_import_limit=_setting("guide_import_limit", "12"),
         all_categories=Category.query.order_by(Category.name.asc()).all(),
         selected_top_menu_ids=selected_top_menu_ids,
         **_common_admin_context("settings"),
@@ -1450,6 +1735,18 @@ def save_logo():
     _save_setting("youtube_url", (request.form.get("youtube_url", "") or "").strip())
     _save_setting("x_url", (request.form.get("x_url", "") or "").strip())
     _save_setting("site_keywords", (request.form.get("site_keywords", "") or "").strip())
+    _save_setting("guide_google_places_api_key", (request.form.get("guide_google_places_api_key", "") or "").strip())
+    _save_setting("guide_import_city", (request.form.get("guide_import_city", "") or "Foz do Iguaçu").strip() or "Foz do Iguaçu")
+    _save_setting("guide_import_state", (request.form.get("guide_import_state", "") or "PR").strip() or "PR")
+    _save_setting("guide_import_country", (request.form.get("guide_import_country", "") or "Brasil").strip() or "Brasil")
+    _save_setting("guide_import_language", (request.form.get("guide_import_language", "") or "pt-BR").strip() or "pt-BR")
+    _save_setting("guide_import_region", (request.form.get("guide_import_region", "") or "br").strip() or "br")
+    limit_raw = (request.form.get("guide_import_limit", "12") or "12").strip()
+    try:
+        limit_value = max(1, min(20, int(limit_raw or '12')))
+    except Exception:
+        limit_value = 12
+    _save_setting("guide_import_limit", str(limit_value))
     selected_top_menu_ids = []
     for raw_id in request.form.getlist('top_menu_category_ids'):
         try:

@@ -6,7 +6,10 @@
 <section class="panel-card">
   <div class="panel-head">
     <div><h2>Empresas do guia</h2><p>Esses cards alimentam as páginas públicas do guia.</p></div>
-    <a class="btn btn-dark" href="{{ url_for('admin.guide_listings_new') }}">Nova empresa</a>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-dark" href="{{ url_for('admin.guide_import_page') }}">Importar do Google</a>
+      <a class="btn btn-dark" href="{{ url_for('admin.guide_listings_new') }}">Nova empresa</a>
+    </div>
   </div>
   <form method="get" class="row g-3 mb-3">
     <div class="col-md-7"><input class="form-control" name="q" value="{{ term }}" placeholder="Buscar por nome, categoria, telefone ou endereço"></div>

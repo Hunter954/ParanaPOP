@@ -23,22 +23,41 @@ def load_user(user_id):
 
 def _ensure_schema_updates():
     inspector = inspect(db.engine)
-    user_columns = {col["name"] for col in inspector.get_columns("user")} if inspector.has_table("user") else set()
-    statements = []
-    if "is_active" not in user_columns:
-        statements.append('ALTER TABLE "user" ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE')
-    if "created_at" not in user_columns:
-        statements.append('ALTER TABLE "user" ADD COLUMN created_at TIMESTAMP')
-    if "updated_at" not in user_columns:
-        statements.append('ALTER TABLE "user" ADD COLUMN updated_at TIMESTAMP')
 
-    if statements:
-        with db.engine.begin() as conn:
-            for stmt in statements:
-                conn.execute(text(stmt))
-            conn.execute(text('UPDATE "user" SET is_active = TRUE WHERE is_active IS NULL'))
-            conn.execute(text('UPDATE "user" SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL'))
-            conn.execute(text('UPDATE "user" SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL'))
+    if inspector.has_table("user"):
+        user_columns = {col["name"] for col in inspector.get_columns("user")}
+        user_statements = []
+        if "is_active" not in user_columns:
+            user_statements.append('ALTER TABLE "user" ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE')
+        if "created_at" not in user_columns:
+            user_statements.append('ALTER TABLE "user" ADD COLUMN created_at TIMESTAMP')
+        if "updated_at" not in user_columns:
+            user_statements.append('ALTER TABLE "user" ADD COLUMN updated_at TIMESTAMP')
+        if user_statements:
+            with db.engine.begin() as conn:
+                for stmt in user_statements:
+                    conn.execute(text(stmt))
+                conn.execute(text('UPDATE "user" SET is_active = TRUE WHERE is_active IS NULL'))
+                conn.execute(text('UPDATE "user" SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL'))
+                conn.execute(text('UPDATE "user" SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL'))
+
+    if inspector.has_table("guide_listing"):
+        guide_columns = {col["name"] for col in inspector.get_columns("guide_listing")}
+        guide_statements = []
+        if "source_provider" not in guide_columns:
+            guide_statements.append('ALTER TABLE guide_listing ADD COLUMN source_provider VARCHAR(60)')
+        if "source_ref" not in guide_columns:
+            guide_statements.append('ALTER TABLE guide_listing ADD COLUMN source_ref VARCHAR(190)')
+        if "source_query" not in guide_columns:
+            guide_statements.append('ALTER TABLE guide_listing ADD COLUMN source_query VARCHAR(220)')
+        if "maps_url" not in guide_columns:
+            guide_statements.append('ALTER TABLE guide_listing ADD COLUMN maps_url VARCHAR(1000)')
+        if "last_imported_at" not in guide_columns:
+            guide_statements.append('ALTER TABLE guide_listing ADD COLUMN last_imported_at TIMESTAMP')
+        if guide_statements:
+            with db.engine.begin() as conn:
+                for stmt in guide_statements:
+                    conn.execute(text(stmt))
 
 
 def _ensure_defaults():
@@ -78,6 +97,13 @@ def _ensure_defaults():
         ("hub_receive_token", ""),
         ("hub_auto_push", "1"),
         ("hub_remote_sites_json", "[]"),
+        ("guide_google_places_api_key", ""),
+        ("guide_import_city", "Foz do Iguaçu"),
+        ("guide_import_state", "PR"),
+        ("guide_import_country", "Brasil"),
+        ("guide_import_language", "pt-BR"),
+        ("guide_import_region", "br"),
+        ("guide_import_limit", "12"),
     ]:
         if not SiteSetting.query.filter_by(key=key).first():
             db.session.add(SiteSetting(key=key, value=value))
