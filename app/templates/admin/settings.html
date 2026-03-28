@@ -39,8 +39,30 @@
     </div>
   </section>
 
+  <section class="panel-card mt-4">
+    <div class="panel-head">
+      <div>
+        <h2>Categorias do menu do topo</h2>
+        <p>Marque somente as categorias que devem aparecer na navegação principal do site. Se nada for marcado, o sistema continua exibindo todas.</p>
+      </div>
+    </div>
+    <div class="settings-category-grid">
+      {% for category in all_categories %}
+        <label class="settings-category-option">
+          <input type="checkbox" name="top_menu_category_ids" value="{{ category.id }}" {% if category.id in selected_top_menu_ids %}checked{% endif %}>
+          <span>
+            <strong>{{ category.name }}</strong>
+            <small>{{ category.slug }}</small>
+          </span>
+        </label>
+      {% else %}
+        <div class="text-muted">Cadastre categorias primeiro para liberar essa configuração.</div>
+      {% endfor %}
+    </div>
+  </section>
+
   <div class="d-flex justify-content-end mt-3">
-    <button class="btn btn-dark" type="submit">Salvar branding, SEO e compartilhamento</button>
+    <button class="btn btn-dark" type="submit">Salvar branding, SEO, compartilhamento e menu</button>
   </div>
 </form>
 

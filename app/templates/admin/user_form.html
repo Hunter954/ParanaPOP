@@ -1,0 +1,61 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}{{ 'Novo usuário' if mode == 'new' else 'Editar usuário' }}{% endblock %}
+{% block page_title %}{{ 'Novo usuário' if mode == 'new' else 'Editar usuário' }}{% endblock %}
+{% block page_subtitle %}Controle completo de acesso ao painel administrativo.{% endblock %}
+{% block admin_content %}
+<section class="panel-card form-narrow">
+  <div class="panel-head">
+    <div>
+      <h2>{{ 'Cadastrar acesso' if mode == 'new' else 'Atualizar acesso' }}</h2>
+      <p>{{ 'Crie um novo login para o painel.' if mode == 'new' else 'Altere e-mail, senha, status e permissão desse usuário.' }}</p>
+    </div>
+    <a class="btn btn-outline-dark" href="{{ url_for('admin.users_list') }}">Voltar</a>
+  </div>
+
+  <form method="post" class="vstack gap-3">
+    <div>
+      <label class="form-label">E-mail</label>
+      <input class="form-control" type="email" name="email" value="{{ request.form.get('email', user_obj.email if user_obj else '') }}" required>
+    </div>
+
+    <div>
+      <label class="form-label">{{ 'Senha inicial' if mode == 'new' else 'Nova senha' }}</label>
+      <input class="form-control" type="password" name="password" placeholder="{{ 'Digite a senha do usuário' if mode == 'new' else 'Preencha só se quiser trocar a senha' }}" {{ 'required' if mode == 'new' else '' }}>
+      <small class="text-muted">Mínimo de 4 caracteres.</small>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="settings-category-option">
+          <input type="checkbox" name="is_active" value="1" {% if request.method == 'POST' %}{% if request.form.get('is_active') %}checked{% endif %}{% else %}{% if user_obj is none or user_obj.is_active %}checked{% endif %}{% endif %}>
+          <span>
+            <strong>Usuário ativo</strong>
+            <small>Quando desativado, não consegue fazer login.</small>
+          </span>
+        </label>
+      </div>
+      <div class="col-md-6">
+        <label class="settings-category-option">
+          <input type="checkbox" name="is_admin" value="1" {% if request.method == 'POST' %}{% if request.form.get('is_admin') %}checked{% endif %}{% else %}{% if user_obj is none or user_obj.is_admin %}checked{% endif %}{% endif %}>
+          <span>
+            <strong>Administrador</strong>
+            <small>Libera acesso total ao painel.</small>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    {% if mode == 'edit' and user_obj %}
+    <div class="admin-inline-info">
+      <div><span>Criado em</span><strong>{{ user_obj.created_at.strftime('%d/%m/%Y %H:%M') if user_obj.created_at else '-' }}</strong></div>
+      <div><span>Última atualização</span><strong>{{ user_obj.updated_at.strftime('%d/%m/%Y %H:%M') if user_obj.updated_at else '-' }}</strong></div>
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-end gap-2 flex-wrap">
+      <a class="btn btn-outline-dark" href="{{ url_for('admin.users_list') }}">Cancelar</a>
+      <button class="btn btn-dark" type="submit">{{ 'Criar usuário' if mode == 'new' else 'Salvar alterações' }}</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

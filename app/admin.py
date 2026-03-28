@@ -90,6 +90,19 @@ def _setting_json(key: str, default):
         return default
 
 
+def _selected_top_menu_category_ids() -> list[int]:
+    raw = _setting_json('top_menu_category_ids', [])
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for item in raw:
+        try:
+            result.append(int(item))
+        except Exception:
+            continue
+    return result
+
+
 def _parse_ad_slot_payload(raw: str | None) -> dict | None:
     value = (raw or '').strip()
     if not value.startswith('__ADCFG__'):
@@ -722,6 +735,9 @@ def login_post():
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data.lower().strip()).first()
         if user and user.check_password(form.password.data):
+            if not getattr(user, 'is_active', True):
+                flash('Este usuário está desativado. Fale com o administrador.', 'danger')
+                return render_template("admin/login.html", form=form)
             login_user(user)
             return redirect(url_for("admin.dashboard"))
         flash("Email ou senha inválidos.", "danger")
@@ -811,6 +827,127 @@ def insights_page():
         x_url=_setting("x_url", ""),
         **_common_admin_context("insights"),
     )
+
+
+
+
+@admin_bp.get("/users")
+@login_required
+def users_list():
+    r = _require_admin()
+    if r:
+        return r
+    term = (request.args.get('q') or '').strip()
+    q = User.query
+    if term:
+        q = q.filter(User.email.ilike(f"%{term}%"))
+    users = q.order_by(User.is_admin.desc(), User.email.asc()).all()
+    return render_template(
+        'admin/users_list.html',
+        users=users,
+        term=term,
+        top_menu_category_ids=_selected_top_menu_category_ids(),
+        **_common_admin_context('users'),
+    )
+
+
+@admin_bp.route('/users/new', methods=['GET', 'POST'])
+@login_required
+def users_new():
+    r = _require_admin()
+    if r:
+        return r
+    user_obj = None
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+        password = request.form.get('password') or ''
+        is_admin = bool(request.form.get('is_admin'))
+        is_active = bool(request.form.get('is_active'))
+
+        if not email:
+            flash('Informe o e-mail do usuário.', 'danger')
+        elif len(password) < 4:
+            flash('A senha precisa ter pelo menos 4 caracteres.', 'danger')
+        elif User.query.filter_by(email=email).first():
+            flash('Já existe um usuário com esse e-mail.', 'danger')
+        else:
+            user_obj = User(email=email, is_admin=is_admin, is_active=is_active)
+            user_obj.set_password(password)
+            db.session.add(user_obj)
+            db.session.commit()
+            flash('Usuário criado com sucesso.', 'success')
+            return redirect(url_for('admin.users_edit', user_id=user_obj.id))
+
+    return render_template('admin/user_form.html', mode='new', user_obj=user_obj, **_common_admin_context('users'))
+
+
+@admin_bp.route('/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@login_required
+def users_edit(user_id):
+    r = _require_admin()
+    if r:
+        return r
+    user_obj = User.query.get_or_404(user_id)
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+        password = request.form.get('password') or ''
+        is_admin = bool(request.form.get('is_admin'))
+        is_active = bool(request.form.get('is_active'))
+
+        if not email:
+            flash('Informe o e-mail do usuário.', 'danger')
+        elif User.query.filter(User.email == email, User.id != user_obj.id).first():
+            flash('Já existe outro usuário com esse e-mail.', 'danger')
+        elif user_obj.id == current_user.id and not is_admin:
+            flash('Você não pode remover seu próprio acesso de administrador.', 'danger')
+        elif user_obj.id == current_user.id and not is_active:
+            flash('Você não pode desativar seu próprio usuário.', 'danger')
+        else:
+            user_obj.email = email
+            user_obj.is_admin = is_admin
+            user_obj.is_active = is_active
+            if password.strip():
+                if len(password.strip()) < 4:
+                    flash('A nova senha precisa ter pelo menos 4 caracteres.', 'danger')
+                    return render_template('admin/user_form.html', mode='edit', user_obj=user_obj, **_common_admin_context('users'))
+                user_obj.set_password(password.strip())
+            db.session.commit()
+            flash('Usuário atualizado com sucesso.', 'success')
+            return redirect(url_for('admin.users_edit', user_id=user_obj.id))
+
+    return render_template('admin/user_form.html', mode='edit', user_obj=user_obj, **_common_admin_context('users'))
+
+
+@admin_bp.post('/users/<int:user_id>/toggle-active')
+@login_required
+def users_toggle_active(user_id):
+    r = _require_admin()
+    if r:
+        return r
+    user_obj = User.query.get_or_404(user_id)
+    if user_obj.id == current_user.id:
+        flash('Você não pode desativar seu próprio usuário.', 'danger')
+        return redirect(url_for('admin.users_list'))
+    user_obj.is_active = not bool(user_obj.is_active)
+    db.session.commit()
+    flash('Usuário ativado com sucesso.' if user_obj.is_active else 'Usuário desativado com sucesso.', 'success')
+    return redirect(url_for('admin.users_list'))
+
+
+@admin_bp.post('/users/<int:user_id>/toggle-admin')
+@login_required
+def users_toggle_admin(user_id):
+    r = _require_admin()
+    if r:
+        return r
+    user_obj = User.query.get_or_404(user_id)
+    if user_obj.id == current_user.id and user_obj.is_admin:
+        flash('Você não pode remover seu próprio acesso de administrador.', 'danger')
+        return redirect(url_for('admin.users_list'))
+    user_obj.is_admin = not bool(user_obj.is_admin)
+    db.session.commit()
+    flash('Permissão de administrador atualizada.', 'success')
+    return redirect(url_for('admin.users_list'))
 
 
 @admin_bp.get("/posts")
@@ -1052,6 +1189,7 @@ def settings_page():
     r = _require_admin()
     if r:
         return r
+    selected_top_menu_ids = _selected_top_menu_category_ids()
     return render_template(
         "admin/settings.html",
         live_embed=_setting("live_embed_html", ""),
@@ -1071,6 +1209,8 @@ def settings_page():
         youtube_url=_setting("youtube_url", ""),
         x_url=_setting("x_url", ""),
         site_keywords=_setting("site_keywords", ""),
+        all_categories=Category.query.order_by(Category.name.asc()).all(),
+        selected_top_menu_ids=selected_top_menu_ids,
         **_common_admin_context("settings"),
     )
 
@@ -1122,6 +1262,13 @@ def save_logo():
     _save_setting("youtube_url", (request.form.get("youtube_url", "") or "").strip())
     _save_setting("x_url", (request.form.get("x_url", "") or "").strip())
     _save_setting("site_keywords", (request.form.get("site_keywords", "") or "").strip())
+    selected_top_menu_ids = []
+    for raw_id in request.form.getlist('top_menu_category_ids'):
+        try:
+            selected_top_menu_ids.append(int(raw_id))
+        except Exception:
+            continue
+    _save_setting('top_menu_category_ids', json.dumps(selected_top_menu_ids, ensure_ascii=False))
     _save_setting("logo_url", logo_url)
     _save_setting("favicon_url", favicon_url)
     _save_setting("default_share_image", default_share_image)

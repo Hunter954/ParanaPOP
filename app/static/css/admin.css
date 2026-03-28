@@ -193,3 +193,20 @@ body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFo
 @media (max-width: 991px) {
   .ads-manage-specs { grid-template-columns: 1fr; }
 }
+
+
+.settings-category-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.settings-category-option { display:flex; gap:12px; align-items:flex-start; border:1px solid var(--admin-line); border-radius:18px; padding:14px 16px; background:#fbfcff; cursor:pointer; }
+.settings-category-option input { margin-top: 4px; }
+.settings-category-option strong { display:block; line-height:1.2; }
+.settings-category-option small { display:block; margin-top:4px; color:var(--admin-muted); }
+.admin-badge { display:inline-flex; align-items:center; justify-content:center; padding:7px 11px; border-radius:999px; font-size:12px; font-weight:700; }
+.admin-badge--success { background:#dcfce7; color:#166534; }
+.admin-badge--danger { background:#fee2e2; color:#991b1b; }
+.admin-badge--dark { background:#e2e8f0; color:#0f172a; }
+.admin-badge--muted { background:#f1f5f9; color:#475569; }
+.admin-inline-info { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:14px; }
+.admin-inline-info > div { border:1px solid var(--admin-line); border-radius:18px; padding:14px 16px; background:#fbfcff; }
+.admin-inline-info span { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--admin-muted); margin-bottom:4px; }
+.admin-inline-info strong { display:block; font-size:16px; }
+@media (max-width: 767px) { .settings-category-grid, .admin-inline-info { grid-template-columns: 1fr; } }

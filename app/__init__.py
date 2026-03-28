@@ -1,6 +1,7 @@
 import os
 import threading, time
 from pathlib import Path
+from sqlalchemy import inspect, text
 from flask import Flask
 from flask_login import LoginManager
 from dotenv import load_dotenv
@@ -18,6 +19,26 @@ login_manager.login_view = "admin.login"
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+def _ensure_schema_updates():
+    inspector = inspect(db.engine)
+    user_columns = {col["name"] for col in inspector.get_columns("user")} if inspector.has_table("user") else set()
+    statements = []
+    if "is_active" not in user_columns:
+        statements.append('ALTER TABLE "user" ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1')
+    if "created_at" not in user_columns:
+        statements.append('ALTER TABLE "user" ADD COLUMN created_at TIMESTAMP')
+    if "updated_at" not in user_columns:
+        statements.append('ALTER TABLE "user" ADD COLUMN updated_at TIMESTAMP')
+
+    if statements:
+        with db.engine.begin() as conn:
+            for stmt in statements:
+                conn.execute(text(stmt))
+            conn.execute(text('UPDATE "user" SET is_active = 1 WHERE is_active IS NULL'))
+            conn.execute(text('UPDATE "user" SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL'))
+            conn.execute(text('UPDATE "user" SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL'))
 
 
 def _ensure_defaults():
@@ -51,6 +72,7 @@ def _ensure_defaults():
         ("youtube_url", ""),
         ("x_url", ""),
         ("site_keywords", "notícias, Paraná, Foz do Iguaçu, portal de notícias, atualidades"),
+        ("top_menu_category_ids", "[]"),
         ("hub_enabled", "0"),
         ("hub_site_key", ""),
         ("hub_receive_token", ""),
@@ -93,6 +115,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _ensure_schema_updates()
         _ensure_defaults()
 
         admin_email = "admin@admin.com"
@@ -100,11 +123,14 @@ def create_app():
 
         u = User.query.filter_by(email=admin_email).first()
         if not u:
-            u = User(email=admin_email, is_admin=True)
+            u = User(email=admin_email, is_admin=True, is_active=True)
+            u.set_password(admin_password)
             db.session.add(u)
-
-        u.is_admin = True
-        u.set_password(admin_password)
+        else:
+            u.is_admin = True
+            u.is_active = True
+            if not u.password_hash:
+                u.set_password(admin_password)
         db.session.commit()
         print("ADMIN OK:", admin_email)
 

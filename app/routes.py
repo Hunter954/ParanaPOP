@@ -150,9 +150,24 @@ def _meta_defaults():
     }
 
 
+
+def _nav_categories():
+    selected_raw = _setting("top_menu_category_ids", "")
+    if selected_raw.strip():
+        try:
+            selected_ids = [int(item) for item in json.loads(selected_raw) if str(item).strip()]
+        except Exception:
+            selected_ids = []
+        if selected_ids:
+            items = Category.query.filter(Category.id.in_(selected_ids)).all()
+            order = {cid: idx for idx, cid in enumerate(selected_ids)}
+            items.sort(key=lambda item: (order.get(item.id, 9999), item.name.lower()))
+            return items
+    return Category.query.order_by(Category.name.asc()).all()
+
 @site_bp.app_context_processor
 def inject_site_globals():
-    cats = Category.query.order_by(Category.name.asc()).all()
+    cats = _nav_categories()
     return {
         "nav_categories": cats,
         "logo_url": _setting("logo_url", ""),

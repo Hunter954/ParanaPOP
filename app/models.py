@@ -15,13 +15,15 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(190), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    is_admin = db.Column(db.Boolean, default=True)
+    is_admin = db.Column(db.Boolean, default=True, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     def set_password(self, pw: str) -> None:
         self.password_hash = generate_password_hash(pw)
 
     def check_password(self, pw: str) -> bool:
-        # ✅ CORRETO
         return check_password_hash(self.password_hash, pw)
 
 class Category(db.Model):

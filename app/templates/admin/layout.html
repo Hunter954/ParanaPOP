@@ -25,6 +25,7 @@
         <a class="admin-nav-link {% if section=='dashboard' %}active{% endif %}" href="{{ url_for('admin.dashboard') }}"><i class="bi bi-speedometer2"></i><span>Visão geral</span></a>
         <a class="admin-nav-link {% if section=='posts' %}active{% endif %}" href="{{ url_for('admin.posts_list') }}"><i class="bi bi-newspaper"></i><span>Matérias</span></a>
         <a class="admin-nav-link {% if section=='categories' %}active{% endif %}" href="{{ url_for('admin.categories_list') }}"><i class="bi bi-tags"></i><span>Categorias</span></a>
+        <a class="admin-nav-link {% if section=='users' %}active{% endif %}" href="{{ url_for('admin.users_list') }}"><i class="bi bi-people"></i><span>Usuários</span></a>
         <a class="admin-nav-link {% if section=='media' %}active{% endif %}" href="{{ url_for('admin.media_library') }}"><i class="bi bi-images"></i><span>Biblioteca de mídia</span></a>
         <a class="admin-nav-link {% if section=='wordpress' %}active{% endif %}" href="{{ url_for('admin.wordpress_manager') }}"><i class="bi bi-wordpress"></i><span>WordPress</span></a>
         <a class="admin-nav-link {% if section=='hub_posts' %}active{% endif %}" href="{{ url_for('admin.hub_posts_page') }}"><i class="bi bi-diagram-3"></i><span>Hub Posts</span></a>

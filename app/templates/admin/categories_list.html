@@ -4,7 +4,7 @@
 {% block page_subtitle %}Organize as editorias e mantenha a navegação do portal separada por sessão.{% endblock %}
 {% block admin_content %}
 <section class="panel-card">
-  <div class="panel-head"><div><h2>Editorias cadastradas</h2><p>Essas categorias também aparecem na navegação pública.</p></div><a class="btn btn-dark" href="{{ url_for('admin.categories_new') }}">Nova categoria</a></div>
+  <div class="panel-head"><div><h2>Editorias cadastradas</h2><p>Essas categorias alimentam o site e também podem ser escolhidas em Configurações para aparecer no menu do topo.</p></div><a class="btn btn-dark" href="{{ url_for('admin.categories_new') }}">Nova categoria</a></div>
   <div class="table-responsive">
     <table class="table admin-table align-middle">
       <thead><tr><th>Nome</th><th>Slug</th><th>Matérias</th><th></th></tr></thead>

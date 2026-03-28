@@ -1,0 +1,67 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Usuários{% endblock %}
+{% block page_title %}Usuários do painel{% endblock %}
+{% block page_subtitle %}Gerencie acesso ao admin, altere e-mail, redefina senha e ative ou desative contas.{% endblock %}
+{% block admin_content %}
+<section class="panel-card">
+  <div class="panel-head">
+    <div>
+      <h2>Contas cadastradas</h2>
+      <p>O administrador pode criar novos acessos, editar permissões e bloquear logins sem apagar usuários.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <form class="d-flex gap-2" method="get" action="{{ url_for('admin.users_list') }}">
+        <input class="form-control" type="search" name="q" value="{{ term }}" placeholder="Buscar por e-mail">
+        <button class="btn btn-outline-dark" type="submit">Buscar</button>
+      </form>
+      <a class="btn btn-dark" href="{{ url_for('admin.users_new') }}">Novo usuário</a>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table admin-table align-middle">
+      <thead>
+        <tr><th>E-mail</th><th>Status</th><th>Permissão</th><th>Criado em</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td>
+            <strong>{{ user.email }}</strong>
+            {% if current_user.id == user.id %}<div><small class="text-muted">Sua conta atual</small></div>{% endif %}
+          </td>
+          <td>
+            {% if user.is_active %}
+              <span class="admin-badge admin-badge--success">Ativo</span>
+            {% else %}
+              <span class="admin-badge admin-badge--danger">Desativado</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if user.is_admin %}
+              <span class="admin-badge admin-badge--dark">Administrador</span>
+            {% else %}
+              <span class="admin-badge admin-badge--muted">Usuário</span>
+            {% endif %}
+          </td>
+          <td>{{ user.created_at.strftime('%d/%m/%Y %H:%M') if user.created_at else '-' }}</td>
+          <td class="text-end">
+            <div class="d-inline-flex gap-2 flex-wrap justify-content-end">
+              <a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.users_edit', user_id=user.id) }}">Editar</a>
+              <form method="post" action="{{ url_for('admin.users_toggle_active', user_id=user.id) }}">
+                <button class="btn btn-sm {{ 'btn-outline-danger' if user.is_active else 'btn-outline-success' }}" type="submit">{{ 'Desativar' if user.is_active else 'Ativar' }}</button>
+              </form>
+              <form method="post" action="{{ url_for('admin.users_toggle_admin', user_id=user.id) }}">
+                <button class="btn btn-sm btn-outline-secondary" type="submit">{{ 'Remover admin' if user.is_admin else 'Tornar admin' }}</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-5">Nenhum usuário encontrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
