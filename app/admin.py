@@ -721,7 +721,10 @@ def _wp_stats():
 
 @admin_bp.app_context_processor
 def inject_admin_helpers():
-    return {"admin_media_root": current_app.config.get("MEDIA_ROOT", "/data/uploads")}
+    return {
+        "admin_media_root": current_app.config.get("MEDIA_ROOT", "/data/uploads"),
+        "format_date_br": lambda value: value.strftime("%d/%m/%Y %H:%M") if value else "",
+    }
 
 
 @admin_bp.get("/login")
@@ -777,6 +780,245 @@ def dashboard():
         media_files=media_files,
         **_common_admin_context("dashboard"),
     )
+
+
+@admin_bp.get("/posts")
+@login_required
+def posts_list():
+    r = _require_admin()
+    if r:
+        return r
+    term = (request.args.get("q") or "").strip()
+    source = (request.args.get("source") or "all").strip().lower()
+    q = Post.query
+    if term:
+        q = q.filter(Post.title.ilike(f"%{term}%"))
+    if source in {"local", "wp", "hub"}:
+        q = q.filter(Post.source == source)
+    else:
+        source = "all"
+    posts = q.order_by(desc(Post.published_at), desc(Post.updated_at), desc(Post.id)).all()
+    return render_template(
+        "admin/posts_list.html",
+        posts=posts,
+        term=term,
+        source=source,
+        format_date_br=lambda value: value.strftime("%d/%m/%Y %H:%M") if value else "",
+        **_common_admin_context("posts"),
+    )
+
+
+@admin_bp.route("/posts/new", methods=["GET", "POST"])
+@login_required
+def posts_new():
+    r = _require_admin()
+    if r:
+        return r
+    form = PostAdminForm()
+    _bind_post_form_choices(form)
+    if request.method == "POST" and form.validate_on_submit():
+        featured_image = (form.featured_image.data or "").strip()
+        if form.featured_image_file.data:
+            featured_image = _save_upload(form.featured_image_file.data, "posts")
+        now = datetime.utcnow()
+        post = Post(
+            source="local",
+            title=(form.title.data or "").strip(),
+            slug=_ensure_unique_slug(Post, form.title.data or "materia"),
+            excerpt=(form.excerpt.data or "").strip(),
+            content_html=(form.content_html.data or "").strip(),
+            featured_image=featured_image,
+            author_name="Anônimo",
+            updated_at=now,
+        )
+        if (request.form.get("post_action") or "publish") == "publish":
+            post.published_at = now
+        post.categories = Category.query.filter(Category.id.in_(form.categories.data or [])).all()
+        db.session.add(post)
+        db.session.commit()
+        if post.published_at and _hub_config().get('enabled'):
+            _broadcast_post_to_hub(post)
+        flash("Matéria criada com sucesso.", "success")
+        return redirect(url_for("admin.posts_edit", post_id=post.id))
+    return render_template("admin/post_form.html", form=form, mode="new", post=None, hub=_hub_config(), **_common_admin_context("posts"))
+
+
+@admin_bp.route("/posts/<int:post_id>/edit", methods=["GET", "POST"])
+@login_required
+def posts_edit(post_id):
+    r = _require_admin()
+    if r:
+        return r
+    post = Post.query.get_or_404(post_id)
+    form = PostAdminForm(obj=post)
+    _bind_post_form_choices(form)
+    if request.method == "GET":
+        _fill_post_form_from_obj(form, post)
+    elif form.validate_on_submit():
+        featured_image = (form.featured_image.data or "").strip()
+        old_featured_image = post.featured_image or ""
+        if form.featured_image_file.data:
+            featured_image = _save_upload(form.featured_image_file.data, "posts")
+        post.title = (form.title.data or "").strip()
+        post.slug = _ensure_unique_slug(Post, post.title or post.slug or "materia", object_id=post.id)
+        post.excerpt = (form.excerpt.data or "").strip()
+        post.content_html = (form.content_html.data or "").strip()
+        post.featured_image = featured_image
+        post.author_name = "Anônimo"
+        post.updated_at = datetime.utcnow()
+        action = (request.form.get("post_action") or "publish")
+        if action == "publish":
+            if not post.published_at:
+                post.published_at = datetime.utcnow()
+        else:
+            post.published_at = None
+        post.categories = Category.query.filter(Category.id.in_(form.categories.data or [])).all()
+        db.session.commit()
+        if form.featured_image_file.data and old_featured_image and old_featured_image != featured_image:
+            _delete_local_media(old_featured_image)
+        if post.published_at and _hub_config().get('enabled'):
+            _broadcast_post_to_hub(post)
+        flash("Matéria atualizada com sucesso.", "success")
+        return redirect(url_for("admin.posts_edit", post_id=post.id))
+    return render_template("admin/post_form.html", form=form, mode="edit", post=post, hub=_hub_config(), **_common_admin_context("posts"))
+
+
+@admin_bp.post("/posts/<int:post_id>/delete")
+@login_required
+def posts_delete(post_id):
+    r = _require_admin()
+    if r:
+        return r
+    post = Post.query.get_or_404(post_id)
+    if post.source != 'local':
+        flash('Somente matérias locais podem ser excluídas por aqui.', 'warning')
+        return redirect(url_for('admin.posts_edit', post_id=post.id))
+    featured_image = post.featured_image or ''
+    db.session.delete(post)
+    db.session.commit()
+    if featured_image.startswith('/media/'):
+        _delete_local_media(featured_image)
+    flash('Matéria excluída com sucesso.', 'success')
+    return redirect(url_for('admin.posts_list'))
+
+
+@admin_bp.get("/categories")
+@login_required
+def categories_list():
+    r = _require_admin()
+    if r:
+        return r
+    categories = Category.query.order_by(Category.name.asc()).all()
+    rows = (
+        db.session.query(Category.id, func.count(post_categories.c.post_id))
+        .outerjoin(post_categories, post_categories.c.category_id == Category.id)
+        .group_by(Category.id)
+        .all()
+    )
+    counts = {row[0]: row[1] for row in rows}
+    return render_template("admin/categories_list.html", categories=categories, counts=counts, **_common_admin_context("categories"))
+
+
+@admin_bp.route("/categories/new", methods=["GET", "POST"])
+@login_required
+def categories_new():
+    r = _require_admin()
+    if r:
+        return r
+    form = CategoryForm()
+    if form.validate_on_submit():
+        desired_slug = (form.slug.data or form.name.data or "").strip()
+        category = Category(name=(form.name.data or "").strip(), slug=_ensure_unique_slug(Category, desired_slug))
+        db.session.add(category)
+        db.session.commit()
+        flash("Categoria criada com sucesso.", "success")
+        return redirect(url_for("admin.categories_edit", category_id=category.id))
+    return render_template("admin/category_form.html", form=form, mode="new", category=None, **_common_admin_context("categories"))
+
+
+@admin_bp.route("/categories/<int:category_id>/edit", methods=["GET", "POST"])
+@login_required
+def categories_edit(category_id):
+    r = _require_admin()
+    if r:
+        return r
+    category = Category.query.get_or_404(category_id)
+    form = CategoryForm(obj=category)
+    if form.validate_on_submit():
+        category.name = (form.name.data or "").strip()
+        desired_slug = (form.slug.data or category.name or "").strip()
+        category.slug = _ensure_unique_slug(Category, desired_slug, object_id=category.id)
+        db.session.commit()
+        flash("Categoria atualizada com sucesso.", "success")
+        return redirect(url_for("admin.categories_edit", category_id=category.id))
+    return render_template("admin/category_form.html", form=form, mode="edit", category=category, **_common_admin_context("categories"))
+
+
+@admin_bp.post("/categories/<int:category_id>/delete")
+@login_required
+def categories_delete(category_id):
+    r = _require_admin()
+    if r:
+        return r
+    category = Category.query.get_or_404(category_id)
+    in_use = db.session.query(func.count(post_categories.c.post_id)).filter(post_categories.c.category_id == category.id).scalar() or 0
+    if in_use:
+        flash("Essa categoria está vinculada a matérias e não pode ser excluída agora.", "warning")
+        return redirect(url_for("admin.categories_edit", category_id=category.id))
+    db.session.delete(category)
+    db.session.commit()
+    flash("Categoria excluída com sucesso.", "success")
+    return redirect(url_for("admin.categories_list"))
+
+
+@admin_bp.get("/media")
+@login_required
+def media_library():
+    r = _require_admin()
+    if r:
+        return r
+    files = []
+    root = _media_root()
+    if root.exists():
+        for p in sorted([item for item in root.rglob('*') if item.is_file()], key=lambda item: item.stat().st_mtime, reverse=True):
+            files.append({
+                'name': p.name,
+                'url': f"{current_app.config['MEDIA_URL_PREFIX'].rstrip('/')}/{p.relative_to(root).as_posix()}",
+                'size_kb': max(1, round(p.stat().st_size / 1024)),
+                'updated_at': datetime.fromtimestamp(p.stat().st_mtime),
+            })
+    return render_template("admin/media_library.html", files=files, **_common_admin_context("media"))
+
+
+@admin_bp.post("/media/upload")
+@login_required
+def media_upload():
+    r = _require_admin()
+    if r:
+        return r
+    uploads = request.files.getlist('files')
+    sent = 0
+    for item in uploads:
+        if item and getattr(item, 'filename', ''):
+            _save_upload(item, 'library')
+            sent += 1
+    flash(f'{sent} arquivo(s) enviado(s) com sucesso.' if sent else 'Selecione pelo menos um arquivo para enviar.', 'success' if sent else 'warning')
+    return redirect(url_for('admin.media_library'))
+
+
+@admin_bp.post("/media/delete")
+@login_required
+def media_delete():
+    r = _require_admin()
+    if r:
+        return r
+    url = (request.form.get('url') or '').strip()
+    if url:
+        _delete_local_media(url)
+        flash('Arquivo removido com sucesso.', 'success')
+    else:
+        flash('Arquivo inválido.', 'warning')
+    return redirect(url_for('admin.media_library'))
 
 
 @admin_bp.get("/insights")
