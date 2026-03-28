@@ -26,7 +26,7 @@ def _ensure_schema_updates():
     user_columns = {col["name"] for col in inspector.get_columns("user")} if inspector.has_table("user") else set()
     statements = []
     if "is_active" not in user_columns:
-        statements.append('ALTER TABLE "user" ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1')
+        statements.append('ALTER TABLE "user" ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE')
     if "created_at" not in user_columns:
         statements.append('ALTER TABLE "user" ADD COLUMN created_at TIMESTAMP')
     if "updated_at" not in user_columns:
@@ -36,7 +36,7 @@ def _ensure_schema_updates():
         with db.engine.begin() as conn:
             for stmt in statements:
                 conn.execute(text(stmt))
-            conn.execute(text('UPDATE "user" SET is_active = 1 WHERE is_active IS NULL'))
+            conn.execute(text('UPDATE "user" SET is_active = TRUE WHERE is_active IS NULL'))
             conn.execute(text('UPDATE "user" SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL'))
             conn.execute(text('UPDATE "user" SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL'))
 
