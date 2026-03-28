@@ -61,26 +61,6 @@
     </div>
   </section>
 
-  <section class="panel-card mt-4">
-    <div class="panel-head">
-      <div>
-        <h2>Guia Comercial / Importação automática</h2>
-        <p>Configure a busca padrão do importador que puxa empresas para o Guia Comercial via Google Places API.</p>
-      </div>
-      <a class="btn btn-outline-dark" href="{{ url_for('admin.guide_import_page') }}">Abrir importador</a>
-    </div>
-    <div class="row g-3">
-      <div class="col-md-6"><label class="form-label">Google Places API Key</label><input class="form-control" name="guide_google_places_api_key" value="{{ guide_google_places_api_key }}" placeholder="AIza..."></div>
-      <div class="col-md-3"><label class="form-label">Cidade padrão</label><input class="form-control" name="guide_import_city" value="{{ guide_import_city }}"></div>
-      <div class="col-md-1"><label class="form-label">UF</label><input class="form-control" name="guide_import_state" value="{{ guide_import_state }}"></div>
-      <div class="col-md-2"><label class="form-label">País</label><input class="form-control" name="guide_import_country" value="{{ guide_import_country }}"></div>
-      <div class="col-md-2"><label class="form-label">Idioma</label><input class="form-control" name="guide_import_language" value="{{ guide_import_language }}" placeholder="pt-BR"></div>
-      <div class="col-md-2"><label class="form-label">Região</label><input class="form-control" name="guide_import_region" value="{{ guide_import_region }}" placeholder="br"></div>
-      <div class="col-md-2"><label class="form-label">Limite por busca</label><input class="form-control" type="number" min="1" max="20" name="guide_import_limit" value="{{ guide_import_limit }}"></div>
-      <div class="col-12 text-muted small">O importador monta buscas como “auto vidros Foz do Iguaçu PR Brasil”, filtra somente resultados de Foz e deixa você revisar antes de gravar.</div>
-    </div>
-  </section>
-
   <div class="d-flex justify-content-end mt-3">
     <button class="btn btn-dark" type="submit">Salvar branding, SEO, compartilhamento e menu</button>
   </div>

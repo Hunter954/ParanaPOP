@@ -97,13 +97,6 @@ def _ensure_defaults():
         ("hub_receive_token", ""),
         ("hub_auto_push", "1"),
         ("hub_remote_sites_json", "[]"),
-        ("guide_google_places_api_key", ""),
-        ("guide_import_city", "Foz do Iguaçu"),
-        ("guide_import_state", "PR"),
-        ("guide_import_country", "Brasil"),
-        ("guide_import_language", "pt-BR"),
-        ("guide_import_region", "br"),
-        ("guide_import_limit", "12"),
     ]:
         if not SiteSetting.query.filter_by(key=key).first():
             db.session.add(SiteSetting(key=key, value=value))
