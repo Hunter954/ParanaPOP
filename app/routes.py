@@ -5,9 +5,9 @@ import re
 import json
 
 from flask import Blueprint, render_template, abort, request, current_app, send_from_directory, jsonify, make_response, url_for
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 
-from .models import db, Post, Category, AdSlot, SiteSetting, PageView, AnalyticsSession
+from .models import db, Post, Category, AdSlot, SiteSetting, PageView, AnalyticsSession, GuideCategory, GuideListing
 from .sync import download_external_image
 
 site_bp = Blueprint("site", __name__)
@@ -177,6 +177,8 @@ def inject_site_globals():
         "clean_text": _clean_text,
         "format_date_br": _format_date_br,
         "display_category_name": _display_category_name,
+        "guide_whatsapp_url": _build_whatsapp_url,
+        "guide_tel_url": _build_tel_url,
     }
 
 
@@ -416,6 +418,111 @@ def hub_posts_delete_api():
     db.session.delete(post)
     db.session.commit()
     return jsonify({'ok': True, 'deleted': True})
+
+
+def _guide_category_query():
+    return GuideCategory.query.filter_by(is_active=True).order_by(GuideCategory.name.asc())
+
+
+def _guide_listing_query():
+    return GuideListing.query.join(GuideCategory).filter(GuideListing.is_active.is_(True), GuideCategory.is_active.is_(True))
+
+
+def _format_phone_digits(value: str) -> str:
+    return re.sub(r'\D+', '', value or '')
+
+
+def _build_whatsapp_url(value: str) -> str:
+    digits = _format_phone_digits(value)
+    if not digits:
+        return ''
+    if not digits.startswith('55'):
+        digits = '55' + digits
+    return f'https://wa.me/{digits}'
+
+
+def _build_tel_url(value: str) -> str:
+    digits = _format_phone_digits(value)
+    return f'tel:+{digits}' if digits else ''
+
+
+def _guide_suggestions(term: str, limit: int = 8) -> list[dict]:
+    term = (term or '').strip()
+    if not term:
+        return []
+    like = f"%{term}%"
+    rows = (_guide_listing_query()
+            .filter(or_(GuideListing.name.ilike(like), GuideCategory.name.ilike(like), GuideListing.address.ilike(like), GuideListing.neighborhood.ilike(like)))
+            .order_by(GuideListing.is_featured.desc(), GuideListing.name.asc())
+            .limit(limit)
+            .all())
+    return [{
+        'name': row.name,
+        'category': row.category.name if row.category else '',
+        'category_slug': row.category.slug if row.category else '',
+        'address': row.address or '',
+        'url': url_for('site.guide_category', slug=row.category.slug) + f"?q={row.name}" if row.category else url_for('site.guide_home', q=row.name),
+    } for row in rows]
+
+
+@site_bp.get('/guia-comercial')
+def guide_home():
+    _track_view(None)
+    term = (request.args.get('q') or '').strip()
+    categories = _guide_category_query().all()
+    listing_count = _guide_listing_query().count()
+    alpha_map = {}
+    for category in categories:
+        initial = (category.name[:1] or '#').upper()
+        if not initial.isalpha():
+            initial = '#'
+        alpha_map.setdefault(initial, []).append(category)
+    ordered_alpha = sorted(alpha_map.items(), key=lambda item: ('ZZZ' if item[0] == '#' else item[0]))
+    highlights = []
+    if term:
+        like = f"%{term}%"
+        highlights = (_guide_listing_query()
+                      .filter(or_(GuideListing.name.ilike(like), GuideCategory.name.ilike(like), GuideListing.address.ilike(like), GuideListing.neighborhood.ilike(like)))
+                      .order_by(GuideListing.is_featured.desc(), GuideListing.name.asc())
+                      .limit(12).all())
+    else:
+        highlights = (_guide_listing_query()
+                      .order_by(GuideListing.is_featured.desc(), GuideListing.updated_at.desc(), GuideListing.name.asc())
+                      .limit(8).all())
+    meta = _meta_defaults()
+    meta.update({
+        'meta_title': f'Guia Comercial | {_site_name()}',
+        'meta_description': 'Guia Comercial de Foz do Iguaçu com categorias, telefones, WhatsApp e rotas dos estabelecimentos.',
+        'meta_url': url_for('site.guide_home', _external=True),
+    })
+    return render_template('guide_home.html', guide_categories=categories, ordered_alpha=ordered_alpha, highlights=highlights, listing_count=listing_count, term=term, suggestions=_guide_suggestions(term), **meta, ad_header=_get_ad('header_top'))
+
+
+@site_bp.get('/guia-comercial/autocomplete')
+def guide_autocomplete():
+    term = (request.args.get('q') or '').strip()
+    return jsonify({'items': _guide_suggestions(term)})
+
+
+@site_bp.get('/guia-comercial/<slug>')
+def guide_category(slug):
+    category = GuideCategory.query.filter_by(slug=slug, is_active=True).first()
+    if not category:
+        abort(404)
+    _track_view(None)
+    term = (request.args.get('q') or '').strip()
+    q = _guide_listing_query().filter(GuideListing.category_id == category.id)
+    if term:
+        like = f"%{term}%"
+        q = q.filter(or_(GuideListing.name.ilike(like), GuideListing.address.ilike(like), GuideListing.neighborhood.ilike(like), GuideListing.phone.ilike(like)))
+    listings = q.order_by(GuideListing.is_featured.desc(), GuideListing.name.asc()).all()
+    meta = _meta_defaults()
+    meta.update({
+        'meta_title': f'{category.name} | Guia Comercial | {_site_name()}',
+        'meta_description': f'Empresas de {category.name} em Foz do Iguaçu com telefone, WhatsApp e rota.',
+        'meta_url': url_for('site.guide_category', slug=category.slug, _external=True),
+    })
+    return render_template('guide_category.html', category=category, listings=listings, term=term, suggestions=_guide_suggestions(term), **meta, ad_header=_get_ad('header_top'))
 
 
 @site_bp.get("/")

@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="guide-hero">
+  <div>
+    <span class="guide-eyebrow">Guia Comercial</span>
+    <h1>Empresas e serviços de Foz do Iguaçu</h1>
+    <p>Encontre estabelecimentos por categoria, veja telefone livre, fale no WhatsApp e abra a rota direto do portal.</p>
+  </div>
+  <div class="guide-hero-stats">
+    <strong>{{ guide_categories|length }}</strong>
+    <span>categorias</span>
+    <strong>{{ listing_count }}</strong>
+    <span>empresas</span>
+  </div>
+</section>
+
+<section class="guide-search-panel" data-guide-search data-autocomplete-url="{{ url_for('site.guide_autocomplete') }}">
+  <form class="guide-search-form" action="{{ url_for('site.guide_home') }}" method="get" autocomplete="off">
+    <div class="guide-search-input-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" name="q" value="{{ term }}" placeholder="Buscar empresa, categoria, bairro ou telefone" data-guide-input>
+      <button type="submit">Buscar</button>
+    </div>
+    <div class="guide-autocomplete" data-guide-results {% if not suggestions %}hidden{% endif %}>
+      {% for item in suggestions %}
+        <a href="{{ item.url }}" class="guide-autocomplete-item">
+          <strong>{{ item.name }}</strong>
+          <span>{{ item.category }}{% if item.address %} • {{ item.address }}{% endif %}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </form>
+</section>
+
+{% if highlights %}
+<section class="pp-section">
+  <div class="section-head"><h2>{% if term %}Resultados em destaque{% else %}Empresas em destaque{% endif %}</h2><span class="section-line"></span></div>
+  <div class="guide-card-grid">
+    {% for item in highlights %}
+      <article class="guide-card">
+        <div class="guide-card-top">
+          <span class="tag">{{ item.category.name }}</span>
+          {% if item.is_featured %}<span class="guide-badge">Destaque</span>{% endif %}
+        </div>
+        <h3>{{ item.name }}</h3>
+        {% if item.description %}<p>{{ item.description }}</p>{% endif %}
+        <ul class="guide-card-meta">
+          {% if item.address %}<li><i class="bi bi-geo-alt"></i><span>{{ item.address }}{% if item.neighborhood %}, {{ item.neighborhood }}{% endif %}</span></li>{% endif %}
+          {% if item.phone %}<li><i class="bi bi-telephone"></i><span>{{ item.phone }}</span></li>{% endif %}
+        </ul>
+        <div class="guide-card-actions">
+          <a class="guide-action-btn" href="{{ url_for('site.guide_category', slug=item.category.slug) }}?q={{ item.name|urlencode }}">Ver categoria</a>
+          {% if item.whatsapp %}<a class="guide-action-btn guide-action-btn--whatsapp" href="{{ guide_whatsapp_url(item.whatsapp) }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="pp-section">
+  <div class="section-head"><h2>Categorias por ordem alfabética</h2><span class="section-line"></span></div>
+  <div class="guide-alpha-list">
+    {% for letter, items in ordered_alpha %}
+      <section class="guide-alpha-group" id="guide-letter-{{ letter }}">
+        <div class="guide-alpha-letter">{{ letter }}</div>
+        <div class="guide-alpha-categories">
+          {% for category in items %}
+            <a class="guide-category-pill" href="{{ url_for('site.guide_category', slug=category.slug) }}">{{ category.name }}</a>
+          {% endfor %}
+        </div>
+      </section>
+    {% else %}
+      <div class="panel-card-like">Nenhuma categoria do guia cadastrada ainda.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

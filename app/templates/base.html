@@ -86,6 +86,10 @@
           <i class="bi bi-camera-video-fill" aria-hidden="true"></i>
         </button>
 
+        <a class="mobile-icon-btn mobile-guide-btn" href="{{ url_for('site.guide_home') }}" aria-label="Abrir Guia Comercial">
+          <i class="bi bi-telephone-fill" aria-hidden="true"></i>
+        </a>
+
         <a class="brand mobile-brand" href="{{ url_for('site.home') }}" aria-label="Home">
           {% if logo_url %}
             <img src="{{ logo_url }}" alt="{{ site_name_value }}" />
@@ -109,6 +113,7 @@
         </div>
         <nav class="mobile-menu-list" aria-label="Menu mobile">
           <a class="mobile-menu-link" href="{{ url_for('site.home') }}">Início</a>
+          <a class="mobile-menu-link" href="{{ url_for('site.guide_home') }}">Guia Comercial</a>
           {% for c in nav_categories[:7] %}
             {% set short_name = c.name.split(' e ')[-1].strip() if ' e ' in c.name else c.name %}
             <a class="mobile-menu-link" href="{{ url_for('site.category', slug=c.slug) }}">{{ short_name }}</a>
@@ -119,15 +124,19 @@
       <div class="header-topline desktop-topline">
         <nav class="main-nav" aria-label="Menu principal">
           <a class="nav-link" href="{{ url_for('site.home') }}">Início</a>
+          <a class="nav-link" href="{{ url_for('site.guide_home') }}">Guia Comercial</a>
           {% for c in nav_categories[:7] %}
             <a class="nav-link" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
           {% endfor %}
         </nav>
 
-        <a class="live-chip" href="#meteorologia" data-livecam-open>
-          <span class="live-chip__icon" aria-hidden="true"><i class="bi bi-camera-video-fill"></i></span>
-          <span class="live-chip__label">Câmera ao vivo</span>
-        </a>
+        <div class="header-top-actions">
+          <a class="guide-chip" href="{{ url_for('site.guide_home') }}">Guia Comercial</a>
+          <a class="live-chip" href="#meteorologia" data-livecam-open>
+            <span class="live-chip__icon" aria-hidden="true"><i class="bi bi-camera-video-fill"></i></span>
+            <span class="live-chip__label">Câmera ao vivo</span>
+          </a>
+        </div>
       </div>
 
       <div class="brand-row">

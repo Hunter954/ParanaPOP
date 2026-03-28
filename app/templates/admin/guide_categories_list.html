@@ -1,0 +1,38 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Guia Comercial / Categorias{% endblock %}
+{% block page_title %}Guia Comercial / Categorias{% endblock %}
+{% block page_subtitle %}Organize as categorias públicas do Guia Comercial em ordem alfabética.{% endblock %}
+{% block admin_content %}
+<section class="panel-card">
+  <div class="panel-head">
+    <div><h2>Categorias do guia</h2><p>Essas categorias aparecem na página /guia-comercial.</p></div>
+    <a class="btn btn-dark" href="{{ url_for('admin.guide_categories_new') }}">Nova categoria</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table admin-table align-middle">
+      <thead><tr><th>Categoria</th><th>Slug</th><th>Ordem</th><th>Empresas</th><th>Status</th><th class="text-end">Ações</th></tr></thead>
+      <tbody>
+      {% for item in categories %}
+        <tr>
+          <td><strong>{{ item.name }}</strong>{% if item.description %}<div class="text-muted small mt-1">{{ item.description }}</div>{% endif %}</td>
+          <td>{{ item.slug }}</td>
+          <td>{{ item.sort_order }}</td>
+          <td>{{ counts.get(item.id, 0) }}</td>
+          <td>{% if item.is_active %}<span class="admin-badge admin-badge--success">Ativa</span>{% else %}<span class="admin-badge admin-badge--danger">Inativa</span>{% endif %}</td>
+          <td class="text-end">
+            <div class="d-inline-flex gap-2">
+              <a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.guide_categories_edit', category_id=item.id) }}">Editar</a>
+              <form method="post" action="{{ url_for('admin.guide_categories_delete', category_id=item.id) }}" onsubmit="return confirm('Excluir esta categoria do guia?');">
+                <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-muted">Nenhuma categoria do guia cadastrada.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

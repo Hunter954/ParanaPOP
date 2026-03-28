@@ -10,10 +10,10 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort
 from flask_login import login_user, logout_user, login_required, current_user
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, or_
 from werkzeug.utils import secure_filename
 
-from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
+from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession, GuideCategory, GuideListing
 from .sync import download_external_image
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .wp_client import WPClient
@@ -948,6 +948,194 @@ def users_toggle_admin(user_id):
     db.session.commit()
     flash('Permissão de administrador atualizada.', 'success')
     return redirect(url_for('admin.users_list'))
+
+
+@admin_bp.get("/guia-comercial/categorias")
+@login_required
+def guide_categories_list():
+    r = _require_admin()
+    if r:
+        return r
+    categories = GuideCategory.query.order_by(GuideCategory.name.asc()).all()
+    counts = {cid: total for cid, total in db.session.query(GuideCategory.id, func.count(GuideListing.id)).outerjoin(GuideListing, GuideListing.category_id == GuideCategory.id).group_by(GuideCategory.id).all()}
+    return render_template("admin/guide_categories_list.html", categories=categories, counts=counts, **_common_admin_context("guide_categories"))
+
+
+@admin_bp.route("/guia-comercial/categorias/new", methods=["GET", "POST"])
+@login_required
+def guide_categories_new():
+    r = _require_admin()
+    if r:
+        return r
+    category = None
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        description = (request.form.get('description') or '').strip()
+        sort_order_raw = (request.form.get('sort_order') or '0').strip()
+        try:
+            sort_order = int(sort_order_raw)
+        except Exception:
+            sort_order = 0
+        if not name:
+            flash('Informe o nome da categoria.', 'danger')
+        else:
+            slug = _ensure_unique_slug(GuideCategory, request.form.get('slug') or name)
+            category = GuideCategory(name=name, slug=slug, description=description, sort_order=sort_order, is_active=bool(request.form.get('is_active')))
+            db.session.add(category)
+            db.session.commit()
+            flash('Categoria do guia criada com sucesso.', 'success')
+            return redirect(url_for('admin.guide_categories_list'))
+    return render_template("admin/guide_category_form.html", mode='new', category=category, **_common_admin_context("guide_categories"))
+
+
+@admin_bp.route("/guia-comercial/categorias/<int:category_id>/edit", methods=["GET", "POST"])
+@login_required
+def guide_categories_edit(category_id):
+    r = _require_admin()
+    if r:
+        return r
+    category = GuideCategory.query.get_or_404(category_id)
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        description = (request.form.get('description') or '').strip()
+        sort_order_raw = (request.form.get('sort_order') or '0').strip()
+        try:
+            sort_order = int(sort_order_raw)
+        except Exception:
+            sort_order = 0
+        if not name:
+            flash('Informe o nome da categoria.', 'danger')
+        else:
+            category.name = name
+            category.slug = _ensure_unique_slug(GuideCategory, request.form.get('slug') or name, object_id=category.id)
+            category.description = description
+            category.sort_order = sort_order
+            category.is_active = bool(request.form.get('is_active'))
+            db.session.commit()
+            flash('Categoria do guia atualizada.', 'success')
+            return redirect(url_for('admin.guide_categories_list'))
+    return render_template("admin/guide_category_form.html", mode='edit', category=category, **_common_admin_context("guide_categories"))
+
+
+@admin_bp.post("/guia-comercial/categorias/<int:category_id>/delete")
+@login_required
+def guide_categories_delete(category_id):
+    r = _require_admin()
+    if r:
+        return r
+    category = GuideCategory.query.get_or_404(category_id)
+    if GuideListing.query.filter_by(category_id=category.id).first():
+        flash('Não foi possível excluir: existem empresas vinculadas a essa categoria.', 'danger')
+        return redirect(url_for('admin.guide_categories_list'))
+    db.session.delete(category)
+    db.session.commit()
+    flash('Categoria do guia removida.', 'success')
+    return redirect(url_for('admin.guide_categories_list'))
+
+
+@admin_bp.get("/guia-comercial/empresas")
+@login_required
+def guide_listings_list():
+    r = _require_admin()
+    if r:
+        return r
+    term = (request.args.get('q') or '').strip()
+    category_id = (request.args.get('category_id') or '').strip()
+    q = GuideListing.query.join(GuideCategory)
+    if term:
+        like = f"%{term}%"
+        q = q.filter(or_(GuideListing.name.ilike(like), GuideListing.phone.ilike(like), GuideListing.address.ilike(like), GuideCategory.name.ilike(like)))
+    if category_id.isdigit():
+        q = q.filter(GuideListing.category_id == int(category_id))
+    listings = q.order_by(GuideListing.is_featured.desc(), GuideListing.name.asc()).all()
+    return render_template("admin/guide_listings_list.html", listings=listings, categories=GuideCategory.query.order_by(GuideCategory.name.asc()).all(), term=term, category_id=category_id, **_common_admin_context("guide_listings"))
+
+
+@admin_bp.route("/guia-comercial/empresas/new", methods=["GET", "POST"])
+@login_required
+def guide_listings_new():
+    r = _require_admin()
+    if r:
+        return r
+    listing = None
+    categories = GuideCategory.query.order_by(GuideCategory.name.asc()).all()
+    if request.method == 'POST':
+        category_id = request.form.get('category_id') or ''
+        name = (request.form.get('name') or '').strip()
+        if not category_id.isdigit() or not GuideCategory.query.get(int(category_id)):
+            flash('Selecione uma categoria válida.', 'danger')
+        elif not name:
+            flash('Informe o nome do estabelecimento.', 'danger')
+        else:
+            slug = _ensure_unique_slug(GuideListing, request.form.get('slug') or name)
+            listing = GuideListing(category_id=int(category_id), name=name, slug=slug)
+            _fill_guide_listing_from_form(listing)
+            db.session.add(listing)
+            db.session.commit()
+            flash('Empresa adicionada ao guia com sucesso.', 'success')
+            return redirect(url_for('admin.guide_listings_edit', listing_id=listing.id))
+    return render_template("admin/guide_listing_form.html", mode='new', listing=listing, categories=categories, **_common_admin_context("guide_listings"))
+
+
+@admin_bp.route("/guia-comercial/empresas/<int:listing_id>/edit", methods=["GET", "POST"])
+@login_required
+def guide_listings_edit(listing_id):
+    r = _require_admin()
+    if r:
+        return r
+    listing = GuideListing.query.get_or_404(listing_id)
+    categories = GuideCategory.query.order_by(GuideCategory.name.asc()).all()
+    if request.method == 'POST':
+        category_id = request.form.get('category_id') or ''
+        name = (request.form.get('name') or '').strip()
+        if not category_id.isdigit() or not GuideCategory.query.get(int(category_id)):
+            flash('Selecione uma categoria válida.', 'danger')
+        elif not name:
+            flash('Informe o nome do estabelecimento.', 'danger')
+        else:
+            listing.category_id = int(category_id)
+            listing.name = name
+            listing.slug = _ensure_unique_slug(GuideListing, request.form.get('slug') or name, object_id=listing.id)
+            _fill_guide_listing_from_form(listing)
+            db.session.commit()
+            flash('Empresa atualizada no guia.', 'success')
+            return redirect(url_for('admin.guide_listings_edit', listing_id=listing.id))
+    return render_template("admin/guide_listing_form.html", mode='edit', listing=listing, categories=categories, **_common_admin_context("guide_listings"))
+
+
+@admin_bp.post("/guia-comercial/empresas/<int:listing_id>/delete")
+@login_required
+def guide_listings_delete(listing_id):
+    r = _require_admin()
+    if r:
+        return r
+    listing = GuideListing.query.get_or_404(listing_id)
+    db.session.delete(listing)
+    db.session.commit()
+    flash('Empresa removida do guia.', 'success')
+    return redirect(url_for('admin.guide_listings_list'))
+
+
+def _fill_guide_listing_from_form(listing: GuideListing) -> None:
+    listing.phone = (request.form.get('phone') or '').strip()
+    listing.whatsapp = (request.form.get('whatsapp') or '').strip()
+    listing.address = (request.form.get('address') or '').strip()
+    listing.neighborhood = (request.form.get('neighborhood') or '').strip()
+    listing.city = (request.form.get('city') or '').strip() or 'Foz do Iguaçu'
+    listing.state = (request.form.get('state') or '').strip() or 'PR'
+    listing.postal_code = (request.form.get('postal_code') or '').strip()
+    listing.latitude = (request.form.get('latitude') or '').strip()
+    listing.longitude = (request.form.get('longitude') or '').strip()
+    listing.website = (request.form.get('website') or '').strip()
+    listing.description = (request.form.get('description') or '').strip()
+    listing.is_active = bool(request.form.get('is_active'))
+    listing.is_featured = bool(request.form.get('is_featured'))
+    custom_route = (request.form.get('route_url') or '').strip()
+    if custom_route:
+        listing.route_url = custom_route
+    else:
+        destination = ', '.join(part for part in [listing.address, listing.neighborhood, listing.city, listing.state] if part)
+        listing.route_url = f'https://www.google.com/maps/dir/?api=1&destination={requests.utils.quote(destination)}' if destination else ''
 
 
 @admin_bp.get("/posts")

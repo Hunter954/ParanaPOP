@@ -1,0 +1,43 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Guia Comercial / Empresas{% endblock %}
+{% block page_title %}Guia Comercial / Empresas{% endblock %}
+{% block page_subtitle %}Cadastre estabelecimentos com telefone, WhatsApp e rota para o usuário clicar direto.{% endblock %}
+{% block admin_content %}
+<section class="panel-card">
+  <div class="panel-head">
+    <div><h2>Empresas do guia</h2><p>Esses cards alimentam as páginas públicas do guia.</p></div>
+    <a class="btn btn-dark" href="{{ url_for('admin.guide_listings_new') }}">Nova empresa</a>
+  </div>
+  <form method="get" class="row g-3 mb-3">
+    <div class="col-md-7"><input class="form-control" name="q" value="{{ term }}" placeholder="Buscar por nome, categoria, telefone ou endereço"></div>
+    <div class="col-md-3">
+      <select class="form-select" name="category_id">
+        <option value="">Todas as categorias</option>
+        {% for item in categories %}<option value="{{ item.id }}" {% if category_id == item.id|string %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2 d-grid"><button class="btn btn-outline-dark" type="submit">Filtrar</button></div>
+  </form>
+  <div class="table-responsive">
+    <table class="table admin-table align-middle">
+      <thead><tr><th>Estabelecimento</th><th>Categoria</th><th>Contato</th><th>Status</th><th class="text-end">Ações</th></tr></thead>
+      <tbody>
+      {% for item in listings %}
+        <tr>
+          <td><strong>{{ item.name }}</strong><div class="text-muted small mt-1">{{ item.address or 'Sem endereço' }}</div></td>
+          <td>{{ item.category.name }}</td>
+          <td>{{ item.phone or '—' }}{% if item.whatsapp %}<div class="text-muted small">WhatsApp: {{ item.whatsapp }}</div>{% endif %}</td>
+          <td>
+            {% if item.is_active %}<span class="admin-badge admin-badge--success">Ativo</span>{% else %}<span class="admin-badge admin-badge--danger">Inativo</span>{% endif %}
+            {% if item.is_featured %}<span class="admin-badge admin-badge--dark">Destaque</span>{% endif %}
+          </td>
+          <td class="text-end"><div class="d-inline-flex gap-2"><a class="btn btn-sm btn-outline-dark" href="{{ url_for('admin.guide_listings_edit', listing_id=item.id) }}">Editar</a><form method="post" action="{{ url_for('admin.guide_listings_delete', listing_id=item.id) }}" onsubmit="return confirm('Excluir esta empresa do guia?');"><button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button></form></div></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted">Nenhuma empresa cadastrada no guia.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -58,6 +58,46 @@ class AdSlot(db.Model):
     html = db.Column(db.Text, nullable=True)
     is_active = db.Column(db.Boolean, default=True)
 
+
+
+class GuideCategory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(190), nullable=False, unique=True)
+    slug = db.Column(db.String(190), nullable=False, unique=True, index=True)
+    description = db.Column(db.Text, nullable=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    listings = db.relationship('GuideListing', back_populates='category', lazy='dynamic', cascade='all, delete-orphan')
+
+
+class GuideListing(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    category_id = db.Column(db.Integer, db.ForeignKey('guide_category.id'), nullable=False, index=True)
+    name = db.Column(db.String(220), nullable=False, index=True)
+    slug = db.Column(db.String(220), nullable=False, unique=True, index=True)
+    phone = db.Column(db.String(60), nullable=True)
+    whatsapp = db.Column(db.String(60), nullable=True)
+    address = db.Column(db.String(255), nullable=True)
+    neighborhood = db.Column(db.String(120), nullable=True)
+    city = db.Column(db.String(120), nullable=True, default='Foz do Iguaçu')
+    state = db.Column(db.String(10), nullable=True, default='PR')
+    postal_code = db.Column(db.String(30), nullable=True)
+    latitude = db.Column(db.String(40), nullable=True)
+    longitude = db.Column(db.String(40), nullable=True)
+    route_url = db.Column(db.String(1000), nullable=True)
+    website = db.Column(db.String(500), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    is_featured = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    category = db.relationship('GuideCategory', back_populates='listings')
+
+
 class SiteSetting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(80), unique=True, nullable=False)

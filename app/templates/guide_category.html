@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="guide-hero guide-hero--category">
+  <div>
+    <a class="guide-back-link" href="{{ url_for('site.guide_home') }}"><i class="bi bi-arrow-left"></i> Voltar para o guia</a>
+    <span class="guide-eyebrow">Guia Comercial</span>
+    <h1>{{ category.name }}</h1>
+    <p>{{ category.description or 'Confira empresas, telefones, WhatsApp e rotas desta categoria em Foz do Iguaçu.' }}</p>
+  </div>
+</section>
+
+<section class="guide-search-panel" data-guide-search data-autocomplete-url="{{ url_for('site.guide_autocomplete') }}">
+  <form class="guide-search-form" action="{{ url_for('site.guide_category', slug=category.slug) }}" method="get" autocomplete="off">
+    <div class="guide-search-input-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" name="q" value="{{ term }}" placeholder="Buscar nome, telefone ou bairro dentro de {{ category.name }}" data-guide-input>
+      <button type="submit">Buscar</button>
+    </div>
+    <div class="guide-autocomplete" data-guide-results {% if not suggestions %}hidden{% endif %}>
+      {% for item in suggestions %}
+        <a href="{{ item.url }}" class="guide-autocomplete-item">
+          <strong>{{ item.name }}</strong>
+          <span>{{ item.category }}{% if item.address %} • {{ item.address }}{% endif %}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </form>
+</section>
+
+<section class="pp-section">
+  <div class="section-head"><h2>{{ listings|length }} resultado(s)</h2><span class="section-line"></span></div>
+  <div class="guide-listing-grid">
+    {% for item in listings %}
+      <article class="guide-listing-card">
+        <div class="guide-card-top">
+          <span class="tag">{{ item.category.name }}</span>
+          {% if item.is_featured %}<span class="guide-badge">Destaque</span>{% endif %}
+        </div>
+        <h3>{{ item.name }}</h3>
+        {% if item.description %}<p>{{ item.description }}</p>{% endif %}
+        <ul class="guide-card-meta">
+          {% if item.address %}<li><i class="bi bi-geo-alt"></i><span>{{ item.address }}{% if item.neighborhood %}, {{ item.neighborhood }}{% endif %} - {{ item.city }}/{{ item.state }}</span></li>{% endif %}
+          {% if item.phone %}<li><i class="bi bi-telephone"></i><span>{{ item.phone }}</span></li>{% endif %}
+          {% if item.website %}<li><i class="bi bi-globe"></i><a href="{{ item.website }}" target="_blank" rel="noopener">{{ item.website }}</a></li>{% endif %}
+        </ul>
+        <div class="guide-card-actions">
+          {% if item.whatsapp %}<a class="guide-action-btn guide-action-btn--whatsapp" href="{{ guide_whatsapp_url(item.whatsapp) }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> WhatsApp</a>{% endif %}
+          {% if item.phone %}<a class="guide-action-btn" href="{{ guide_tel_url(item.phone) }}"><i class="bi bi-telephone-fill"></i> Ligar</a>{% endif %}
+          {% if item.route_url %}<a class="guide-action-btn guide-action-btn--route" href="{{ item.route_url }}" target="_blank" rel="noopener"><i class="bi bi-sign-turn-right-fill"></i> Rota</a>{% endif %}
+        </div>
+      </article>
+    {% else %}
+      <div class="panel-card-like">Nenhuma empresa encontrada nesta categoria{% if term %} para “{{ term }}”{% endif %}.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

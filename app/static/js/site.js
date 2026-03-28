@@ -279,3 +279,33 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.visibilityState === 'hidden') flushDuration();
   });
 })();
+
+
+(function(){
+  const roots=document.querySelectorAll('[data-guide-search]');
+  roots.forEach((root)=>{
+    const endpoint=root.getAttribute('data-autocomplete-url');
+    const input=root.querySelector('[data-guide-input]');
+    const results=root.querySelector('[data-guide-results]');
+    if(!endpoint || !input || !results || !window.fetch) return;
+    let timer=null;
+    const render=(items)=>{
+      if(!items.length){results.hidden=true;results.innerHTML='';return;}
+      results.innerHTML=items.map((item)=>`<a href="${item.url}" class="guide-autocomplete-item"><strong>${item.name}</strong><span>${item.category}${item.address ? ' • ' + item.address : ''}</span></a>`).join('');
+      results.hidden=false;
+    };
+    input.addEventListener('input',()=>{
+      const q=input.value.trim();
+      clearTimeout(timer);
+      if(q.length<2){results.hidden=true;return;}
+      timer=setTimeout(()=>{
+        fetch(`${endpoint}?q=${encodeURIComponent(q)}`)
+          .then((r)=>r.json())
+          .then((data)=>render(Array.isArray(data.items)?data.items:[]))
+          .catch(()=>{results.hidden=true;});
+      },180);
+    });
+    document.addEventListener('click',(event)=>{if(!root.contains(event.target)){results.hidden=true;}});
+    input.addEventListener('focus',()=>{if(results.children.length){results.hidden=false;}});
+  });
+})();
