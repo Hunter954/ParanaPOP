@@ -425,7 +425,7 @@ def home():
 
     latest = _published_posts_query().order_by(desc(Post.published_at), desc(Post.id)).limit(24).all()
     lead_post = latest[0] if latest else None
-    latest_queue = latest[1:5] if len(latest) > 1 else []
+    latest_queue = latest[1:4] if len(latest) > 1 else []
     excluded_ids = {p.id for p in [lead_post, *latest_queue] if p}
 
     def cat_posts(slug, limit=6, exclude_ids=None):
