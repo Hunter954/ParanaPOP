@@ -1,31 +1,26 @@
-
 {% extends 'admin/layout.html' %}
 {% block admin_title %}Insights{% endblock %}
 {% block page_title %}Insights do site{% endblock %}
 {% block page_subtitle %}Leitura de performance do período selecionado com visão detalhada de sessões, pageviews e usuários.{% endblock %}
 {% block admin_content %}
 <section class="stats-grid insights-metrics-grid">
-  {% for card in insights.cards %}
+  {% for card in visible_cards %}
   <article class="stat-card">
     <span>{{ card.label }}</span>
-    <strong>
-      {% if card.key == 'avg_duration' %}
-        {{ card.value }}s
-      {% elif card.key == 'bounce_rate' %}
-        {{ '%.1f'|format(card.value) }}%
-      {% else %}
-        {{ '{:,}'.format(card.value).replace(',', '.') }}
-      {% endif %}
-    </strong>
+    <strong>{{ '{:,}'.format(card.value).replace(',', '.') }}</strong>
     <small>
-      {% if card.delta > 0 %}
+      {% if card.is_total %}
+        <span class="text-muted">Total geral do dashboard</span>
+      {% elif card.delta > 0 %}
         <span class="text-success">▲ {{ '%.1f'|format(card.delta) }}%</span>
+        vs. período anterior
       {% elif card.delta < 0 %}
         <span class="text-danger">▼ {{ '%.1f'|format(card.delta|abs) }}%</span>
+        vs. período anterior
       {% else %}
         <span class="text-muted">0%</span>
+        vs. período anterior
       {% endif %}
-      vs. período anterior
     </small>
   </article>
   {% endfor %}
@@ -90,115 +85,135 @@
   </div>
 </section>
 
+<div class="d-flex justify-content-end mt-3">
+  <button class="btn btn-outline-secondary" type="button" id="toggleExtraInsights">Esconder outros insights</button>
+</div>
+
+<div id="extraInsightsWrap">
+  <section class="admin-grid-2 mt-4">
+    <div class="panel-card">
+      <div class="panel-head"><div><h2>Páginas de entrada</h2><p>URLs que mais trouxeram sessões no período.</p></div></div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Página</th><th>Sessões</th><th>Pageviews</th></tr></thead>
+          <tbody>
+            {% for path, sessions, pageviews in insights.top_pages %}
+            <tr>
+              <td><code>{{ path or '/' }}</code></td>
+              <td>{{ sessions }}</td>
+              <td>{{ pageviews or 0 }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="text-muted">Ainda não há dados suficientes.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel-card">
+      <div class="panel-head"><div><h2>Origem de tráfego</h2><p>Referrers captados automaticamente.</p></div></div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Origem</th><th>Sessões</th></tr></thead>
+          <tbody>
+            {% for referrer, sessions in insights.top_referrers %}
+            <tr>
+              <td>{{ referrer }}</td>
+              <td>{{ sessions }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="2" class="text-muted">Sem origem registrada ainda.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="admin-grid-2 mt-4">
+    <div class="panel-card">
+      <div class="panel-head"><div><h2>Compartilhamento social</h2><p>Estado atual das principais configurações para link preview.</p></div></div>
+      <ul class="mb-0 ps-3">
+        <li><strong>Site:</strong> {{ site_name }}</li>
+        <li><strong>Logo:</strong> {{ 'OK' if logo_url else 'Pendente' }}</li>
+        <li><strong>Favicon:</strong> {{ 'OK' if favicon_url else 'Pendente' }}</li>
+        <li><strong>Imagem padrão:</strong> {{ 'OK' if default_share_image else 'Pendente' }}</li>
+        <li><strong>Descrição:</strong> {{ 'OK' if default_meta_description else 'Pendente' }}</li>
+        <li><strong>Google verification:</strong> {{ 'OK' if google_site_verification else 'Pendente' }}</li>
+        <li><strong>Google Analytics ID:</strong> {{ google_analytics_id or 'Não informado' }}</li>
+      </ul>
+    </div>
+    <div class="panel-card">
+      <div class="panel-head"><div><h2>O que foi habilitado nesta atualização</h2><p>Base para ranquear e compartilhar melhor automaticamente.</p></div></div>
+      <ul class="mb-0 ps-3">
+        <li>Meta title, description e keywords por página.</li>
+        <li>Open Graph e Twitter Card com thumbnail automática.</li>
+        <li>Canonical URL por home, categorias, busca e matéria.</li>
+        <li>JSON-LD de organização e artigo.</li>
+        <li>robots.txt e sitemap.xml automáticos.</li>
+        <li>Painel com sessões, usuários, bounce, pageviews e duração média.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     const wrap = document.getElementById('insightsChartWrap');
     const tooltip = document.getElementById('chartHoverTooltip');
-    if (!wrap || !tooltip) return;
+    const toggleExtraInsights = document.getElementById('toggleExtraInsights');
+    const extraInsightsWrap = document.getElementById('extraInsightsWrap');
 
-    const dateEl = tooltip.querySelector('.chart-hover-date');
-    const valueEl = tooltip.querySelector('.chart-hover-value');
-    const points = wrap.querySelectorAll('.chart-point');
+    if (wrap && tooltip) {
+      const dateEl = tooltip.querySelector('.chart-hover-date');
+      const valueEl = tooltip.querySelector('.chart-hover-value');
+      const points = wrap.querySelectorAll('.chart-point');
 
-    function positionTooltip(event) {
-      const rect = wrap.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      tooltip.style.left = x + 'px';
-      tooltip.style.top = Math.max(16, y - 14) + 'px';
+      function positionTooltip(event) {
+        const rect = wrap.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = Math.max(16, y - 14) + 'px';
+      }
+
+      points.forEach(function (point) {
+        point.addEventListener('mouseenter', function (event) {
+          dateEl.textContent = point.dataset.label || '';
+          valueEl.textContent = (point.dataset.value || '0') + ' {{ metric_label }}';
+          tooltip.classList.add('is-visible');
+          point.classList.add('is-hovered');
+          positionTooltip(event);
+        });
+
+        point.addEventListener('mousemove', positionTooltip);
+
+        point.addEventListener('mouseleave', function () {
+          tooltip.classList.remove('is-visible');
+          point.classList.remove('is-hovered');
+        });
+      });
+
+      wrap.addEventListener('mouseleave', function () {
+        tooltip.classList.remove('is-visible');
+        points.forEach(function (point) {
+          point.classList.remove('is-hovered');
+        });
+      });
     }
 
-    points.forEach(function (point) {
-      point.addEventListener('mouseenter', function (event) {
-        dateEl.textContent = point.dataset.label || '';
-        valueEl.textContent = (point.dataset.value || '0') + ' {{ metric_label }}';
-        tooltip.classList.add('is-visible');
-        point.classList.add('is-hovered');
-        positionTooltip(event);
+    if (toggleExtraInsights && extraInsightsWrap) {
+      toggleExtraInsights.addEventListener('click', function () {
+        const hidden = extraInsightsWrap.hasAttribute('hidden');
+        if (hidden) {
+          extraInsightsWrap.removeAttribute('hidden');
+          toggleExtraInsights.textContent = 'Esconder outros insights';
+        } else {
+          extraInsightsWrap.setAttribute('hidden', 'hidden');
+          toggleExtraInsights.textContent = 'Mostrar outros insights';
+        }
       });
-
-      point.addEventListener('mousemove', function (event) {
-        positionTooltip(event);
-      });
-
-      point.addEventListener('mouseleave', function () {
-        tooltip.classList.remove('is-visible');
-        point.classList.remove('is-hovered');
-      });
-    });
-
-    wrap.addEventListener('mouseleave', function () {
-      tooltip.classList.remove('is-visible');
-      points.forEach(function (point) {
-        point.classList.remove('is-hovered');
-      });
-    });
+    }
   });
 </script>
-
-<section class="admin-grid-2 mt-4">
-  <div class="panel-card">
-    <div class="panel-head"><div><h2>Páginas de entrada</h2><p>URLs que mais trouxeram sessões no período.</p></div></div>
-    <div class="table-responsive">
-      <table class="table align-middle mb-0">
-        <thead><tr><th>Página</th><th>Sessões</th><th>Pageviews</th></tr></thead>
-        <tbody>
-          {% for path, sessions, pageviews in insights.top_pages %}
-          <tr>
-            <td><code>{{ path or '/' }}</code></td>
-            <td>{{ sessions }}</td>
-            <td>{{ pageviews or 0 }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="3" class="text-muted">Ainda não há dados suficientes.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  <div class="panel-card">
-    <div class="panel-head"><div><h2>Origem de tráfego</h2><p>Referrers captados automaticamente.</p></div></div>
-    <div class="table-responsive">
-      <table class="table align-middle mb-0">
-        <thead><tr><th>Origem</th><th>Sessões</th></tr></thead>
-        <tbody>
-          {% for referrer, sessions in insights.top_referrers %}
-          <tr>
-            <td>{{ referrer }}</td>
-            <td>{{ sessions }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="2" class="text-muted">Sem origem registrada ainda.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<section class="admin-grid-2 mt-4">
-  <div class="panel-card">
-    <div class="panel-head"><div><h2>Compartilhamento social</h2><p>Estado atual das principais configurações para link preview.</p></div></div>
-    <ul class="mb-0 ps-3">
-      <li><strong>Site:</strong> {{ site_name }}</li>
-      <li><strong>Logo:</strong> {{ 'OK' if logo_url else 'Pendente' }}</li>
-      <li><strong>Favicon:</strong> {{ 'OK' if favicon_url else 'Pendente' }}</li>
-      <li><strong>Imagem padrão:</strong> {{ 'OK' if default_share_image else 'Pendente' }}</li>
-      <li><strong>Descrição:</strong> {{ 'OK' if default_meta_description else 'Pendente' }}</li>
-      <li><strong>Google verification:</strong> {{ 'OK' if google_site_verification else 'Pendente' }}</li>
-      <li><strong>Google Analytics ID:</strong> {{ google_analytics_id or 'Não informado' }}</li>
-    </ul>
-  </div>
-  <div class="panel-card">
-    <div class="panel-head"><div><h2>O que foi habilitado nesta atualização</h2><p>Base para ranquear e compartilhar melhor automaticamente.</p></div></div>
-    <ul class="mb-0 ps-3">
-      <li>Meta title, description e keywords por página.</li>
-      <li>Open Graph e Twitter Card com thumbnail automática.</li>
-      <li>Canonical URL por home, categorias, busca e matéria.</li>
-      <li>JSON-LD de organização e artigo.</li>
-      <li>robots.txt e sitemap.xml automáticos.</li>
-      <li>Painel com sessões, usuários, bounce, pageviews e duração média.</li>
-    </ul>
-  </div>
-</section>
 {% endblock %}

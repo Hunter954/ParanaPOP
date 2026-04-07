@@ -1,7 +1,7 @@
 {% extends 'admin/layout.html' %}
 {% block admin_title %}{% if mode=='new' %}Nova matéria{% else %}Editar matéria{% endif %}{% endblock %}
 {% block page_title %}{% if mode=='new' %}Nova matéria{% else %}Editar matéria{% endif %}{% endblock %}
-{% block page_subtitle %}Editor visual sem API externa, slug gerado no código e opção de salvar como rascunho.{% endblock %}
+{% block page_subtitle %}Editor visual sem API externa, slug gerado no código e opção de agendar a publicação.{% endblock %}
 {% block admin_content %}
 <form method="post" enctype="multipart/form-data" class="admin-grid-2 js-post-form">
   {{ form.csrf_token }}
@@ -44,20 +44,21 @@
   </section>
 
   <section class="panel-card">
-    <div class="panel-head"><div><h2>Publicação e mídia</h2><p>Autor fica como <strong>Anônimo</strong>, data é automática e o slug é gerado sozinho.</p></div></div>
+    <div class="panel-head"><div><h2>Publicação e mídia</h2><p>Autor fica como <strong>Redação</strong>, você escolhe a data da publicação e o slug é gerado sozinho.</p></div></div>
     <div class="vstack gap-3">
       <div class="preview-box" style="padding:14px 16px;">
         <div class="small text-muted mb-1">Autor padrão</div>
-        <div><strong>Anônimo</strong></div>
+        <div><strong>Redação</strong></div>
       </div>
       <div class="preview-box" style="padding:14px 16px;">
         <div class="small text-muted mb-1">Data da publicação</div>
-        <div><strong>{% if post and post.published_at %}{{ post.published_at.strftime('%d/%m/%Y %H:%M') }}{% else %}Automática no momento da publicação{% endif %}</strong></div>
+        <div><strong>{% if form.scheduled_for.data %}{{ form.scheduled_for.data.strftime('%d/%m/%Y %H:%M') }}{% else %}Definida ao publicar agora{% endif %}</strong></div>
       </div>
       <div class="preview-box" style="padding:14px 16px;">
         <div class="small text-muted mb-1">Status atual</div>
-        <div><strong>{% if post and not post.published_at %}Rascunho{% else %}Publicado{% endif %}</strong></div>
+        <div><strong>{% if not post or not post.published_at %}Rascunho{% elif post.published_at > now_utc %}Agendada{% else %}Publicada{% endif %}</strong></div>
       </div>
+      <div><label class="form-label">Calendário da publicação</label>{{ form.scheduled_for(class='form-control', type='datetime-local') }}<div class="form-help mt-2">Se a data estiver no futuro a matéria fica em standby e entra automaticamente no horário configurado.</div></div>
       <div><label class="form-label">Categorias</label>{{ form.categories(class='form-select', multiple=true, size='8') }}</div>
       <div><label class="form-label">Imagem por link</label>{{ form.featured_image(class='form-control', placeholder='https://.../imagem.jpg') }}</div>
       <div><label class="form-label">ou enviar arquivo</label>{{ form.featured_image_file(class='form-control') }}</div>
@@ -69,10 +70,10 @@
       {% endif %}
     </div>
     <div class="d-flex gap-2 mt-4 flex-wrap">
-      <button class="btn btn-dark" type="submit" name="post_action" value="publish">Publicar agora</button>
+      <button class="btn btn-dark" type="submit" name="post_action" value="publish">Salvar / publicar</button>
       <button class="btn btn-outline-secondary" type="submit" name="post_action" value="draft">Salvar rascunho</button>
-      {% if post and post.published_at %}<a class="btn btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Visualizar</a>{% endif %}
-      {% if post and hub.enabled and hub.remotes and post.published_at %}<button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_single', post_id=post.id) }}" formmethod="post">Enviar aos espelhos</button>{% endif %}
+      {% if post and post.published_at and post.published_at <= now_utc %}<a class="btn btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Visualizar</a>{% endif %}
+      {% if post and hub.enabled and hub.remotes and post.published_at and post.published_at <= now_utc %}<button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_single', post_id=post.id) }}" formmethod="post">Enviar aos espelhos</button>{% endif %}
     </div>
   </section>
 </form>

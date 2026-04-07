@@ -16,7 +16,6 @@
           <div class="recent-body">
             <div class="tag small">{{ (p.categories[0].name if p.categories else cat.name) }}</div>
             <div class="recent-title">{{ p.title|safe }}</div>
-            <div class="meta">{{ p.published_at.strftime('%d %b, %Y') if p.published_at else '' }}</div>
           </div>
         </a>
       {% endfor %}

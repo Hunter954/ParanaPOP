@@ -6,6 +6,7 @@ from wtforms import (
     BooleanField,
     TextAreaField,
     SelectMultipleField,
+    DateTimeLocalField,
 )
 from wtforms.validators import DataRequired, Email, Length, Optional
 
@@ -37,3 +38,4 @@ class PostAdminForm(FlaskForm):
     featured_image = StringField("Imagem destacada (URL)", validators=[Optional(), Length(max=800)])
     featured_image_file = FileField("Imagem destacada (arquivo)", validators=[Optional(), FileAllowed(["jpg", "jpeg", "png", "webp", "gif", "svg"], "Envie uma imagem válida.")])
     categories = SelectMultipleField("Categorias", coerce=int, validators=[Optional()])
+    scheduled_for = DateTimeLocalField("Data e hora da publicação", format='%Y-%m-%dT%H:%M', validators=[Optional()])

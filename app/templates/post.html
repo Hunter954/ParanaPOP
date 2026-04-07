@@ -19,9 +19,6 @@
           <a class="tag" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
         {% endfor %}
       </div>
-      {% if post.published_at %}
-        <div class="meta">{{ post.published_at.strftime('%d/%m/%Y %H:%M') }}</div>
-      {% endif %}
     </div>
 
     <h1 class="article-title">{{ post.title|safe }}</h1>
@@ -55,7 +52,6 @@
           <div class="thumb-card-image thumb-small" style="background-image:url('{{ p.featured_image or '' }}')"></div>
           <div class="story-meta-row">
             <span class="tag">{{ (p.categories[0].name if p.categories else related_label) }}</span>
-            <span class="date-label">{{ format_date_br(p.published_at) }}</span>
           </div>
           <h3>{{ clean_text(p.title, 78) }}</h3>
           <p>{{ clean_text(p.excerpt or p.content_html, 115) }}</p>
@@ -80,7 +76,6 @@
           <div class="thumb-card-image side-thumb" style="background-image:url('{{ p.featured_image or '' }}')"></div>
           <div class="story-meta-row">
             <span class="tag">{{ (p.categories[0].name if p.categories else 'Notícias') }}</span>
-            <span class="date-label">{{ format_date_br(p.published_at) }}</span>
           </div>
           <h3>{{ clean_text(p.title, 80) }}</h3>
         </a>

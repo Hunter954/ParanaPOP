@@ -95,7 +95,7 @@ img{max-width:100%;display:block}
 .story-meta-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
 .tag{display:inline-flex;align-items:center;min-height:21px;padding:0 10px;border-radius:999px;background:var(--ad);color:#111;font-size:10px;font-weight:900;text-transform:uppercase;line-height:1;letter-spacing:.02em}
 .date-label{font-size:11px;color:#6f6f6f;font-weight:500;text-align:right}
-.main-story-card h1,.news-tile-card h3,.side-story-card h3,.city-story-copy h3{margin:0;font-weight:900;letter-spacing:-.035em;color:#111}
+.main-story-card h1,.news-tile-card h3,.side-story-card h3,.city-story-copy h3{margin:0;font-weight:600;letter-spacing:-.035em;color:#111}
 .main-story-card{padding-top:2px}
 
 .main-story-card h1{
@@ -158,7 +158,7 @@ img{max-width:100%;display:block}
 .footer-credit a{font-weight:800;text-decoration:none}
 .footer-credit a:hover{text-decoration:underline}
 
-.article-title{font-size:42px;line-height:1.05;font-weight:900;margin:0 0 18px}
+.article-title{font-size:42px;line-height:1.05;font-weight:600;margin:0 0 18px}
 .article-meta,.article-content,.article-excerpt,.popular-list,.inner-grid,.right-rail,.content-grid,.recent-grid,.search-row{font-weight:500}
 .search-row{display:flex;gap:10px;margin:10px 0 18px}
 .search-row input{flex:1;height:40px;border-radius:999px;border:1px solid rgba(0,0,0,.1);padding:0 14px;outline:none}
@@ -193,7 +193,7 @@ img{max-width:100%;display:block}
 .recent-card{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;text-decoration:none}
 .recent-img{height:132px;border-radius:14px;background:#c9c9c9 center/cover no-repeat}
 .recent-body{min-width:0}
-.recent-title{font-size:22px;line-height:1.05;font-weight:900;margin:10px 0 8px;letter-spacing:-.02em}
+.recent-title{font-size:22px;line-height:1.05;font-weight:600;margin:10px 0 8px;letter-spacing:-.02em}
 .article-cover{border-radius:14px}
 .article-excerpt{border-left:4px solid var(--line);background:#fff;padding:14px;border-radius:12px}
 .article-content img{max-width:100%;height:auto;border-radius:14px}
@@ -250,9 +250,9 @@ img{max-width:100%;display:block}
       "mainhead"
       "feature"
       "story"
+      "cards"
       "sidehead"
       "sidebar"
-      "cards"
       "banner";
     gap:14px;
   }
@@ -423,7 +423,7 @@ img{max-width:100%;display:block}
 .story-meta-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
 .tag{display:inline-flex;align-items:center;min-height:21px;padding:0 10px;border-radius:999px;background:var(--ad);color:#111;font-size:10px;font-weight:900;text-transform:uppercase;line-height:1;letter-spacing:.02em}
 .date-label{font-size:11px;color:#6f6f6f;font-weight:500;text-align:right}
-.main-story-card h1,.news-tile-card h3,.side-story-card h3,.city-story-copy h3{margin:0;font-weight:900;letter-spacing:-.035em;color:#111}
+.main-story-card h1,.news-tile-card h3,.side-story-card h3,.city-story-copy h3{margin:0;font-weight:600;letter-spacing:-.035em;color:#111}
 .main-story-card{padding-top:2px}
 
 .main-story-card h1{
@@ -484,7 +484,7 @@ img{max-width:100%;display:block}
 .footer-credit a{font-weight:800;text-decoration:none}
 .footer-credit a:hover{text-decoration:underline}
 
-.article-title{font-size:42px;line-height:1.05;font-weight:900;margin:0 0 18px}
+.article-title{font-size:42px;line-height:1.05;font-weight:600;margin:0 0 18px}
 .article-meta,.article-content,.article-excerpt,.popular-list,.inner-grid,.right-rail,.content-grid,.recent-grid,.search-row{font-weight:500}
 .search-row{display:flex;gap:10px;margin:10px 0 18px}
 .search-row input{flex:1;height:40px;border-radius:999px;border:1px solid rgba(0,0,0,.1);padding:0 14px;outline:none}
@@ -517,7 +517,7 @@ img{max-width:100%;display:block}
 .recent-card{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;text-decoration:none}
 .recent-img{height:132px;border-radius:14px;background:#c9c9c9 center/cover no-repeat}
 .recent-body{min-width:0}
-.recent-title{font-size:22px;line-height:1.05;font-weight:900;margin:10px 0 8px;letter-spacing:-.02em}
+.recent-title{font-size:22px;line-height:1.05;font-weight:600;margin:10px 0 8px;letter-spacing:-.02em}
 .article-cover{border-radius:14px}
 .article-excerpt{border-left:4px solid var(--line);background:#fff;padding:14px;border-radius:12px}
 .article-content img{max-width:100%;height:auto;border-radius:14px}
@@ -574,9 +574,9 @@ img{max-width:100%;display:block}
       "mainhead"
       "feature"
       "story"
+      "cards"
       "sidehead"
       "sidebar"
-      "cards"
       "banner";
     gap:14px;
   }

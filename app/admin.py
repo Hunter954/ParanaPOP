@@ -292,7 +292,7 @@ def _serialize_post_for_hub(post: Post) -> dict:
             'excerpt': post.excerpt or '',
             'content_html': post.content_html or '',
             'featured_image': _absolute_media_url(post.featured_image or ''),
-            'author_name': post.author_name or 'Anônimo',
+            'author_name': post.author_name or 'Redação',
             'published_at': post.published_at.isoformat() if post.published_at else '',
             'updated_at': (post.updated_at or datetime.utcnow()).isoformat(),
             'categories': [{'name': c.name, 'slug': c.slug} for c in (post.categories or [])],
@@ -700,6 +700,7 @@ def _fill_post_form_from_obj(form: PostAdminForm, post: Post):
     form.content_html.data = post.content_html
     form.featured_image.data = post.featured_image
     form.categories.data = [c.id for c in post.categories]
+    form.scheduled_for.data = post.published_at
 
 
 def _wp_stats():
@@ -803,6 +804,7 @@ def posts_list():
         posts=posts,
         term=term,
         source=source,
+        now_utc=datetime.utcnow(),
         format_date_br=lambda value: value.strftime("%d/%m/%Y %H:%M") if value else "",
         **_common_admin_context("posts"),
     )
@@ -821,6 +823,7 @@ def posts_new():
         if form.featured_image_file.data:
             featured_image = _save_upload(form.featured_image_file.data, "posts")
         now = datetime.utcnow()
+        scheduled_for = form.scheduled_for.data
         post = Post(
             source="local",
             title=(form.title.data or "").strip(),
@@ -828,19 +831,19 @@ def posts_new():
             excerpt=(form.excerpt.data or "").strip(),
             content_html=(form.content_html.data or "").strip(),
             featured_image=featured_image,
-            author_name="Anônimo",
+            author_name="Redação",
             updated_at=now,
         )
         if (request.form.get("post_action") or "publish") == "publish":
-            post.published_at = now
+            post.published_at = scheduled_for or now
         post.categories = Category.query.filter(Category.id.in_(form.categories.data or [])).all()
         db.session.add(post)
         db.session.commit()
-        if post.published_at and _hub_config().get('enabled'):
+        if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get('enabled'):
             _broadcast_post_to_hub(post)
         flash("Matéria criada com sucesso.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
-    return render_template("admin/post_form.html", form=form, mode="new", post=None, hub=_hub_config(), **_common_admin_context("posts"))
+    return render_template("admin/post_form.html", form=form, mode="new", post=None, hub=_hub_config(), now_utc=datetime.utcnow(), **_common_admin_context("posts"))
 
 
 @admin_bp.route("/posts/<int:post_id>/edit", methods=["GET", "POST"])
@@ -864,23 +867,23 @@ def posts_edit(post_id):
         post.excerpt = (form.excerpt.data or "").strip()
         post.content_html = (form.content_html.data or "").strip()
         post.featured_image = featured_image
-        post.author_name = "Anônimo"
+        post.author_name = "Redação"
         post.updated_at = datetime.utcnow()
         action = (request.form.get("post_action") or "publish")
+        scheduled_for = form.scheduled_for.data
         if action == "publish":
-            if not post.published_at:
-                post.published_at = datetime.utcnow()
+            post.published_at = scheduled_for or post.published_at or datetime.utcnow()
         else:
             post.published_at = None
         post.categories = Category.query.filter(Category.id.in_(form.categories.data or [])).all()
         db.session.commit()
         if form.featured_image_file.data and old_featured_image and old_featured_image != featured_image:
             _delete_local_media(old_featured_image)
-        if post.published_at and _hub_config().get('enabled'):
+        if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get('enabled'):
             _broadcast_post_to_hub(post)
         flash("Matéria atualizada com sucesso.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
-    return render_template("admin/post_form.html", form=form, mode="edit", post=post, hub=_hub_config(), **_common_admin_context("posts"))
+    return render_template("admin/post_form.html", form=form, mode="edit", post=post, hub=_hub_config(), now_utc=datetime.utcnow(), **_common_admin_context("posts"))
 
 
 @admin_bp.post("/posts/<int:post_id>/delete")
@@ -1045,9 +1048,20 @@ def insights_page():
 
     metric_chart = _build_chart_data(insights["daily_series"], selected_metric)
 
+    visible_card_keys = {"sessions", "pageviews", "total_users"}
+    visible_cards = [card for card in insights["cards"] if card["key"] in visible_card_keys]
+    visible_cards.append({
+        "key": "pageviews_total",
+        "label": "Pageviews totais",
+        "value": (_common_admin_context("insights")["stats"].get("pv_total") or 0),
+        "delta": 0,
+        "is_total": True,
+    })
+
     return render_template(
         "admin/insights.html",
         insights=insights,
+        visible_cards=visible_cards,
         selected_metric=selected_metric,
         metric_label=allowed_metrics[selected_metric],
         metric_chart=metric_chart,
