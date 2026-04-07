@@ -30,6 +30,7 @@
       <a class="main-story-card main-story-link" href="{{ url_for('site.post', slug=principal.slug) }}">
         <div class="story-meta-row">
           <span class="tag">{{ display_category_name(principal.categories[0].name if principal.categories else 'Notícias') }}</span>
+          {% if principal.published_at %}<span class="story-date">{{ principal.published_at.strftime('%d/%m/%Y') }}</span>{% endif %}
         </div>
         <h1>{{ clean_text(principal.title, 120) }}</h1>
         <p>{{ clean_text(principal.excerpt or principal.content_html, 210) }}</p>
@@ -44,6 +45,7 @@
           <div class="thumb-card-image side-thumb" style="background-image:url('{{ p.featured_image or '' }}')"></div>
           <div class="story-meta-row">
             <span class="tag">{{ display_category_name(p.categories[0].name if p.categories else 'Notícias') }}</span>
+            {% if p.published_at %}<span class="story-date">{{ p.published_at.strftime('%d/%m/%Y') }}</span>{% endif %}
           </div>
           <h3>{{ clean_text(p.title, 80) }}</h3>
         </a>
@@ -57,6 +59,7 @@
         <div class="thumb-card-image thumb-small" style="background-image:url('{{ p.featured_image or '' }}')"></div>
         <div class="story-meta-row">
           <span class="tag">{{ display_category_name(p.categories[0].name if p.categories else 'Notícias') }}</span>
+          {% if p.published_at %}<span class="story-date">{{ p.published_at.strftime('%d/%m/%Y') }}</span>{% endif %}
         </div>
         <h3>{{ clean_text(p.title, 70) }}</h3>
         <p>{{ clean_text(p.excerpt or p.content_html, 108) }}</p>
