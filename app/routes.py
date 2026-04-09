@@ -9,6 +9,7 @@ from sqlalchemy import desc, func, or_
 
 from .models import db, Post, Category, AdSlot, SiteSetting, PageView, AnalyticsSession
 from .sync import download_external_image
+from .art_generator import ArtGeneratorError, build_generator_payload, generate_variants
 
 site_bp = Blueprint("site", __name__)
 
@@ -592,6 +593,78 @@ def category(slug):
         ad_sidebar_2=_get_ad("sidebar_2"),
     )
 
+
+
+
+@site_bp.route("/geradorpop", methods=["GET", "POST"])
+def gerador_pop():
+    _track_view(None)
+
+    form_data = {
+        "post_url": "",
+        "custom_title": "",
+        "custom_category": "",
+        "custom_image_url": "",
+        "include_title": True,
+        "include_image": True,
+        "use_post_title": True,
+        "use_post_thumb": True,
+    }
+    source_data = {}
+    generated_images = []
+    errors = []
+
+    if request.method == "POST":
+        form_data = {
+            "post_url": (request.form.get("post_url") or "").strip(),
+            "custom_title": (request.form.get("custom_title") or "").strip(),
+            "custom_category": (request.form.get("custom_category") or "").strip(),
+            "custom_image_url": (request.form.get("custom_image_url") or "").strip(),
+            "include_title": bool(request.form.get("include_title")),
+            "include_image": bool(request.form.get("include_image")),
+            "use_post_title": bool(request.form.get("use_post_title")),
+            "use_post_thumb": bool(request.form.get("use_post_thumb")),
+        }
+        try:
+            payload = build_generator_payload(
+                post_url=form_data["post_url"],
+                custom_title=form_data["custom_title"],
+                custom_category=form_data["custom_category"],
+                custom_image_url=form_data["custom_image_url"],
+                uploaded_file=request.files.get("custom_image"),
+                include_title=form_data["include_title"],
+                include_image=form_data["include_image"],
+                use_post_title=form_data["use_post_title"],
+                use_post_thumb=form_data["use_post_thumb"],
+            )
+            source_data = payload.get("source") or {}
+            generated_images = generate_variants(
+                title=payload.get("title") or "",
+                image_source=payload.get("image_source") or "",
+                include_title=form_data["include_title"],
+                category_text=payload.get("category") or "",
+            )
+        except ArtGeneratorError as exc:
+            errors.append(str(exc))
+        except Exception:
+            errors.append("Não foi possível gerar as artes com os dados enviados.")
+
+    meta = _meta_defaults()
+    meta.update({
+        "meta_title": f"Gerador POP | {_site_name()}",
+        "meta_description": "Gere artes do Paraná POP a partir de uma URL de matéria ou preenchendo os dados manualmente.",
+        "meta_url": url_for("site.gerador_pop", _external=True),
+    })
+
+    return render_template(
+        "geradorpop.html",
+        **meta,
+        ad_header=_get_ad("header_top"),
+        form_data=form_data,
+        source_data=source_data,
+        generated_images=generated_images,
+        errors=errors,
+    )
 
 @site_bp.get("/buscar")
 def search():

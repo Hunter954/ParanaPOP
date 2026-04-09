@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="generator-page">
+  <div class="generator-shell">
+    <div class="generator-header">
+      <span class="generator-kicker">Ferramenta interna</span>
+      <h1>Gerador POP</h1>
+      <p>Use a URL da matéria para puxar título, imagem e categoria automaticamente ou crie tudo manualmente.</p>
+    </div>
+
+    {% if errors %}
+      <div class="generator-alert generator-alert--error">
+        {% for error in errors %}
+          <div>{{ error }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="generator-grid">
+      <form class="generator-form" method="post" enctype="multipart/form-data">
+        <div class="generator-card">
+          <h2>Fonte da matéria</h2>
+          <label class="generator-field">
+            <span>URL da matéria</span>
+            <input type="url" name="post_url" placeholder="https://..." value="{{ form_data.post_url }}">
+          </label>
+          <p class="generator-help">Se a URL existir, o sistema tenta puxar automaticamente o título, a imagem destacada e a categoria.</p>
+
+          {% if source_data %}
+            <div class="generator-source-preview">
+              {% if source_data.title %}<div><strong>Título:</strong> {{ source_data.title }}</div>{% endif %}
+              {% if source_data.category %}<div><strong>Categoria:</strong> {{ source_data.category }}</div>{% endif %}
+              {% if source_data.image %}<div><strong>Imagem:</strong> encontrada</div>{% endif %}
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="generator-card">
+          <h2>Imagem</h2>
+          <div class="generator-checks">
+            <label><input type="checkbox" name="include_image" value="1" {% if form_data.include_image %}checked{% endif %}> Incluir imagem</label>
+            <label><input type="checkbox" name="use_post_thumb" value="1" {% if form_data.use_post_thumb %}checked{% endif %}> Usar imagem da matéria</label>
+          </div>
+          <label class="generator-field">
+            <span>Upload de imagem</span>
+            <input type="file" name="custom_image" accept="image/*">
+          </label>
+          <label class="generator-field">
+            <span>ou URL da imagem</span>
+            <input type="url" name="custom_image_url" placeholder="https://..." value="{{ form_data.custom_image_url }}">
+          </label>
+        </div>
+
+        <div class="generator-card">
+          <h2>Título e categoria</h2>
+          <div class="generator-checks">
+            <label><input type="checkbox" name="include_title" value="1" {% if form_data.include_title %}checked{% endif %}> Incluir título</label>
+            <label><input type="checkbox" name="use_post_title" value="1" {% if form_data.use_post_title %}checked{% endif %}> Usar título da matéria</label>
+          </div>
+
+          <label class="generator-field">
+            <span>Título manual</span>
+            <input type="text" name="custom_title" placeholder="Digite o título manual" value="{{ form_data.custom_title }}">
+          </label>
+
+          <label class="generator-field">
+            <span>Categoria manual</span>
+            <input type="text" name="custom_category" placeholder="Ex.: Cidade" value="{{ form_data.custom_category }}">
+          </label>
+
+          <div class="generator-note">
+            Serão geradas 3 versões: <strong>Feed 1080x1440</strong>, <strong>Stories 1080x1920</strong> e <strong>Facebook 1080x1080</strong>.
+          </div>
+        </div>
+
+        <button type="submit" class="generator-submit">Gerar artes</button>
+      </form>
+
+      <div class="generator-results">
+        <div class="generator-card generator-card--sticky">
+          <h2>Saída</h2>
+          {% if generated_images %}
+            <div class="generator-results-list">
+              {% for item in generated_images %}
+                <article class="generator-output">
+                  <img src="{{ item.url }}" alt="{{ item.label }}">
+                  <div class="generator-output-meta">
+                    <div>
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.size }}</span>
+                    </div>
+                    <a href="{{ item.url }}" download>Baixar</a>
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="generator-empty">As artes geradas vão aparecer aqui.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
