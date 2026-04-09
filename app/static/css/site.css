@@ -1124,3 +1124,16 @@ img{max-width:100%;display:block}
     position:static;
   }
 }
+
+
+.generator-loading{
+  margin:10px 0 0;
+  color:#5b6573;
+  font-size:.95rem;
+}
+
+.generator-form.is-submitting .generator-submit,
+.generator-submit:disabled{
+  opacity:.72;
+  cursor:wait;
+}

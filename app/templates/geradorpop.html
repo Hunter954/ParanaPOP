@@ -18,7 +18,7 @@
     {% endif %}
 
     <div class="generator-grid">
-      <form class="generator-form" method="post" enctype="multipart/form-data">
+      <form class="generator-form" method="post" enctype="multipart/form-data" data-generator-form>
         <div class="generator-card">
           <h2>Fonte da matéria</h2>
           <label class="generator-field">
@@ -74,7 +74,8 @@
           </div>
         </div>
 
-        <button type="submit" class="generator-submit">Gerar artes</button>
+        <button type="submit" class="generator-submit" data-generator-submit>Gerar artes</button>
+        <p class="generator-loading" data-generator-loading hidden>Gerando artes... isso pode levar alguns segundos dependendo da imagem.</p>
       </form>
 
       <div class="generator-results">
@@ -90,7 +91,7 @@
                       <strong>{{ item.label }}</strong>
                       <span>{{ item.size }}</span>
                     </div>
-                    <a href="{{ item.url }}" download>Baixar</a>
+                    <a href="{{ url_for('site.gerador_pop_download', filename=item.download_name) }}">Baixar</a>
                   </div>
                 </article>
               {% endfor %}
@@ -103,4 +104,23 @@
     </div>
   </div>
 </section>
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function(){
+    const form = document.querySelector('[data-generator-form]');
+    const submit = document.querySelector('[data-generator-submit]');
+    const loading = document.querySelector('[data-generator-loading]');
+    if (!form || !submit || !loading) return;
+
+    form.addEventListener('submit', function(){
+      submit.disabled = true;
+      submit.textContent = 'Gerando...';
+      loading.hidden = false;
+      form.classList.add('is-submitting');
+    });
+  });
+</script>
 {% endblock %}

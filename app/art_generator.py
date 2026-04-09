@@ -423,6 +423,7 @@ def generate_variants(*, title: str, image_source: str, include_title: bool, cat
                 "label": spec["label"],
                 "size": f"{spec['width']}x{spec['height']}",
                 "url": _media_relative_to_url(relative),
+                "download_name": filename,
             }
         )
 

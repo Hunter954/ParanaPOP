@@ -187,6 +187,18 @@ def media(filename):
     return send_from_directory(media_root, filename)
 
 
+@site_bp.get("/geradorpop/download/<path:filename>")
+def gerador_pop_download(filename):
+    media_root = Path(current_app.config["MEDIA_ROOT"]).resolve()
+    generated_root = (media_root / "gerador" / "generated").resolve()
+    target = (generated_root / filename).resolve()
+
+    if not str(target).startswith(str(generated_root)) or not target.exists() or not target.is_file():
+        abort(404)
+
+    return send_from_directory(generated_root, filename, as_attachment=True, download_name=target.name)
+
+
 
 def _clean_text(value: str, limit: int = 0) -> str:
     if not value:
