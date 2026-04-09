@@ -25,10 +25,46 @@ TITLE_TAG_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTAL
 WHITESPACE_RE = re.compile(r"\s+")
 
 VARIANT_SPECS = {
-    "feed": {"label": "Feed", "width": 1080, "height": 1440, "max_size": 44, "line_gap": 56, "bottom_gap": 46},
-    "stories": {"label": "Stories", "width": 1080, "height": 1920, "max_size": 54, "line_gap": 66, "bottom_gap": 64},
+    "feed": {
+        "label": "Feed",
+        "width": 1080,
+        "height": 1440,
+        "max_size": 44,
+        "min_size": 26,
+        "max_lines": 4,
+        "bottom_gap": 58,
+        "text_top_padding": 28,
+        "badge_gap": 18,
+        "badge_padding_x": 24,
+        "badge_padding_y": 12,
+    },
+    "stories": {
+        "label": "Stories",
+        "width": 1080,
+        "height": 1920,
+        "max_size": 54,
+        "min_size": 30,
+        "max_lines": 4,
+        "bottom_gap": 78,
+        "text_top_padding": 30,
+        "badge_gap": 20,
+        "badge_padding_x": 24,
+        "badge_padding_y": 12,
+    },
     # Assumido como 1080x1080 para Facebook. O pedido veio como 1080x0180, provavelmente um typo.
-    "facebook": {"label": "Facebook", "width": 1080, "height": 1080, "max_size": 38, "line_gap": 48, "bottom_gap": 44},
+    "facebook": {
+        "label": "Facebook",
+        "width": 1080,
+        "height": 1080,
+        "max_size": 38,
+        "min_size": 24,
+        "max_lines": 4,
+        "bottom_gap": 50,
+        "text_top_padding": 24,
+        "badge_gap": 16,
+        "badge_padding_x": 22,
+        "badge_padding_y": 10,
+    },
 }
 
 
@@ -242,13 +278,13 @@ def _text_bbox(font: ImageFont.FreeTypeFont, text: str) -> tuple[int, int, int, 
     return int(left), int(top), int(right), int(bottom)
 
 
-def _wrap_text(text: str, max_size: int, max_width: int, max_lines: int) -> tuple[list[str], int]:
+def _wrap_text(text: str, max_size: int, max_width: int, max_lines: int, min_size: int = 10) -> tuple[list[str], int]:
     words = [word for word in text.split() if word]
     if not words:
         return [], max_size
 
     size = max_size
-    while size > 10:
+    while size >= min_size:
         font = _load_font(size)
         lines: list[str] = []
         current = ""
@@ -266,7 +302,133 @@ def _wrap_text(text: str, max_size: int, max_width: int, max_lines: int) -> tupl
         if len(lines) <= max_lines:
             return lines, size
         size -= 2
-    return words[:max_lines], max(10, size)
+    return words[:max_lines], max(min_size, size)
+
+
+def _fit_single_line_text(text: str, max_size: int, max_width: int, min_size: int = 14) -> tuple[ImageFont.FreeTypeFont, int]:
+    size = max_size
+    while size >= min_size:
+        font = _load_font(size)
+        left, _top, right, _bottom = _text_bbox(font, text)
+        if (right - left) <= max_width:
+            return font, size
+        size -= 1
+    return _load_font(min_size), min_size
+
+
+def _line_metrics(font: ImageFont.FreeTypeFont, line: str) -> tuple[int, int, int, int, int, int]:
+    left, top, right, bottom = _text_bbox(font, line)
+    return left, top, right, bottom, right - left, bottom - top
+
+
+def _build_text_layout(
+    *,
+    spec: dict[str, int | str],
+    width: int,
+    height: int,
+    fade_height: int,
+    title_text: str,
+    category: str,
+    pad_left: int,
+    pad_right: int,
+) -> dict[str, object]:
+    text_region_top = max(0, height - fade_height + int(spec.get("text_top_padding", 24)))
+    text_region_bottom = height - int(spec.get("bottom_gap", 48))
+    available_height = max(1, text_region_bottom - text_region_top)
+    max_width = width - (pad_left + pad_right)
+    max_lines = int(spec.get("max_lines", 4))
+    max_size = int(spec.get("max_size", 40))
+    min_size = int(spec.get("min_size", 20))
+
+    chosen: dict[str, object] | None = None
+    for size in range(max_size, min_size - 1, -2):
+        lines, used_size = _wrap_text(
+            title_text,
+            max_size=size,
+            max_width=max_width,
+            max_lines=max_lines,
+            min_size=min_size,
+        )
+        title_font = _load_font(used_size)
+        line_gap = max(8, int(round(used_size * 0.22)))
+        line_boxes = [_line_metrics(title_font, line) for line in lines]
+        title_height = sum(box[5] for box in line_boxes)
+        if len(line_boxes) > 1:
+            title_height += line_gap * (len(line_boxes) - 1)
+
+        category_payload: dict[str, object] | None = None
+        category_height = 0
+        badge_gap = 0
+        if category:
+            category_font_max = max(18, int(round(used_size * 0.5)))
+            category_font, category_size = _fit_single_line_text(
+                category,
+                max_size=category_font_max,
+                max_width=max_width - (int(spec.get("badge_padding_x", 24)) * 2),
+                min_size=14,
+            )
+            cat_left, cat_top, cat_right, cat_bottom = _text_bbox(category_font, category)
+            cat_width = cat_right - cat_left
+            cat_height = cat_bottom - cat_top
+            badge_pad_x = int(spec.get("badge_padding_x", 24))
+            badge_pad_y = int(spec.get("badge_padding_y", 12))
+            category_height = cat_height + badge_pad_y * 2
+            badge_gap = int(spec.get("badge_gap", 18))
+            category_payload = {
+                "font": category_font,
+                "size": category_size,
+                "bbox": (cat_left, cat_top, cat_right, cat_bottom),
+                "text_width": cat_width,
+                "text_height": cat_height,
+                "pad_x": badge_pad_x,
+                "pad_y": badge_pad_y,
+                "height": category_height,
+            }
+
+        block_height = title_height + category_height + (badge_gap if category and title_height else 0)
+        if block_height <= available_height:
+            chosen = {
+                "lines": lines,
+                "title_font": title_font,
+                "line_boxes": line_boxes,
+                "line_gap": line_gap,
+                "title_height": title_height,
+                "category": category_payload,
+                "block_height": block_height,
+                "text_region_top": text_region_top,
+                "text_region_bottom": text_region_bottom,
+                "badge_gap": badge_gap,
+            }
+            break
+
+    if chosen is None:
+        lines, used_size = _wrap_text(
+            title_text,
+            max_size=min_size,
+            max_width=max_width,
+            max_lines=max_lines,
+            min_size=min_size,
+        )
+        title_font = _load_font(used_size)
+        line_gap = max(8, int(round(used_size * 0.22)))
+        line_boxes = [_line_metrics(title_font, line) for line in lines]
+        title_height = sum(box[5] for box in line_boxes)
+        if len(line_boxes) > 1:
+            title_height += line_gap * (len(line_boxes) - 1)
+        chosen = {
+            "lines": lines,
+            "title_font": title_font,
+            "line_boxes": line_boxes,
+            "line_gap": line_gap,
+            "title_height": title_height,
+            "category": None,
+            "block_height": title_height,
+            "text_region_top": text_region_top,
+            "text_region_bottom": text_region_bottom,
+            "badge_gap": int(spec.get("badge_gap", 18)),
+        }
+
+    return chosen
 
 
 def _draw_rounded_rectangle(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], radius: int, fill: tuple[int, int, int, int]):
@@ -288,12 +450,14 @@ def generate_art_image(title: str, image_source: str, variant: str, include_titl
         if background is not None:
             canvas.alpha_composite(_cover_resize(background, (width, height)))
 
+    fade_height = int(height * 0.38)
     fade_path = _asset_path("fadepop.png")
     if fade_path.exists():
         with Image.open(fade_path) as fade_img:
             fade = fade_img.convert("RGBA")
         scale = width / fade.width
         fade = fade.resize((width, max(1, int(fade.height * scale))), Image.Resampling.LANCZOS)
+        fade_height = fade.height
         canvas.alpha_composite(fade, (0, height - fade.height))
 
     logo_path = _asset_path("paranapop.png")
@@ -316,51 +480,53 @@ def generate_art_image(title: str, image_source: str, variant: str, include_titl
     pad_right = 64
 
     if include_title and title_text:
-        lines, used_size = _wrap_text(
-            title_text,
-            max_size=spec["max_size"],
-            max_width=width - (pad_left + pad_right),
-            max_lines=3,
+        layout = _build_text_layout(
+            spec=spec,
+            width=width,
+            height=height,
+            fade_height=fade_height,
+            title_text=title_text,
+            category=category,
+            pad_left=pad_left,
+            pad_right=pad_right,
         )
-        title_font = _load_font(used_size)
-        line_gap = spec["line_gap"]
-        title_baseline = height - spec["bottom_gap"]
-        title_top_baseline = title_baseline - line_gap * (len(lines) - 1)
+        block_bottom = int(layout["text_region_bottom"])
+        block_top = block_bottom - int(layout["block_height"])
+        current_y = block_top
 
-        if category:
-            tag_size = max(18, int(used_size / 2))
-            tag_font = _load_font(tag_size)
-            left, top, right, bottom = _text_bbox(tag_font, category)
-            text_width = right - left
-            ascent = -top
-            descent = bottom
-            pad_x = 24
-            pad_y = 12
-            radius = 12
-            cat_baseline = title_top_baseline - 14 - 50
+        category_payload = layout.get("category")
+        if category_payload:
+            cat_left, cat_top, _cat_right, _cat_bottom = category_payload["bbox"]
+            pad_x = int(category_payload["pad_x"])
+            pad_y = int(category_payload["pad_y"])
+            cat_height = int(category_payload["height"])
             x1 = pad_left
-            y1 = int(cat_baseline - ascent - pad_y)
-            x2 = int(x1 + text_width + pad_x * 2)
-            y2 = int(cat_baseline + descent + pad_y)
-            _draw_rounded_rectangle(draw, (x1, y1, x2, y2), radius=radius, fill=yellow)
-            draw.text((x1 + pad_x - left, cat_baseline + top), category, font=tag_font, fill=black)
+            y1 = current_y
+            x2 = x1 + int(category_payload["text_width"]) + pad_x * 2
+            y2 = y1 + cat_height
+            _draw_rounded_rectangle(draw, (x1, y1, x2, y2), radius=12, fill=yellow)
+            draw.text((x1 + pad_x - cat_left, y1 + pad_y - cat_top), category, font=category_payload["font"], fill=black)
+            current_y = y2 + int(layout["badge_gap"])
 
-        current_y = title_top_baseline
-        for line in lines:
-            left, top, _right, _bottom = _text_bbox(title_font, line)
-            draw.text((pad_left - left, current_y + top), line, font=title_font, fill=white)
-            current_y += line_gap
+        title_font = layout["title_font"]
+        line_boxes = layout["line_boxes"]
+        line_gap = int(layout["line_gap"])
+        for index, line in enumerate(layout["lines"]):
+            left, top, _right, _bottom, _line_width, line_height = line_boxes[index]
+            draw.text((pad_left - left, current_y - top), line, font=title_font, fill=white)
+            current_y += line_height + line_gap
     elif category:
-        tag_font = _load_font(22)
+        max_width = width - (pad_left + pad_right)
+        tag_font, _size = _fit_single_line_text(category, max_size=22, max_width=max_width - 44, min_size=14)
         left, top, right, bottom = _text_bbox(tag_font, category)
         text_width = right - left
         text_height = bottom - top
         pad_x = 22
         pad_y = 10
         x1 = pad_left
-        y1 = height - text_height - 90
+        y2 = height - int(spec.get("bottom_gap", 48))
+        y1 = y2 - text_height - pad_y * 2
         x2 = x1 + text_width + pad_x * 2
-        y2 = y1 + text_height + pad_y * 2
         _draw_rounded_rectangle(draw, (x1, y1, x2, y2), radius=12, fill=yellow)
         draw.text((x1 + pad_x - left, y1 + pad_y - top), category, font=tag_font, fill=black)
 
