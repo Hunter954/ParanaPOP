@@ -439,7 +439,7 @@ def _parse_date_input(value: str | None, fallback: date) -> date:
 
 def _build_chart_data(daily_series, metric_key: str):
     width = 980
-    height = 360
+    height = 280
     pad_left = 56
     pad_right = 18
     pad_top = 20
@@ -877,6 +877,8 @@ def posts_delete(post_id):
         flash('Somente matérias locais podem ser excluídas por aqui.', 'warning')
         return redirect(url_for('admin.posts_edit', post_id=post.id))
     featured_image = post.featured_image or ''
+    post.categories = []
+    PageView.query.filter(PageView.post_id == post.id).update({PageView.post_id: None}, synchronize_session=False)
     db.session.delete(post)
     db.session.commit()
     if is_managed_media_url(featured_image):
@@ -1024,12 +1026,14 @@ def insights_page():
 
     visible_card_keys = {"sessions", "pageviews", "total_users"}
     visible_cards = [card for card in insights["cards"] if card["key"] in visible_card_keys]
+    dashboard_stats = _dashboard_stats()
     visible_cards.append({
-        "key": "pageviews_total",
+        "key": "pageviews_24h",
         "label": "Pageviews totais",
-        "value": (_common_admin_context("insights")["stats"].get("pv_total") or 0),
+        "value": (dashboard_stats.get("pv_total") or 0),
         "delta": 0,
         "is_total": True,
+        "context_value": dashboard_stats.get("pv_24h") or 0,
     })
 
     return render_template(

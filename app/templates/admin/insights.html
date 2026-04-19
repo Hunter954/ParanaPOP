@@ -10,7 +10,7 @@
     <strong>{{ '{:,}'.format(card.value).replace(',', '.') }}</strong>
     <small>
       {% if card.is_total %}
-        <span class="text-muted">Total geral do dashboard</span>
+        Últimas 24h: {{ card.context_value if card.context_value is defined else 0 }}
       {% elif card.delta > 0 %}
         <span class="text-success">▲ {{ '%.1f'|format(card.delta) }}%</span>
         vs. período anterior

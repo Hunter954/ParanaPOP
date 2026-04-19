@@ -83,18 +83,18 @@ body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFo
 
 
 .insights-chart-card { margin-top: 6px; }
-.insights-chart-head { align-items: end; }
-.insights-filter-form { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.insights-chart-head { align-items: end; gap: 10px; }
+.insights-filter-form { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
 .insights-filter-form label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--admin-muted); margin-bottom: 6px; }
 .insights-filter-form .form-control { min-width: 170px; }
-.insights-metric-switcher { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-.metric-pill { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 999px; border: 1px solid var(--admin-line); background: #f8fafc; color: var(--admin-text); text-decoration: none; font-weight: 700; }
+.insights-metric-switcher { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.metric-pill { display: inline-flex; align-items: center; justify-content: center; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--admin-line); background: #f8fafc; color: var(--admin-text); text-decoration: none; font-weight: 700; }
 .metric-pill.active { background: var(--admin-dark); color: #fff; border-color: var(--admin-dark); }
-.insights-chart-header-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
-.insights-chart-header-row strong { display: block; font-size: 22px; letter-spacing: -.03em; }
+.insights-chart-header-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+.insights-chart-header-row strong { display: block; font-size: 20px; letter-spacing: -.03em; }
 .insights-chart-header-row span { color: var(--admin-muted); font-size: 14px; }
-.insights-chart-wrap { position: relative; overflow-x: auto; padding: 8px 0 6px; }
-.insights-svg-chart { width: 100%; min-width: 760px; height: auto; display: block; }
+.insights-chart-wrap { position: relative; overflow-x: auto; padding: 2px 0 0; }
+.insights-svg-chart { width: 100%; min-width: 760px; max-height: 280px; height: auto; display: block; }
 .chart-grid-line { stroke: #dbe4f0; stroke-width: 1; }
 .chart-line { fill: none; stroke: #0ea5e9; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .chart-point { fill: #ffffff; stroke: #0ea5e9; stroke-width: 3; cursor: pointer; transition: r .18s ease, stroke-width .18s ease, filter .18s ease; }

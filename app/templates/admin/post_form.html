@@ -84,6 +84,7 @@
   <form method="post" action="{{ url_for('admin.posts_delete', post_id=post.id) }}" onsubmit="return confirm('Tem certeza que deseja excluir esta matéria?');">
     <button class="btn btn-outline-danger" type="submit">Excluir matéria</button>
   </form>
+  <small class="text-muted d-block mt-2">A exclusão remove a matéria local e mantém o histórico analítico sem quebrar o painel.</small>
 </section>
 {% endif %}
 {% endblock %}
