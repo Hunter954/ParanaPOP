@@ -4,11 +4,12 @@ from pathlib import Path
 import re
 import json
 
-from flask import Blueprint, render_template, abort, request, current_app, send_from_directory, jsonify, make_response, url_for
+from flask import Blueprint, render_template, abort, request, current_app, jsonify, make_response, url_for
 from sqlalchemy import desc, func, or_
 
 from .models import db, Post, Category, AdSlot, SiteSetting, PageView, AnalyticsSession
 from .sync import download_external_image
+from .storage import send_media, send_media_download
 from .art_generator import ArtGeneratorError, build_generator_payload, generate_variants
 
 site_bp = Blueprint("site", __name__)
@@ -183,20 +184,18 @@ def inject_site_globals():
 
 @site_bp.get("/media/<path:filename>")
 def media(filename):
-    media_root = Path(current_app.config["MEDIA_ROOT"]).resolve()
-    return send_from_directory(media_root, filename)
+    try:
+        return send_media(filename)
+    except FileNotFoundError:
+        abort(404)
 
 
 @site_bp.get("/geradorpop/download/<path:filename>")
 def gerador_pop_download(filename):
-    media_root = Path(current_app.config["MEDIA_ROOT"]).resolve()
-    generated_root = (media_root / "gerador" / "generated").resolve()
-    target = (generated_root / filename).resolve()
-
-    if not str(target).startswith(str(generated_root)) or not target.exists() or not target.is_file():
+    try:
+        return send_media_download(f"gerador/generated/{filename}", download_name=filename)
+    except FileNotFoundError:
         abort(404)
-
-    return send_from_directory(generated_root, filename, as_attachment=True, download_name=target.name)
 
 
 

@@ -11,3 +11,6 @@ bleach==6.1.0
 python-dotenv==1.0.1
 email-validator==2.2.0
 Pillow==10.4.0
+
+boto3==1.35.19
+botocore==1.35.19

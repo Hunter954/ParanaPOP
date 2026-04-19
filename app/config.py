@@ -15,4 +15,11 @@ class Config:
 
     MEDIA_ROOT = os.getenv("MEDIA_ROOT", "/data/uploads")
     MEDIA_URL_PREFIX = os.getenv("MEDIA_URL_PREFIX", "/media")
+    R2_BUCKET = (os.getenv("R2_BUCKET") or "").strip()
+    R2_ENDPOINT = (os.getenv("R2_ENDPOINT") or "").strip()
+    R2_REGION = (os.getenv("R2_REGION") or "auto").strip()
+    R2_ACCESS_KEY_ID = (os.getenv("R2_ACCESS_KEY_ID") or "").strip()
+    R2_SECRET_ACCESS_KEY = (os.getenv("R2_SECRET_ACCESS_KEY") or "").strip()
+    R2_LOCAL_DIR = (os.getenv("R2_LOCAL_DIR") or MEDIA_ROOT).strip()
+    USE_R2 = bool(R2_BUCKET and R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(32 * 1024 * 1024)))

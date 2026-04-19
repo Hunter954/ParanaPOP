@@ -11,6 +11,7 @@ from flask import current_app
 from slugify import slugify
 
 from .models import db, Post, Category
+from .storage import save_bytes
 from .wp_client import WPClient
 
 ALLOWED_TAGS = bleach.sanitizer.ALLOWED_TAGS.union({
@@ -39,11 +40,6 @@ def _featured_img_from_embed(p: dict) -> str | None:
     return None
 
 
-def _media_url(relative_path: str) -> str:
-    prefix = current_app.config.get("MEDIA_URL_PREFIX", "/media").rstrip("/")
-    return f"{prefix}/{relative_path.lstrip('/')}"
-
-
 def _guess_extension(source_url: str, content_type: str = "") -> str:
     parsed = urlparse(source_url or "")
     ext = Path(parsed.path).suffix.lower()
@@ -63,24 +59,19 @@ def download_external_image(source_url: str | None, folder: str = "wp") -> str |
     if source_url.startswith("/media/"):
         return source_url
 
-    media_root = Path(current_app.config["MEDIA_ROOT"])
-    target_dir = media_root / folder / datetime.utcnow().strftime("%Y/%m")
-    target_dir.mkdir(parents=True, exist_ok=True)
-
     response = requests.get(source_url, timeout=25, stream=True)
     response.raise_for_status()
 
     ext = _guess_extension(source_url, response.headers.get("Content-Type", ""))
     filename = f"{uuid.uuid4().hex}{ext}"
-    target_path = target_dir / filename
-
-    with target_path.open("wb") as fh:
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
-                fh.write(chunk)
-
-    relative = target_path.relative_to(media_root).as_posix()
-    return _media_url(relative)
+    content = response.content
+    folder_key = f"{folder.strip('/')}/{datetime.utcnow().strftime('%Y/%m')}"
+    return save_bytes(
+        content,
+        folder=folder_key,
+        filename_hint=filename,
+        content_type=response.headers.get("Content-Type", "") or "application/octet-stream",
+    )
 
 
 def localize_content_images(html: str | None) -> str | None:

@@ -16,6 +16,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from .models import Post
+from .storage import local_path_from_url, open_media_bytes, save_bytes
 
 META_TAG_RE = re.compile(
     r'<meta[^>]+(?:property|name)=["\'](?P<key>[^"\']+)["\'][^>]+content=["\'](?P<value>[^"\']*)["\'][^>]*>',
@@ -76,21 +77,8 @@ def _asset_path(filename: str) -> Path:
     return Path(current_app.root_path) / "static" / "gerador" / filename
 
 
-def _media_relative_to_url(relative: str) -> str:
-    prefix = current_app.config.get("MEDIA_URL_PREFIX", "/media").rstrip("/")
-    return f"{prefix}/{relative.lstrip('/')}"
-
-
 def _absolute_to_media_local(url: str) -> Path | None:
-    if not url:
-        return None
-    prefix = current_app.config.get("MEDIA_URL_PREFIX", "/media").rstrip("/")
-    parsed = urlparse(url)
-    path = parsed.path if parsed.scheme else url
-    if not path.startswith(prefix + "/"):
-        return None
-    relative = path[len(prefix) + 1 :]
-    return Path(current_app.config["MEDIA_ROOT"]).resolve() / relative
+    return local_path_from_url(url)
 
 
 def _guess_extension(filename: str, content_type: str = "") -> str:
@@ -106,14 +94,7 @@ def _guess_extension(filename: str, content_type: str = "") -> str:
 
 
 def _save_bytes(content: bytes, folder: str, filename_hint: str = "file") -> str:
-    media_root = Path(current_app.config["MEDIA_ROOT"]).resolve()
-    target_dir = media_root / folder
-    target_dir.mkdir(parents=True, exist_ok=True)
-    ext = _guess_extension(filename_hint)
-    filename = f"{uuid.uuid4().hex}{ext}"
-    target_path = target_dir / filename
-    target_path.write_bytes(content)
-    return _media_relative_to_url((target_dir / filename).relative_to(media_root).as_posix())
+    return save_bytes(content, folder=folder, filename_hint=filename_hint)
 
 
 def save_uploaded_image(upload: FileStorage | None, folder: str = "gerador/source") -> str:
@@ -244,6 +225,11 @@ def _fetch_image(source: str) -> Image.Image | None:
     local_path = _absolute_to_media_local(url)
     if local_path and local_path.exists():
         with Image.open(local_path) as image:
+            return image.convert("RGBA")
+
+    if url.startswith(current_app.config.get("MEDIA_URL_PREFIX", "/media").rstrip("/") + "/"):
+        content, _content_type, _name = open_media_bytes(url)
+        with Image.open(BytesIO(content)) as image:
             return image.convert("RGBA")
 
     if url.startswith("/") and Path(url).exists():
@@ -573,22 +559,19 @@ def build_generator_payload(
 
 def generate_variants(*, title: str, image_source: str, include_title: bool, category_text: str) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
-    media_root = Path(current_app.config["MEDIA_ROOT"]).resolve()
-    target_dir = media_root / "gerador" / "generated"
-    target_dir.mkdir(parents=True, exist_ok=True)
 
     for key, spec in VARIANT_SPECS.items():
         image = generate_art_image(title=title, image_source=image_source, variant=key, include_title=include_title, category_text=category_text)
         filename = f"arte-{key}-{uuid.uuid4().hex}.png"
-        path = target_dir / filename
-        image.convert("RGB").save(path, format="PNG")
-        relative = path.relative_to(media_root).as_posix()
+        buffer = BytesIO()
+        image.convert("RGB").save(buffer, format="PNG")
+        url = save_bytes(buffer.getvalue(), folder="gerador/generated", filename_hint=filename, content_type="image/png")
         results.append(
             {
                 "key": key,
                 "label": spec["label"],
                 "size": f"{spec['width']}x{spec['height']}",
-                "url": _media_relative_to_url(relative),
+                "url": url,
                 "download_name": filename,
             }
         )

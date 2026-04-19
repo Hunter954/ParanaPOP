@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy import func, desc, or_
-from werkzeug.utils import secure_filename
+from .storage import delete_media, list_media_files, local_path_from_url, media_root, save_file_storage
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
@@ -395,51 +395,19 @@ def _parse_remote_sites_from_form(form) -> list[dict]:
 
 
 def _media_root() -> Path:
-    path = Path(current_app.config["MEDIA_ROOT"]).resolve()
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _file_ext(filename: str) -> str:
-    name = secure_filename(filename or "")
-    _, ext = os.path.splitext(name)
-    return ext.lower()
+    return media_root()
 
 
 def _save_upload(file_storage, subdir: str = "general") -> str:
-    if not file_storage or not getattr(file_storage, "filename", ""):
-        return ""
-    ext = _file_ext(file_storage.filename) or ".bin"
-    day_dir = datetime.utcnow().strftime("%Y/%m/%d")
-    folder = _media_root() / subdir / day_dir
-    folder.mkdir(parents=True, exist_ok=True)
-    fname = f"{uuid4().hex}{ext}"
-    full_path = folder / fname
-    file_storage.save(full_path)
-    rel = full_path.relative_to(_media_root()).as_posix()
-    return f"{current_app.config['MEDIA_URL_PREFIX'].rstrip('/')}/{rel}"
+    return save_file_storage(file_storage, subdir=subdir)
 
 
 def _local_media_path_from_url(url: str) -> Path | None:
-    if not url:
-        return None
-    prefix = current_app.config["MEDIA_URL_PREFIX"].rstrip("/") + "/"
-    parsed = urlparse(url)
-    target_path = parsed.path or url
-    if not target_path.startswith(prefix):
-        return None
-    rel = target_path[len(prefix):].lstrip("/")
-    return _media_root() / rel
+    return local_path_from_url(url)
 
 
 def _delete_local_media(url: str) -> None:
-    path = _local_media_path_from_url(url)
-    if path and path.exists() and path.is_file():
-        try:
-            path.unlink()
-        except Exception:
-            pass
-
+    delete_media(url)
 
 
 
@@ -763,15 +731,10 @@ def dashboard():
     if r:
         return r
     slots = AdSlot.query.order_by(AdSlot.key.asc()).all()
-    media_files = []
-    root = _media_root()
-    if root.exists():
-        for p in sorted([p for p in root.rglob("*") if p.is_file()], key=lambda x: x.stat().st_mtime, reverse=True)[:8]:
-            media_files.append({
-                "name": p.name,
-                "url": f"{current_app.config['MEDIA_URL_PREFIX'].rstrip('/')}/{p.relative_to(root).as_posix()}",
-                "size_kb": max(1, round(p.stat().st_size / 1024)),
-            })
+    media_files = [
+        {"name": item.name, "url": item.url, "size_kb": item.size_kb}
+        for item in list_media_files(limit=8)
+    ]
     return render_template(
         "admin/dashboard.html",
         slots=slots,
@@ -980,16 +943,10 @@ def media_library():
     r = _require_admin()
     if r:
         return r
-    files = []
-    root = _media_root()
-    if root.exists():
-        for p in sorted([item for item in root.rglob('*') if item.is_file()], key=lambda item: item.stat().st_mtime, reverse=True):
-            files.append({
-                'name': p.name,
-                'url': f"{current_app.config['MEDIA_URL_PREFIX'].rstrip('/')}/{p.relative_to(root).as_posix()}",
-                'size_kb': max(1, round(p.stat().st_size / 1024)),
-                'updated_at': datetime.fromtimestamp(p.stat().st_mtime),
-            })
+    files = [
+        {'name': item.name, 'url': item.url, 'size_kb': item.size_kb, 'updated_at': item.updated_at}
+        for item in list_media_files()
+    ]
     return render_template("admin/media_library.html", files=files, **_common_admin_context("media"))
 
 
