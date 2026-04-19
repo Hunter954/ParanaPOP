@@ -9,7 +9,7 @@ from sqlalchemy import desc, func, or_
 
 from .models import db, Post, Category, AdSlot, SiteSetting, PageView, AnalyticsSession
 from .sync import download_external_image
-from .storage import send_media, send_media_download
+from .storage import normalize_media_url, rewrite_media_urls, send_media, send_media_download
 from .art_generator import ArtGeneratorError, build_generator_payload, generate_variants
 
 site_bp = Blueprint("site", __name__)
@@ -44,7 +44,7 @@ def _render_ad_from_payload(slot_key: str, payload: dict) -> str:
     for item in banners:
         if not isinstance(item, dict):
             continue
-        image = (item.get("image") or "").strip()
+        image = normalize_media_url((item.get("image") or "").strip())
         if not image:
             continue
         clean_banners.append({
@@ -104,12 +104,32 @@ def _setting(key: str, default: str = "") -> str:
 
 
 def _absolute_url(value: str) -> str:
+    value = normalize_media_url(value or "")
     if not value:
         return ""
     if value.startswith("http://") or value.startswith("https://"):
         return value
     return request.url_root.rstrip("/") + value
 
+
+
+
+def _normalize_post_media(post: Post | None):
+    if not post:
+        return post
+    if getattr(post, "featured_image", None):
+        post.featured_image = normalize_media_url(post.featured_image)
+    if getattr(post, "content_html", None):
+        post.content_html = rewrite_media_urls(post.content_html)
+    return post
+
+
+def _normalize_posts_media(posts):
+    return [_normalize_post_media(post) for post in (posts or [])]
+
+
+def _normalize_setting_media(value: str) -> str:
+    return normalize_media_url(value or "")
 
 def _site_name() -> str:
     return _setting("site_name", current_app.config.get("SITE_NAME", "News"))
@@ -126,7 +146,7 @@ def _default_share_image() -> str:
 def _meta_defaults():
     return {
         "site_name_value": _site_name(),
-        "favicon_url": _setting("favicon_url", ""),
+        "favicon_url": _normalize_setting_media(_setting("favicon_url", "")),
         "meta_title": _site_name(),
         "meta_description": _setting("default_meta_description", _site_tagline()),
         "meta_keywords": _setting("site_keywords", ""),
@@ -172,9 +192,9 @@ def inject_site_globals():
     cats = _nav_categories()
     return {
         "nav_categories": cats,
-        "logo_url": _setting("logo_url", ""),
+        "logo_url": _normalize_setting_media(_setting("logo_url", "")),
         "site_name_value": _site_name(),
-        "favicon_url": _setting("favicon_url", ""),
+        "favicon_url": _normalize_setting_media(_setting("favicon_url", "")),
         "ad_home_bottom": _get_ad("home_bottom"),
         "clean_text": _clean_text,
         "format_date_br": _format_date_br,
@@ -373,7 +393,7 @@ def hub_posts_upsert_api():
     if not slug or not title:
         return jsonify({'ok': False, 'error': 'missing_slug_or_title'}), 400
 
-    post = _published_posts_query().filter_by(slug=slug).first()
+    post = _normalize_post_media(_published_posts_query().filter_by(slug=slug).first())
     if not post:
         post = Post(slug=slug, title=title, source='hub')
         db.session.add(post)
@@ -389,9 +409,9 @@ def hub_posts_upsert_api():
     incoming_image = (post_data.get('featured_image') or '').strip()
     if incoming_image:
         try:
-            post.featured_image = download_external_image(incoming_image, folder='hub/featured') or incoming_image
+            post.featured_image = normalize_media_url(download_external_image(incoming_image, folder='hub/featured') or incoming_image)
         except Exception:
-            post.featured_image = incoming_image
+            post.featured_image = normalize_media_url(incoming_image)
 
     categories = []
     for item in (post_data.get('categories') or []):
@@ -422,7 +442,7 @@ def hub_posts_delete_api():
     slug = (payload.get('slug') or '').strip()
     if not slug:
         return jsonify({'ok': False, 'error': 'missing_slug'}), 400
-    post = _published_posts_query().filter_by(slug=slug).first()
+    post = _normalize_post_media(_published_posts_query().filter_by(slug=slug).first())
     if not post:
         return jsonify({'ok': True, 'deleted': False})
     db.session.delete(post)
@@ -458,10 +478,10 @@ def home():
 
     category_sections = []
     for cat in Category.query.order_by(Category.name.asc()).limit(8).all():
-        posts = (_published_posts_query().join(Post.categories)
+        posts = _normalize_posts_media((_published_posts_query().join(Post.categories)
                  .filter(Category.id == cat.id)
                  .order_by(desc(Post.published_at), desc(Post.id))
-                 .limit(6).all())
+                 .limit(6).all()))
         if posts:
             category_sections.append({"category": cat, "posts": posts})
 
@@ -483,7 +503,7 @@ def home():
     popular_map = {pid: c for pid, c in popular_ids if pid}
     popular_posts = []
     if popular_map:
-        posts = _published_posts_query().filter(Post.id.in_(list(popular_map.keys()))).all()
+        posts = _normalize_posts_media(_published_posts_query().filter(Post.id.in_(list(popular_map.keys()))).all())
         posts_by_id = {p.id: p for p in posts}
         popular_posts = [posts_by_id[pid] for pid, _ in popular_ids if pid in posts_by_id]
 
@@ -516,34 +536,34 @@ def home():
 
 @site_bp.get("/p/<slug>")
 def post(slug):
-    post = _published_posts_query().filter_by(slug=slug).first()
+    post = _normalize_post_media(_published_posts_query().filter_by(slug=slug).first())
     if not post:
         abort(404)
     _track_view(post.id)
 
     category_ids = [c.id for c in post.categories]
-    latest_posts = (_published_posts_query()
+    latest_posts = _normalize_posts_media((_published_posts_query()
                     .filter(Post.id != post.id)
                     .order_by(desc(Post.published_at))
                     .limit(4)
-                    .all())
+                    .all()))
 
     related_posts = []
     if category_ids:
-        related_posts = (_published_posts_query().join(Post.categories)
+        related_posts = _normalize_posts_media((_published_posts_query().join(Post.categories)
                          .filter(Category.id.in_(category_ids), Post.id != post.id)
                          .order_by(desc(Post.published_at))
                          .limit(6)
-                         .all())
+                         .all()))
 
     if len(related_posts) < 6:
         existing_ids = {p.id for p in related_posts}
         existing_ids.add(post.id)
-        complement = (_published_posts_query()
+        complement = _normalize_posts_media((_published_posts_query()
                       .filter(~Post.id.in_(list(existing_ids)))
                       .order_by(desc(Post.published_at))
                       .limit(6 - len(related_posts))
-                      .all())
+                      .all()))
         related_posts.extend(complement)
 
     related_label = post.categories[0].name if post.categories else "Notícias"
@@ -586,6 +606,8 @@ def category(slug):
          .filter(Category.id == cat.id)
          .order_by(desc(Post.published_at)))
     pagination = q.paginate(page=page, per_page=per_page, error_out=False)
+    pagination.items = _normalize_posts_media(pagination.items)
+    pagination.items = _normalize_posts_media(pagination.items)
     _track_view(None)
 
     meta = _meta_defaults()

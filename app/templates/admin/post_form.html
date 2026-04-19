@@ -65,7 +65,7 @@
       {% if post and post.featured_image %}
       <div class="preview-box">
         <div class="small text-muted mb-2">Imagem atual</div>
-        <img src="{{ post.featured_image }}" alt="Imagem destacada atual">
+        <img src="{{ media_url(post.featured_image) }}" alt="Imagem destacada atual">
       </div>
       {% endif %}
     </div>

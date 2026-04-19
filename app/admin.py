@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy import func, desc, or_
-from .storage import delete_media, list_media_files, local_path_from_url, media_root, save_file_storage
+from .storage import delete_media, is_managed_media_url, list_media_files, local_path_from_url, media_root, normalize_media_url, rewrite_media_urls, save_file_storage
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
@@ -213,8 +213,8 @@ def _build_slot_payload_from_request(slot: AdSlot):
     existing_payload = _slot_visual_payload(slot)
     for item in existing_payload.get('banners', []):
         image = (item.get('image') or '').strip()
-        if image.startswith('/media/'):
-            old_local_images.add(image)
+        if is_managed_media_url(image):
+            old_local_images.add(normalize_media_url(image))
 
     kept_local_images = set()
     for idx in range(total):
@@ -227,8 +227,8 @@ def _build_slot_payload_from_request(slot: AdSlot):
             image = _save_upload(upload, 'ads')
         if not image:
             continue
-        if image.startswith('/media/'):
-            kept_local_images.add(image)
+        if is_managed_media_url(image):
+            kept_local_images.add(normalize_media_url(image))
         banners.append({'title': title, 'link': link, 'image': image})
 
     interval_raw = (request.form.get('interval_seconds') or '5').strip()
@@ -249,13 +249,29 @@ def _build_slot_payload_from_request(slot: AdSlot):
 
 
 def _absolute_media_url(value: str) -> str:
+    value = normalize_media_url(value or "")
     if not value:
-        return ''
-    if value.startswith('http://') or value.startswith('https://'):
+        return ""
+    if value.startswith("http://") or value.startswith("https://"):
         return value
-    base = request.url_root.rstrip('/')
+    base = request.url_root.rstrip("/")
     return f"{base}{value if value.startswith('/') else '/' + value}"
 
+
+
+
+def _normalize_post_media(post: Post | None):
+    if not post:
+        return post
+    if getattr(post, "featured_image", None):
+        post.featured_image = normalize_media_url(post.featured_image)
+    if getattr(post, "content_html", None):
+        post.content_html = rewrite_media_urls(post.content_html)
+    return post
+
+
+def _normalize_posts_media(posts):
+    return [_normalize_post_media(post) for post in (posts or [])]
 
 def _hub_config():
     remotes = _setting_json('hub_remote_sites_json', [])
@@ -643,7 +659,7 @@ def _dashboard_stats():
         "wp_posts": wp_posts,
         "categories_total": categories_total,
         "active_ads": active_ads,
-        "recent_posts": recent_posts,
+        "recent_posts": _normalize_posts_media(recent_posts),
         "popular_posts": popular_posts,
         "analytics": analytics,
     }
@@ -666,15 +682,15 @@ def _fill_post_form_from_obj(form: PostAdminForm, post: Post):
     form.title.data = post.title
     form.excerpt.data = post.excerpt
     form.content_html.data = post.content_html
-    form.featured_image.data = post.featured_image
+    form.featured_image.data = normalize_media_url(post.featured_image or "")
     form.categories.data = [c.id for c in post.categories]
     form.scheduled_for.data = post.published_at
 
 
 def _wp_stats():
     total_wp_posts = db.session.query(func.count(Post.id)).filter(Post.source == "wp").scalar() or 0
-    localized_images = db.session.query(func.count(Post.id)).filter(Post.source == "wp", Post.featured_image.like('/media/%')).scalar() or 0
-    external_images = db.session.query(func.count(Post.id)).filter(Post.source == "wp", Post.featured_image.isnot(None), ~Post.featured_image.like('/media/%')).scalar() or 0
+    localized_images = db.session.query(func.count(Post.id)).filter(Post.source == "wp", or_(Post.featured_image.like('/media/%'), Post.featured_image.like('https://img.%'))).scalar() or 0
+    external_images = db.session.query(func.count(Post.id)).filter(Post.source == "wp", Post.featured_image.isnot(None), ~Post.featured_image.like('/media/%'), ~Post.featured_image.like('https://img.%')).scalar() or 0
     without_images = db.session.query(func.count(Post.id)).filter(Post.source == "wp").filter((Post.featured_image.is_(None)) | (Post.featured_image == "")).scalar() or 0
     recent_posts = (Post.query.filter(Post.source == "wp")
                     .order_by(desc(Post.published_at), desc(Post.id))
@@ -684,7 +700,7 @@ def _wp_stats():
         "localized_images": localized_images,
         "external_images": external_images,
         "without_images": without_images,
-        "recent_posts": recent_posts,
+        "recent_posts": _normalize_posts_media(recent_posts),
     }
 
 
@@ -693,6 +709,7 @@ def inject_admin_helpers():
     return {
         "admin_media_root": current_app.config.get("MEDIA_ROOT", "/data/uploads"),
         "format_date_br": lambda value: value.strftime("%d/%m/%Y %H:%M") if value else "",
+        "media_url": normalize_media_url,
     }
 
 
@@ -739,7 +756,7 @@ def dashboard():
         "admin/dashboard.html",
         slots=slots,
         live_embed=_setting("live_embed_html", ""),
-        logo_url=_setting("logo_url", ""),
+        logo_url=normalize_media_url(_setting("logo_url", "")),
         site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
         media_files=media_files,
         **_common_admin_context("dashboard"),
@@ -764,7 +781,7 @@ def posts_list():
     posts = q.order_by(desc(Post.published_at), desc(Post.updated_at), desc(Post.id)).all()
     return render_template(
         "admin/posts_list.html",
-        posts=posts,
+        posts=_normalize_posts_media(posts),
         term=term,
         source=source,
         now_utc=datetime.utcnow(),
@@ -846,7 +863,7 @@ def posts_edit(post_id):
             _broadcast_post_to_hub(post)
         flash("Matéria atualizada com sucesso.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
-    return render_template("admin/post_form.html", form=form, mode="edit", post=post, hub=_hub_config(), now_utc=datetime.utcnow(), **_common_admin_context("posts"))
+    return render_template("admin/post_form.html", form=form, mode="edit", post=_normalize_post_media(post), hub=_hub_config(), now_utc=datetime.utcnow(), **_common_admin_context("posts"))
 
 
 @admin_bp.post("/posts/<int:post_id>/delete")
@@ -862,7 +879,7 @@ def posts_delete(post_id):
     featured_image = post.featured_image or ''
     db.session.delete(post)
     db.session.commit()
-    if featured_image.startswith('/media/'):
+    if is_managed_media_url(featured_image):
         _delete_local_media(featured_image)
     flash('Matéria excluída com sucesso.', 'success')
     return redirect(url_for('admin.posts_list'))
@@ -1024,9 +1041,9 @@ def insights_page():
         metric_chart=metric_chart,
         allowed_metrics=allowed_metrics,
         site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
-        logo_url=_setting("logo_url", ""),
-        favicon_url=_setting("favicon_url", ""),
-        default_share_image=_setting("default_share_image", ""),
+        logo_url=normalize_media_url(_setting("logo_url", "")),
+        favicon_url=normalize_media_url(_setting("favicon_url", "")),
+        default_share_image=normalize_media_url(_setting("default_share_image", "")),
         default_meta_description=_setting("default_meta_description", ""),
         google_analytics_id=_setting("google_analytics_id", ""),
         facebook_app_id=_setting("facebook_app_id", ""),
@@ -1229,9 +1246,9 @@ def settings_page():
     return render_template(
         "admin/settings.html",
         live_embed=_setting("live_embed_html", ""),
-        logo_url=_setting("logo_url", ""),
-        favicon_url=_setting("favicon_url", ""),
-        default_share_image=_setting("default_share_image", ""),
+        logo_url=normalize_media_url(_setting("logo_url", "")),
+        favicon_url=normalize_media_url(_setting("favicon_url", "")),
+        default_share_image=normalize_media_url(_setting("default_share_image", "")),
         site_name=_setting("site_name", current_app.config.get("SITE_NAME", "News")),
         site_tagline=_setting("site_tagline", ""),
         default_meta_description=_setting("default_meta_description", ""),
@@ -1272,9 +1289,9 @@ def save_logo():
     old_logo = _setting("logo_url", "")
     old_favicon = _setting("favicon_url", "")
     old_share = _setting("default_share_image", "")
-    logo_url = (request.form.get("logo_url", "") or "").strip()
-    favicon_url = (request.form.get("favicon_url", "") or "").strip()
-    default_share_image = (request.form.get("default_share_image", "") or "").strip()
+    logo_url = normalize_media_url((request.form.get("logo_url", "") or "").strip())
+    favicon_url = normalize_media_url((request.form.get("favicon_url", "") or "").strip())
+    default_share_image = normalize_media_url((request.form.get("default_share_image", "") or "").strip())
     logo_file = request.files.get("logo_file")
     favicon_file = request.files.get("favicon_file")
     share_file = request.files.get("share_image_file")
@@ -1309,11 +1326,11 @@ def save_logo():
     _save_setting("favicon_url", favicon_url)
     _save_setting("default_share_image", default_share_image)
     db.session.commit()
-    if logo_file and old_logo and old_logo != logo_url:
+    if logo_file and old_logo and normalize_media_url(old_logo) != logo_url:
         _delete_local_media(old_logo)
-    if favicon_file and old_favicon and old_favicon != favicon_url:
+    if favicon_file and old_favicon and normalize_media_url(old_favicon) != favicon_url:
         _delete_local_media(old_favicon)
-    if share_file and old_share and old_share != default_share_image:
+    if share_file and old_share and normalize_media_url(old_share) != default_share_image:
         _delete_local_media(old_share)
     flash("Configurações de branding, SEO e compartilhamento atualizadas.", "success")
     return redirect(url_for("admin.settings_page"))

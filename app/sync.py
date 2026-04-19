@@ -11,7 +11,7 @@ from flask import current_app
 from slugify import slugify
 
 from .models import db, Post, Category
-from .storage import save_bytes
+from .storage import is_managed_media_url, normalize_media_url, save_bytes
 from .wp_client import WPClient
 
 ALLOWED_TAGS = bleach.sanitizer.ALLOWED_TAGS.union({
@@ -56,8 +56,8 @@ def _guess_extension(source_url: str, content_type: str = "") -> str:
 def download_external_image(source_url: str | None, folder: str = "wp") -> str | None:
     if not source_url:
         return None
-    if source_url.startswith("/media/"):
-        return source_url
+    if is_managed_media_url(source_url):
+        return normalize_media_url(source_url)
 
     response = requests.get(source_url, timeout=25, stream=True)
     response.raise_for_status()
@@ -82,7 +82,7 @@ def localize_content_images(html: str | None) -> str | None:
 
     def repl(match):
         prefix, src, suffix = match.groups()
-        if not src or src.startswith("/media/") or src.startswith("data:"):
+        if not src or is_managed_media_url(src) or src.startswith("data:"):
             return match.group(0)
         if src not in cache:
             try:
@@ -139,7 +139,7 @@ def sync_posts(client: WPClient, max_pages: int = 10, per_page: int = 20, downlo
             excerpt_safe = bleach.clean(excerpt, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
             content_safe = bleach.clean(content, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)
             if download_images:
-                if featured and not featured.startswith('/media/'):
+                if featured and not is_managed_media_url(featured):
                     try:
                         featured = download_external_image(featured, folder='wp/featured') or featured
                     except Exception:
@@ -184,7 +184,7 @@ def localize_existing_wp_images(limit: int | None = None) -> dict:
     content_updated = 0
     for post in posts:
         changed = False
-        if post.featured_image and not post.featured_image.startswith('/media/'):
+        if post.featured_image and not is_managed_media_url(post.featured_image):
             try:
                 post.featured_image = download_external_image(post.featured_image, folder='wp/featured') or post.featured_image
                 featured_downloaded += 1

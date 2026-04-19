@@ -8,6 +8,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import urlparse
+import re
 from uuid import uuid4
 
 import boto3
@@ -49,20 +50,76 @@ def media_prefix() -> str:
     return current_app.config.get("MEDIA_URL_PREFIX", "/media").rstrip("/")
 
 
+def public_media_base() -> str:
+    return (current_app.config.get("R2_PUBLIC_BASE_URL") or "").strip().rstrip("/")
+
+
+def public_media_enabled() -> bool:
+    return bool(using_r2() and public_media_base())
+
+
+def public_media_url(key: str) -> str:
+    key = (key or "").lstrip("/")
+    base = public_media_base()
+    if base:
+        return f"{base}/{key}"
+    return f"{media_prefix()}/{key}"
+
+
 def media_url_from_key(key: str) -> str:
-    return f"{media_prefix()}/{key.lstrip('/')}"
+    key = (key or "").lstrip("/")
+    if public_media_enabled():
+        return public_media_url(key)
+    return f"{media_prefix()}/{key}"
 
 
 def key_from_media_url(url: str) -> str | None:
     if not url:
         return None
+    value = (url or "").strip()
+    parsed = urlparse(value)
+    target_path = parsed.path or value
     prefix = media_prefix() + "/"
-    parsed = urlparse(url)
-    target_path = parsed.path or url
-    if not target_path.startswith(prefix):
-        return None
-    rel = target_path[len(prefix) :].lstrip("/")
-    return rel or None
+    public_prefix = (public_media_base() + "/") if public_media_base() else ""
+
+    if value.startswith(public_prefix):
+        rel = value[len(public_prefix):].lstrip("/")
+        return rel or None
+    if target_path.startswith(prefix):
+        rel = target_path[len(prefix):].lstrip("/")
+        return rel or None
+    if parsed.scheme and public_prefix and target_path.startswith(urlparse(public_media_base()).path + "/"):
+        rel = target_path[len(urlparse(public_media_base()).path) + 1:].lstrip("/")
+        return rel or None
+    return None
+
+
+def is_managed_media_url(url: str) -> bool:
+    return key_from_media_url(url) is not None
+
+
+def normalize_media_url(url: str) -> str:
+    if not url:
+        return ""
+    key = key_from_media_url(url)
+    if key:
+        return media_url_from_key(key)
+    return url
+
+
+def rewrite_media_urls(value: str) -> str:
+    if not value:
+        return value
+    base = public_media_base()
+    if not base:
+        return value
+    prefix = media_prefix().rstrip("/")
+    result = value.replace(f'="{prefix}/', f'="{base}/')
+    result = result.replace(f"='{prefix}/", f"='{base}/")
+    result = result.replace(f'("{prefix}/', f'("{base}/')
+    result = result.replace(f"('{prefix}/", f"('{base}/")
+    result = re.sub(r'(?<![A-Za-z0-9_\-])' + re.escape(prefix) + r'/', base + '/', result)
+    return result
 
 
 def local_path_from_url(url: str) -> Path | None:

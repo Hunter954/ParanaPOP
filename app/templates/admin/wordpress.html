@@ -59,7 +59,7 @@
               <td class="small text-break">{{ post.featured_image or 'Sem imagem' }}</td>
               <td>{{ format_date_br(post.published_at) }}</td>
               <td>
-                {% if post.featured_image and post.featured_image.startswith('/media/') %}
+                {% if post.featured_image and ('img.paranapop.com.br/' in post.featured_image or post.featured_image.startswith('/media/')) %}
                   <span class="badge text-bg-success">Local</span>
                 {% elif post.featured_image %}
                   <span class="badge text-bg-warning">Externa</span>
