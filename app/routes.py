@@ -210,10 +210,10 @@ def media(filename):
         abort(404)
 
 
-@site_bp.get("/geradorpop/download/<path:filename>")
-def gerador_pop_download(filename):
+@site_bp.get("/geradorpop/download/<path:key>")
+def gerador_pop_download(key):
     try:
-        return send_media_download(f"gerador/generated/{filename}", download_name=filename)
+        return send_media_download(key, download_name=request.args.get("name") or None)
     except FileNotFoundError:
         abort(404)
 

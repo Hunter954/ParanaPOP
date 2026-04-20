@@ -91,7 +91,7 @@
                       <strong>{{ item.label }}</strong>
                       <span>{{ item.size }}</span>
                     </div>
-                    <a href="{{ url_for('site.gerador_pop_download', filename=item.download_name) }}">Baixar</a>
+                    <a href="{{ url_for('site.gerador_pop_download', key=item.download_key, name=item.download_name) }}">Baixar</a>
                   </div>
                 </article>
               {% endfor %}

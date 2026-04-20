@@ -16,7 +16,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from .models import Post
-from .storage import local_path_from_url, open_media_bytes, save_bytes
+from .storage import key_from_media_url, local_path_from_url, open_media_bytes, save_bytes
 
 META_TAG_RE = re.compile(
     r'<meta[^>]+(?:property|name)=["\'](?P<key>[^"\']+)["\'][^>]+content=["\'](?P<value>[^"\']*)["\'][^>]*>',
@@ -572,6 +572,7 @@ def generate_variants(*, title: str, image_source: str, include_title: bool, cat
                 "label": spec["label"],
                 "size": f"{spec['width']}x{spec['height']}",
                 "url": url,
+                "download_key": key_from_media_url(url) or f"gerador/generated/{filename}",
                 "download_name": filename,
             }
         )
