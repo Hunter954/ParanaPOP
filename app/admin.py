@@ -15,10 +15,11 @@ from .storage import delete_media, is_managed_media_url, list_media_files, local
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
+from .news_api import search_google_news, generate_article_with_openai
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .wp_client import WPClient
 from .sync import sync_categories, sync_posts, localize_existing_wp_images
-from html import unescape
+from html import unescape, escape
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -764,14 +765,130 @@ def dashboard():
 
 
 
-@admin_bp.get("/materias-api")
+@admin_bp.route("/materias-api", methods=["GET", "POST"])
 @login_required
 def materias_api_page():
     r = _require_admin()
     if r:
         return r
+
+    categories = Category.query.order_by(Category.name.asc()).all()
+    results = []
+    searched = False
+    query = (request.values.get("q") or "").strip()
+    selected_date = (request.values.get("data") or "").strip()
+
+    if request.method == "POST" and (request.form.get("materias_action") or "") == "create_posts":
+        raw_items = request.form.get("items_json") or "[]"
+        try:
+            available_items = json.loads(raw_items)
+            if not isinstance(available_items, list):
+                available_items = []
+        except Exception:
+            available_items = []
+
+        selected_indexes = set()
+        for value in request.form.getlist("selected_items"):
+            try:
+                selected_indexes.add(int(value))
+            except Exception:
+                continue
+
+        if not selected_indexes:
+            flash("Selecione pelo menos uma matéria para gerar.", "warning")
+            results = available_items
+            searched = True
+        else:
+            publish_now = (request.form.get("post_action") or "draft") == "publish"
+            category_id_raw = (request.form.get("category_id") or "").strip()
+            category = None
+            if category_id_raw:
+                try:
+                    category = Category.query.get(int(category_id_raw))
+                except Exception:
+                    category = None
+            if not category:
+                category = Category.query.filter(func.lower(Category.name) == "notícias").first()
+                if not category:
+                    category = Category(name="Notícias", slug=_ensure_unique_slug(Category, "noticias"))
+                    db.session.add(category)
+                    db.session.flush()
+
+            created = []
+            errors = []
+            site_tone = _setting("materias_api_tom", "Portal regional brasileiro, linguagem jornalística clara, objetiva, popular e informativa.")
+            now = datetime.utcnow()
+            for idx in sorted(selected_indexes):
+                if idx < 0 or idx >= len(available_items):
+                    continue
+                item = available_items[idx]
+                try:
+                    article = generate_article_with_openai(item, site_tone=site_tone)
+                    title = (article.get("titulo") or item.get("title") or "Matéria").strip()
+                    content_html = (article.get("corpo_html") or "").strip()
+                    excerpt = (article.get("resumo") or article.get("subtitulo") or item.get("description") or "").strip()
+                    source_name = (article.get("fonte_nome") or item.get("source") or "Fonte original").strip()
+                    source_url = (article.get("fonte_url") or item.get("url") or "").strip()
+                    if source_url and source_url not in content_html:
+                        content_html += f'<p><strong>Fonte:</strong> <a href="{escape(source_url, quote=True)}" target="_blank" rel="noopener nofollow">{escape(source_name)}</a>.</p>'
+
+                    featured_image = (item.get("image") or "").strip()
+                    if featured_image:
+                        try:
+                            featured_image = download_external_image(featured_image, folder="materias-api/featured") or featured_image
+                        except Exception:
+                            pass
+
+                    post = Post(
+                        source="local",
+                        title=title,
+                        slug=_ensure_unique_slug(Post, title or "materia-api"),
+                        excerpt=excerpt[:3000],
+                        content_html=content_html,
+                        featured_image=featured_image,
+                        author_name="Redação",
+                        updated_at=now,
+                        published_at=now if publish_now else None,
+                    )
+                    post.categories = [category]
+                    db.session.add(post)
+                    db.session.flush()
+                    created.append(post)
+                except Exception as exc:
+                    errors.append(str(exc)[:180])
+
+            db.session.commit()
+            for post in created:
+                if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get('enabled'):
+                    _broadcast_post_to_hub(post)
+            if created:
+                flash(f"{len(created)} matéria(s) criada(s) com sucesso como {'publicadas' if publish_now else 'rascunho'}.", "success")
+            if errors:
+                flash("Algumas matérias não foram criadas: " + " | ".join(errors[:3]), "warning")
+            return redirect(url_for("admin.posts_list", source="local"))
+
+    elif query:
+        searched = True
+        try:
+            limit = min(max(int(request.values.get("limit") or 15), 1), 30)
+        except Exception:
+            limit = 15
+        try:
+            results = search_google_news(query, day=selected_date or None, limit=limit, enrich_images=False)
+            if not results:
+                flash("Nenhum resultado encontrado para essa busca.", "warning")
+        except Exception as exc:
+            flash(f"Erro ao buscar notícias: {str(exc)[:180]}", "danger")
+            results = []
+
     return render_template(
         "admin/materias_api.html",
+        query=query,
+        selected_date=selected_date,
+        results=results,
+        searched=searched,
+        categories=categories,
+        openai_enabled=bool((os.getenv("OPENAI_API_KEY") or "").strip()),
         **_common_admin_context("materias_api"),
     )
 

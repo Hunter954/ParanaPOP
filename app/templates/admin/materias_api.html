@@ -1,52 +1,123 @@
 {% extends 'admin/layout.html' %}
 {% block admin_title %}Matérias API{% endblock %}
 {% block page_title %}Matérias API{% endblock %}
-{% block page_subtitle %}Área preparada para buscar notícias, gerar rascunhos com IA e publicar no portal.{% endblock %}
+{% block page_subtitle %}Busque notícias no Google News, selecione as fontes e gere rascunhos jornalísticos para o portal.{% endblock %}
 {% block admin_content %}
 <section class="panel-card">
   <div class="panel-head">
     <div>
-      <h2>Importador de matérias por API</h2>
-      <p>Use esta tela como base para a próxima etapa: pesquisar por data ou tema, selecionar matérias e gerar rascunhos no tom editorial do site.</p>
+      <h2>Buscar matérias</h2>
+      <p>Pesquise por tema e, se quiser, filtre por uma data específica. O sistema usa Google News RSS e gera textos originais para revisão.</p>
     </div>
-    <span class="badge text-bg-warning">Em preparação</span>
+    {% if openai_enabled %}
+      <span class="badge text-bg-success">GPT ativo</span>
+    {% else %}
+      <span class="badge text-bg-secondary">Sem OPENAI_API_KEY</span>
+    {% endif %}
   </div>
 
-  <form class="row g-3" method="get" action="#">
-    <div class="col-md-4">
+  <form class="row g-3" method="get" action="{{ url_for('admin.materias_api_page') }}">
+    <div class="col-md-3">
       <label class="form-label">Data da busca</label>
-      <input class="form-control" type="date" name="data">
+      <input class="form-control" type="date" name="data" value="{{ selected_date or '' }}">
+      <div class="form-help mt-1">Exemplo: escolha 07/09 e pesquise “7 de setembro”.</div>
     </div>
     <div class="col-md-6">
       <label class="form-label">Tema ou palavra-chave</label>
-      <input class="form-control" type="text" name="q" placeholder="Ex: 7 de setembro, política, Foz do Iguaçu...">
+      <input class="form-control" type="text" name="q" value="{{ query or '' }}" placeholder="Ex: 7 de setembro, Foz do Iguaçu, política..." required>
+    </div>
+    <div class="col-md-1">
+      <label class="form-label">Qtd.</label>
+      <input class="form-control" type="number" name="limit" min="1" max="30" value="15">
     </div>
     <div class="col-md-2 d-flex align-items-end">
-      <button class="btn btn-dark w-100" type="button" disabled>Buscar</button>
+      <button class="btn btn-dark w-100" type="submit"><i class="bi bi-search me-1"></i>Buscar</button>
     </div>
   </form>
 
-  <hr>
-
-  <div class="row g-3">
-    <div class="col-lg-4">
-      <div class="border rounded-4 p-3 h-100">
-        <h3 class="h6 mb-2"><i class="bi bi-search me-1"></i>1. Buscar notícias</h3>
-        <p class="text-muted small mb-0">Aqui entra a busca por tema/data usando uma API de notícias ou busca personalizada.</p>
-      </div>
-    </div>
-    <div class="col-lg-4">
-      <div class="border rounded-4 p-3 h-100">
-        <h3 class="h6 mb-2"><i class="bi bi-check2-square me-1"></i>2. Selecionar fontes</h3>
-        <p class="text-muted small mb-0">A lista poderá exibir título, site de origem, imagem, categoria, data e link para abrir a matéria original.</p>
-      </div>
-    </div>
-    <div class="col-lg-4">
-      <div class="border rounded-4 p-3 h-100">
-        <h3 class="h6 mb-2"><i class="bi bi-magic me-1"></i>3. Gerar rascunho</h3>
-        <p class="text-muted small mb-0">Depois, a IA poderá gerar uma matéria original, salvar imagem no R2 e criar o post como rascunho.</p>
-      </div>
-    </div>
+  <div class="alert alert-info mt-4 mb-0">
+    <strong>Importante:</strong> o sistema não copia texto integral de outros portais. Ele cria um rascunho original, com link de fonte, para você revisar antes de publicar.
   </div>
 </section>
+
+{% if searched %}
+<section class="panel-card mt-4">
+  <div class="panel-head">
+    <div>
+      <h2>Resultados encontrados</h2>
+      <p>{{ results|length }} resultado(s) para <strong>{{ query }}</strong>{% if selected_date %} em <strong>{{ selected_date }}</strong>{% endif %}. Abra a fonte, selecione as matérias e gere os posts.</p>
+    </div>
+  </div>
+
+  {% if results %}
+  <form method="post" action="{{ url_for('admin.materias_api_page') }}">
+    <input type="hidden" name="materias_action" value="create_posts">
+    <input type="hidden" name="q" value="{{ query or '' }}">
+    <input type="hidden" name="data" value="{{ selected_date or '' }}">
+    <textarea name="items_json" class="d-none">{{ results|tojson }}</textarea>
+
+    <div class="row g-3 align-items-end mb-3">
+      <div class="col-md-5">
+        <label class="form-label">Categoria dos posts criados</label>
+        <select class="form-select" name="category_id">
+          <option value="">Notícias (criar/usar padrão)</option>
+          {% for category in categories %}
+            <option value="{{ category.id }}">{{ category.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-7 d-flex gap-2 flex-wrap">
+        <button class="btn btn-dark" type="submit" name="post_action" value="draft"><i class="bi bi-file-earmark-text me-1"></i>Gerar rascunhos selecionados</button>
+        <button class="btn btn-outline-dark" type="submit" name="post_action" value="publish" onclick="return confirm('Publicar automaticamente as matérias selecionadas? Revise as informações antes se tiver dúvida.');"><i class="bi bi-send me-1"></i>Gerar e publicar</button>
+      </div>
+    </div>
+
+    <div class="materias-api-list">
+      {% for item in results %}
+      <article class="materia-api-card">
+        <div class="form-check materia-api-check">
+          <input class="form-check-input" type="checkbox" name="selected_items" value="{{ loop.index0 }}" id="mat-api-{{ loop.index0 }}">
+          <label class="form-check-label" for="mat-api-{{ loop.index0 }}">Selecionar</label>
+        </div>
+        <div class="materia-api-body">
+          <div class="d-flex justify-content-between gap-3 flex-wrap">
+            <div>
+              <h3>{{ item.title }}</h3>
+              <div class="text-muted small">
+                <span><i class="bi bi-building me-1"></i>{{ item.source }}</span>
+                {% if item.published_at %}<span class="ms-2"><i class="bi bi-clock me-1"></i>{{ item.published_at }}</span>{% endif %}
+                <span class="ms-2"><i class="bi bi-rss me-1"></i>{{ item.provider }}</span>
+              </div>
+            </div>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ item.url }}" target="_blank" rel="noopener nofollow"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir fonte</a>
+          </div>
+          {% if item.description %}<p class="mt-2 mb-0">{{ item.description }}</p>{% endif %}
+          {% if item.source_url %}<div class="small text-muted mt-2">Site de origem: {{ item.source_url }}</div>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap mt-4">
+      <button class="btn btn-dark" type="submit" name="post_action" value="draft">Gerar rascunhos selecionados</button>
+      <button class="btn btn-outline-dark" type="submit" name="post_action" value="publish" onclick="return confirm('Publicar automaticamente as matérias selecionadas?');">Gerar e publicar</button>
+    </div>
+  </form>
+  {% else %}
+    <div class="alert alert-warning mb-0">Nenhuma notícia foi encontrada. Tente uma palavra-chave mais específica ou remova a data.</div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <style>
+    .materias-api-list{display:grid;gap:1rem;}
+    .materia-api-card{display:grid;grid-template-columns:150px 1fr;gap:1rem;border:1px solid var(--bs-border-color);border-radius:18px;padding:1rem;background:#fff;}
+    .materia-api-check{border-right:1px solid var(--bs-border-color);padding-right:1rem;display:flex;align-items:flex-start;gap:.5rem;}
+    .materia-api-body h3{font-size:1.05rem;margin:0 0 .35rem;font-weight:800;}
+    .materia-api-body p{color:#475467;line-height:1.55;}
+    @media (max-width: 768px){.materia-api-card{grid-template-columns:1fr}.materia-api-check{border-right:0;border-bottom:1px solid var(--bs-border-color);padding-bottom:.75rem}}
+  </style>
 {% endblock %}
