@@ -7,7 +7,7 @@
   <div class="panel-head">
     <div>
       <h2>Buscar matérias</h2>
-      <p>Pesquise por tema e, se quiser, filtre por uma data específica. O sistema usa Google News RSS e gera textos originais para revisão.</p>
+      <p>Pesquise por tema e, se quiser, filtre por uma data específica. O sistema tenta Google News RSS e usa Bing News RSS como fallback quando o Google limita a requisição.</p>
     </div>
     {% if openai_enabled %}
       <span class="badge text-bg-success">GPT ativo</span>
