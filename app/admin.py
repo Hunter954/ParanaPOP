@@ -763,6 +763,19 @@ def dashboard():
     )
 
 
+
+@admin_bp.get("/materias-api")
+@login_required
+def materias_api_page():
+    r = _require_admin()
+    if r:
+        return r
+    return render_template(
+        "admin/materias_api.html",
+        **_common_admin_context("materias_api"),
+    )
+
+
 @admin_bp.get("/posts")
 @login_required
 def posts_list():
