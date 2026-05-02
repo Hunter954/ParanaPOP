@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urlparse, unquote
 
 import requests
 
@@ -100,21 +100,88 @@ def _extract_meta_value(markup: str, names: list[str]) -> str:
     return ""
 
 
+def _is_google_news_url(url: str) -> bool:
+    host = _safe_domain(url)
+    return host in {"news.google.com", "google.com"} or host.endswith(".google.com") and "/articles/" in (url or "")
+
+
+def _looks_like_placeholder_image(url: str) -> bool:
+    """Evita salvar logos/cards genéricos como se fossem foto da matéria."""
+    value = (url or "").strip().lower()
+    if not value:
+        return True
+    host = _safe_domain(value)
+    bad_bits = [
+        "news.google.com", "gstatic.com/images/branding", "googlelogo", "google-news", "googlenews",
+        "favicon", "logo", "sprite", "placeholder", "default-image", "default.png", "blank.gif",
+    ]
+    if any(bit in value for bit in bad_bits):
+        return True
+    if host in {"www.google.com", "google.com", "news.google.com"}:
+        return True
+    return False
+
+
 def _extract_first_image_from_html(markup: str, base_url: str = "") -> str:
+    markup = markup or ""
     patterns = [
         r'<meta[^>]+property=["\']og:image(?::secure_url)?["\'][^>]+content=["\']([^"\']+)',
         r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image(?::secure_url)?["\']',
         r'<meta[^>]+name=["\']twitter:image(?::src)?["\'][^>]+content=["\']([^"\']+)',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image(?::src)?["\']',
+        r'<meta[^>]+itemprop=["\']image["\'][^>]+content=["\']([^"\']+)',
         r'<link[^>]+rel=["\']image_src["\'][^>]+href=["\']([^"\']+)',
-        r'<img[^>]+(?:data-src|src)=["\']([^"\']+)["\']',
+        r'"image"\s*:\s*"(https?:\\/\\/[^"\\]+)',
+        r'<img[^>]+(?:data-src|data-original|src)=["\']([^"\']+)["\']',
     ]
+    candidates: list[str] = []
     for pattern in patterns:
-        m = re.search(pattern, markup or "", flags=re.I)
-        if m:
-            image = _absolute_url(base_url, m.group(1))
+        for m in re.finditer(pattern, markup, flags=re.I | re.S):
+            raw = (m.group(1) or "").replace("\\/", "/")
+            image = _absolute_url(base_url, raw)
             if image.startswith("http://") or image.startswith("https://"):
-                return image
+                candidates.append(image)
+    # srcset costuma trazer a foto principal em portais que usam lazy loading.
+    for m in re.finditer(r'<img[^>]+(?:data-srcset|srcset)=["\']([^"\']+)["\']', markup, flags=re.I | re.S):
+        srcset = html.unescape(m.group(1) or "")
+        first = srcset.split(",")[0].strip().split(" ")[0]
+        image = _absolute_url(base_url, first)
+        if image.startswith("http://") or image.startswith("https://"):
+            candidates.append(image)
+    for image in candidates:
+        if not _looks_like_placeholder_image(image):
+            return image
     return ""
+
+
+def _resolve_google_news_url(url: str) -> str:
+    """Tenta sair do agregador do Google News e chegar na URL real da fonte."""
+    if not _is_google_news_url(url):
+        return url or ""
+    try:
+        headers = dict(REQUEST_HEADERS)
+        headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        resp = requests.get(url, headers=headers, timeout=18, allow_redirects=True)
+        final_url = resp.url or url
+        if final_url and not _is_google_news_url(final_url):
+            return final_url
+        text = resp.text or ""
+        decoded_text = html.unescape(unquote(text))
+        patterns = [
+            r'data-n-au=["\'](https?://[^"\']+)',
+            r'<a[^>]+href=["\'](https?://[^"\']+)["\'][^>]*?(?:rel=["\']nofollow|target=["\']_blank)',
+            r'url=(https?://[^"\'&<>]+)',
+            r'(https?://(?:www\.)?(?!news\.google\.com|www\.google\.com|accounts\.google\.com|support\.google\.com)[^\s"\'<>\\]+)',
+        ]
+        for pattern in patterns:
+            for m in re.finditer(pattern, decoded_text, flags=re.I | re.S):
+                candidate = html.unescape(unquote((m.group(1) or "").strip()))
+                candidate = candidate.split("&")[0]
+                if candidate.startswith("http") and not _is_google_news_url(candidate) and "google." not in _safe_domain(candidate):
+                    return candidate
+    except Exception:
+        pass
+    return url or ""
 
 
 def _extract_readable_text(markup: str) -> str:
@@ -142,27 +209,36 @@ def _extract_readable_text(markup: str) -> str:
 def _fetch_page_metadata(url: str, include_text: bool = False) -> dict[str, str]:
     if not url:
         return {"resolved_url": "", "image": "", "description": "", "article_text": ""}
+    original_url = url
+    url = _resolve_google_news_url(url)
     try:
         headers = dict(REQUEST_HEADERS)
         headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        resp = requests.get(url, headers=headers, timeout=18, allow_redirects=True)
+        headers["Referer"] = "https://www.google.com/"
+        resp = requests.get(url, headers=headers, timeout=22, allow_redirects=True)
         content_type = (resp.headers.get("Content-Type") or "").lower()
         resolved_url = resp.url or url
         if resp.status_code >= 400 or ("text/html" not in content_type and "application/xhtml" not in content_type):
             return {"resolved_url": resolved_url, "image": "", "description": "", "article_text": ""}
-        text = resp.text[:600000]
+        text = resp.text[:900000]
+        # Se ainda caiu numa página do Google News, tenta extrair a URL real uma segunda vez.
+        if _is_google_news_url(resolved_url):
+            candidate = _resolve_google_news_url(resolved_url)
+            if candidate and candidate != resolved_url and not _is_google_news_url(candidate):
+                return _fetch_page_metadata(candidate, include_text=include_text)
         desc = _extract_meta_value(text, ["description", "og:description", "twitter:description"])
         title = _extract_meta_value(text, ["og:title", "twitter:title"])
         article_text = _extract_readable_text(text) if include_text else ""
+        image = _extract_first_image_from_html(text, resolved_url)
         return {
-            "resolved_url": resolved_url,
-            "image": _extract_first_image_from_html(text, resolved_url),
+            "resolved_url": resolved_url if resolved_url else original_url,
+            "image": "" if _looks_like_placeholder_image(image) else image,
             "description": desc,
             "page_title": title,
             "article_text": article_text,
         }
     except Exception:
-        return {"resolved_url": url or "", "image": "", "description": "", "article_text": ""}
+        return {"resolved_url": url or original_url or "", "image": "", "description": "", "article_text": ""}
 
 
 def _extract_rss_image(item: ET.Element) -> str:
@@ -253,11 +329,17 @@ def _parse_rss_items(payload: bytes, provider: str, limit: int, enrich_images: b
             "published_at": pub_date,
             "image": _extract_rss_image(item),
             "provider": provider,
+            "image_status": "rss",
         }
+        if _looks_like_placeholder_image(data.get("image") or ""):
+            data["image"] = ""
+            data["image_status"] = "sem_imagem"
         if enrich_images:
             meta = _fetch_page_metadata(link)
             data["url"] = meta.get("resolved_url") or link
-            data["image"] = data.get("image") or meta.get("image") or ""
+            if meta.get("image"):
+                data["image"] = meta["image"]
+                data["image_status"] = "fonte_original"
             if meta.get("description"):
                 data["description"] = meta["description"]
             if meta.get("page_title") and len(data["title"]) < 8:
@@ -394,8 +476,11 @@ def enrich_news_item(item: dict[str, Any], include_text: bool = True) -> dict[st
     meta = _fetch_page_metadata((enriched.get("url") or "").strip(), include_text=include_text)
     if meta.get("resolved_url"):
         enriched["url"] = meta["resolved_url"]
-    if not enriched.get("image") and meta.get("image"):
+    if _looks_like_placeholder_image(enriched.get("image") or ""):
+        enriched["image"] = ""
+    if meta.get("image"):
         enriched["image"] = meta["image"]
+        enriched["image_status"] = "fonte_original"
     if meta.get("description"):
         enriched["description"] = meta["description"]
     if meta.get("article_text"):
@@ -423,7 +508,7 @@ def generate_article_with_openai(item: dict[str, Any], site_tone: str = "") -> d
     prompt = (
         "Crie uma matéria jornalística ORIGINAL em português do Brasil. Não copie trechos, frases ou a estrutura da fonte. "
         "Use o recorte textual apenas para entender os fatos principais e reescreva com linguagem própria. "
-        "A matéria deve ser mais completa do que um resumo curto, com 5 a 8 parágrafos, lead forte, contexto e fechamento. "
+        "A matéria deve ser mais completa do que um resumo curto, com 7 a 10 parágrafos, lead forte, contexto, detalhes confirmados e fechamento. "
         "Não invente dados, falas, números, acusações ou informações não presentes no payload. "
         "Quando faltar informação, use formulações cautelosas e evite afirmar como fato. "
         "Inclua atribuição e link da fonte no final. Retorne somente JSON válido com as chaves: "
@@ -467,3 +552,28 @@ def generate_article_with_openai(item: dict[str, Any], site_tone: str = "") -> d
         return fallback
 
     return _fallback_article(item, site_tone)
+
+
+
+def test_openai_connection() -> dict[str, Any]:
+    """Verifica rapidamente se a chave da OpenAI está configurada e respondendo."""
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return {"ok": False, "message": "OPENAI_API_KEY não está configurada no Railway."}
+    model = (os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": model, "input": "Responda somente: ok", "max_output_tokens": 10},
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json().get("error", {}).get("message") or resp.text
+            except Exception:
+                detail = resp.text
+            return {"ok": False, "message": f"Erro OpenAI {resp.status_code}: {detail[:220]}", "model": model}
+        return {"ok": True, "message": f"GPT conectado usando {model}.", "model": model}
+    except Exception as exc:
+        return {"ok": False, "message": f"Falha ao testar OpenAI: {str(exc)[:220]}", "model": model}

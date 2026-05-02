@@ -15,7 +15,7 @@ from .storage import delete_media, is_managed_media_url, list_media_files, local
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
-from .news_api import search_google_news, generate_article_with_openai, enrich_news_item
+from .news_api import search_google_news, generate_article_with_openai, enrich_news_item, test_openai_connection
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .wp_client import WPClient
 from .sync import sync_categories, sync_posts, localize_existing_wp_images
@@ -765,6 +765,17 @@ def dashboard():
 
 
 
+@admin_bp.post("/materias-api/test-openai")
+@login_required
+def materias_api_test_openai():
+    r = _require_admin()
+    if r:
+        return r
+    status = test_openai_connection()
+    flash(status.get("message") or ("GPT conectado." if status.get("ok") else "GPT indisponível."), "success" if status.get("ok") else "danger")
+    return redirect(url_for("admin.materias_api_page"))
+
+
 @admin_bp.route("/materias-api", methods=["GET", "POST"])
 @login_required
 def materias_api_page():
@@ -834,11 +845,21 @@ def materias_api_page():
                         content_html += f'<p><strong>Fonte:</strong> <a href="{escape(source_url, quote=True)}" target="_blank" rel="noopener nofollow">{escape(source_name)}</a>.</p>'
 
                     featured_image = (item.get("image") or "").strip()
+                    image_note = ""
                     if featured_image:
                         try:
-                            featured_image = download_external_image(featured_image, folder="materias-api/featured") or featured_image
-                        except Exception:
-                            pass
+                            downloaded_image = download_external_image(featured_image, folder="materias-api/featured")
+                            if downloaded_image:
+                                featured_image = downloaded_image
+                                image_note = "imagem salva"
+                            else:
+                                image_note = "imagem não baixada"
+                        except Exception as img_exc:
+                            image_note = f"imagem não baixada: {str(img_exc)[:80]}"
+                            featured_image = ""
+
+                    if article.get("erro_ia"):
+                        content_html += f'<p><em>Observação interna: GPT não respondeu e foi usado rascunho básico. Erro: {escape(str(article.get("erro_ia"))[:180])}</em></p>'
 
                     post = Post(
                         source="local",

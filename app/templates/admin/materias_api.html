@@ -7,13 +7,18 @@
   <div class="panel-head">
     <div>
       <h2>Buscar matérias</h2>
-      <p>Pesquise por tema e, se quiser, filtre por uma data específica. O sistema tenta Google News RSS e usa Bing News RSS como fallback, já buscando imagem destacada quando a fonte permitir.</p>
+      <p>Pesquise por tema e, se quiser, filtre por uma data específica. O sistema tenta Google News RSS/Bing RSS, abre a fonte original e busca a foto real via og:image/twitter:image quando o portal permitir.</p>
     </div>
-    {% if openai_enabled %}
-      <span class="badge text-bg-success">GPT ativo</span>
-    {% else %}
-      <span class="badge text-bg-secondary">Sem OPENAI_API_KEY</span>
-    {% endif %}
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      {% if openai_enabled %}
+        <span class="badge text-bg-success">GPT configurado</span>
+      {% else %}
+        <span class="badge text-bg-secondary">Sem OPENAI_API_KEY</span>
+      {% endif %}
+      <form method="post" action="{{ url_for('admin.materias_api_test_openai') }}" class="m-0">
+        <button class="btn btn-sm btn-outline-dark" type="submit"><i class="bi bi-plug me-1"></i>Testar GPT</button>
+      </form>
+    </div>
   </div>
 
   <form class="row g-3" method="get" action="{{ url_for('admin.materias_api_page') }}">
@@ -81,12 +86,13 @@
         </div>
         {% if item.image %}
         <div class="materia-api-thumb">
-          <img src="{{ item.image }}" alt="Imagem da matéria" loading="lazy">
+          <img src="{{ item.image }}" alt="Imagem da matéria" loading="lazy" referrerpolicy="no-referrer">
+          <span class="materia-api-image-badge">{{ 'foto da fonte' if item.image_status == 'fonte_original' else 'imagem RSS' }}</span>
         </div>
         {% else %}
         <div class="materia-api-thumb materia-api-thumb-empty">
           <i class="bi bi-image"></i>
-          <span>Sem imagem</span>
+          <span>Sem imagem real</span>
         </div>
         {% endif %}
         <div class="materia-api-body">
@@ -103,6 +109,7 @@
           </div>
           {% if item.description %}<p class="mt-2 mb-0">{{ item.description }}</p>{% endif %}
           {% if item.source_url %}<div class="small text-muted mt-2">Site de origem: {{ item.source_url }}</div>{% endif %}
+          {% if item.image %}<div class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>Imagem encontrada; ao gerar/publicar ela será salva no armazenamento do site/R2.</div>{% else %}<div class="small text-warning mt-1"><i class="bi bi-exclamation-triangle me-1"></i>Não foi possível extrair foto real desta fonte. O post será criado sem imagem destacada.</div>{% endif %}
         </div>
       </article>
       {% endfor %}
@@ -126,9 +133,10 @@
     .materias-api-list{display:grid;gap:1rem;}
     .materia-api-card{display:grid;grid-template-columns:140px 180px 1fr;gap:1rem;border:1px solid var(--bs-border-color);border-radius:18px;padding:1rem;background:#fff;}
     .materia-api-check{border-right:1px solid var(--bs-border-color);padding-right:1rem;display:flex;align-items:flex-start;gap:.5rem;}
-    .materia-api-thumb{width:180px;min-height:108px;border-radius:14px;overflow:hidden;background:#f2f4f7;display:flex;align-items:center;justify-content:center;color:#667085;flex-direction:column;font-size:.85rem;}
+    .materia-api-thumb{width:180px;min-height:108px;border-radius:14px;overflow:hidden;background:#f2f4f7;display:flex;align-items:center;justify-content:center;color:#667085;flex-direction:column;font-size:.85rem;position:relative;}
     .materia-api-thumb img{width:100%;height:120px;object-fit:cover;display:block;}
     .materia-api-thumb i{font-size:1.6rem;margin-bottom:.25rem;}
+    .materia-api-image-badge{position:absolute;left:.45rem;bottom:.45rem;background:rgba(0,0,0,.68);color:#fff;border-radius:999px;padding:.15rem .5rem;font-size:.72rem;}
     .materia-api-body h3{font-size:1.05rem;margin:0 0 .35rem;font-weight:800;}
     .materia-api-body p{color:#475467;line-height:1.55;}
     @media (max-width: 992px){.materia-api-card{grid-template-columns:1fr}.materia-api-check{border-right:0;border-bottom:1px solid var(--bs-border-color);padding-bottom:.75rem}.materia-api-thumb{width:100%;}.materia-api-thumb img{height:190px;}}

@@ -59,8 +59,20 @@ def download_external_image(source_url: str | None, folder: str = "wp") -> str |
     if is_managed_media_url(source_url):
         return normalize_media_url(source_url)
 
-    response = requests.get(source_url, timeout=25, stream=True)
+    response = requests.get(
+        source_url,
+        timeout=30,
+        stream=True,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Referer": "https://www.google.com/",
+        },
+    )
     response.raise_for_status()
+    content_type = (response.headers.get("Content-Type") or "").lower()
+    if content_type and not content_type.startswith("image/") and "octet-stream" not in content_type:
+        return None
 
     ext = _guess_extension(source_url, response.headers.get("Content-Type", ""))
     filename = f"{uuid.uuid4().hex}{ext}"
