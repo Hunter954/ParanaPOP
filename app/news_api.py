@@ -70,43 +70,117 @@ def _safe_domain(url: str) -> str:
         return ""
 
 
-def _extract_first_image_from_html(markup: str) -> str:
+def _absolute_url(base_url: str, maybe_url: str) -> str:
+    maybe_url = html.unescape((maybe_url or "").strip())
+    if not maybe_url:
+        return ""
+    if maybe_url.startswith("http://") or maybe_url.startswith("https://"):
+        return maybe_url
+    if maybe_url.startswith("//"):
+        return "https:" + maybe_url
+    try:
+        from urllib.parse import urljoin
+        return urljoin(base_url, maybe_url)
+    except Exception:
+        return maybe_url
+
+
+def _extract_meta_value(markup: str, names: list[str]) -> str:
+    for name in names:
+        patterns = [
+            rf'<meta[^>]+property=["\']{re.escape(name)}["\'][^>]+content=["\']([^"\']+)',
+            rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']{re.escape(name)}["\']',
+            rf'<meta[^>]+name=["\']{re.escape(name)}["\'][^>]+content=["\']([^"\']+)',
+            rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']{re.escape(name)}["\']',
+        ]
+        for pattern in patterns:
+            m = re.search(pattern, markup or "", flags=re.I)
+            if m:
+                return _clean_text(m.group(1))
+    return ""
+
+
+def _extract_first_image_from_html(markup: str, base_url: str = "") -> str:
     patterns = [
-        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
-        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
-        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)',
-        r'<img[^>]+src=["\']([^"\']+)["\']',
+        r'<meta[^>]+property=["\']og:image(?::secure_url)?["\'][^>]+content=["\']([^"\']+)',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image(?::secure_url)?["\']',
+        r'<meta[^>]+name=["\']twitter:image(?::src)?["\'][^>]+content=["\']([^"\']+)',
+        r'<link[^>]+rel=["\']image_src["\'][^>]+href=["\']([^"\']+)',
+        r'<img[^>]+(?:data-src|src)=["\']([^"\']+)["\']',
     ]
     for pattern in patterns:
         m = re.search(pattern, markup or "", flags=re.I)
         if m:
-            image = html.unescape(m.group(1).strip())
+            image = _absolute_url(base_url, m.group(1))
             if image.startswith("http://") or image.startswith("https://"):
                 return image
     return ""
 
 
-def _fetch_page_metadata(url: str) -> dict[str, str]:
-    if not url or "news.google." in urlparse(url).netloc.lower():
-        return {"resolved_url": url or "", "image": "", "description": ""}
+def _extract_readable_text(markup: str) -> str:
+    text = markup or ""
+    text = re.sub(r"<script[\s\S]*?</script>", " ", text, flags=re.I)
+    text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
+    paragraphs = re.findall(r"<p[^>]*>(.*?)</p>", text, flags=re.I | re.S)
+    clean_parts = []
+    for paragraph in paragraphs:
+        part = _clean_text(paragraph)
+        lower = part.lower()
+        if len(part) < 45:
+            continue
+        if any(skip in lower for skip in ["cookies", "newsletter", "assine", "publicidade", "continua após", "todos os direitos"]):
+            continue
+        clean_parts.append(part)
+        if sum(len(x) for x in clean_parts) >= 5500:
+            break
+    if not clean_parts:
+        text = _clean_text(text)
+        return text[:5500]
+    return "\n".join(clean_parts)[:5500]
+
+
+def _fetch_page_metadata(url: str, include_text: bool = False) -> dict[str, str]:
+    if not url:
+        return {"resolved_url": "", "image": "", "description": "", "article_text": ""}
     try:
-        resp = requests.get(url, headers=REQUEST_HEADERS, timeout=12, allow_redirects=True)
+        headers = dict(REQUEST_HEADERS)
+        headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        resp = requests.get(url, headers=headers, timeout=18, allow_redirects=True)
         content_type = (resp.headers.get("Content-Type") or "").lower()
-        if resp.status_code >= 400 or "text/html" not in content_type:
-            return {"resolved_url": resp.url or url, "image": "", "description": ""}
-        text = resp.text[:300000]
-        desc = ""
-        for pattern in [
-            r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)',
-            r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)',
-        ]:
-            m = re.search(pattern, text, flags=re.I)
-            if m:
-                desc = _clean_text(m.group(1))
-                break
-        return {"resolved_url": resp.url or url, "image": _extract_first_image_from_html(text), "description": desc}
+        resolved_url = resp.url or url
+        if resp.status_code >= 400 or ("text/html" not in content_type and "application/xhtml" not in content_type):
+            return {"resolved_url": resolved_url, "image": "", "description": "", "article_text": ""}
+        text = resp.text[:600000]
+        desc = _extract_meta_value(text, ["description", "og:description", "twitter:description"])
+        title = _extract_meta_value(text, ["og:title", "twitter:title"])
+        article_text = _extract_readable_text(text) if include_text else ""
+        return {
+            "resolved_url": resolved_url,
+            "image": _extract_first_image_from_html(text, resolved_url),
+            "description": desc,
+            "page_title": title,
+            "article_text": article_text,
+        }
     except Exception:
-        return {"resolved_url": url or "", "image": "", "description": ""}
+        return {"resolved_url": url or "", "image": "", "description": "", "article_text": ""}
+
+
+def _extract_rss_image(item: ET.Element) -> str:
+    # Funciona para Bing/Google e feeds com media:thumbnail, media:content, enclosure etc.
+    for child in item.iter():
+        tag = (child.tag or "").lower()
+        if tag.endswith("}thumbnail") or tag.endswith("}content") or tag.endswith("thumbnail") or tag.endswith("content"):
+            url = child.attrib.get("url") or child.attrib.get("href") or ""
+            medium = (child.attrib.get("medium") or "").lower()
+            if url and (not medium or medium == "image"):
+                return html.unescape(url.strip())
+        if tag.endswith("}enclosure") or tag.endswith("enclosure"):
+            url = child.attrib.get("url") or ""
+            typ = (child.attrib.get("type") or "").lower()
+            if url and (typ.startswith("image/") or not typ):
+                return html.unescape(url.strip())
+    description = _item_text(item, "description") or _item_text(item, "summary") or ""
+    return _extract_first_image_from_html(description)
 
 
 def _get_rss(url: str, provider: str) -> bytes:
@@ -177,15 +251,17 @@ def _parse_rss_items(payload: bytes, provider: str, limit: int, enrich_images: b
             "url": link,
             "description": description,
             "published_at": pub_date,
-            "image": "",
+            "image": _extract_rss_image(item),
             "provider": provider,
         }
         if enrich_images:
             meta = _fetch_page_metadata(link)
             data["url"] = meta.get("resolved_url") or link
-            data["image"] = meta.get("image") or ""
+            data["image"] = data.get("image") or meta.get("image") or ""
             if meta.get("description"):
                 data["description"] = meta["description"]
+            if meta.get("page_title") and len(data["title"]) < 8:
+                data["title"] = meta["page_title"]
         items.append(data)
         if len(items) >= limit:
             break
@@ -250,14 +326,16 @@ def search_google_news(query: str, day: str | None = None, limit: int = 15, enri
                     continue
                 seen.add(key)
                 all_items.append(item)
-                if len(all_items) >= limit:
-                    return all_items
         except Exception as exc:
             errors.append(str(exc)[:180])
             continue
 
     if all_items:
-        return all_items
+        # Depois que todos os provedores responderem, prioriza itens com imagem,
+        # porque o Google News RSS muitas vezes não entrega thumb, enquanto Bing/feeds sim.
+        provider_rank = {"Google News RSS": 0, "Google News RSS alternativo": 1, "Bing News RSS": 2}
+        all_items.sort(key=lambda it: (0 if it.get("image") else 1, provider_rank.get(it.get("provider") or "", 9)))
+        return all_items[:limit]
     raise NewsSearchError("Nenhum provedor respondeu. " + " | ".join(errors[:3]))
 
 
@@ -306,6 +384,27 @@ def _fallback_article(item: dict[str, Any], site_tone: str = "") -> dict[str, An
     }
 
 
+def enrich_news_item(item: dict[str, Any], include_text: bool = True) -> dict[str, Any]:
+    """Completa URL final, imagem, descrição e um recorte textual para orientar a IA.
+
+    O recorte não é salvo nem copiado integralmente; ele serve apenas como base de fatos
+    para a geração de uma matéria original.
+    """
+    enriched = dict(item or {})
+    meta = _fetch_page_metadata((enriched.get("url") or "").strip(), include_text=include_text)
+    if meta.get("resolved_url"):
+        enriched["url"] = meta["resolved_url"]
+    if not enriched.get("image") and meta.get("image"):
+        enriched["image"] = meta["image"]
+    if meta.get("description"):
+        enriched["description"] = meta["description"]
+    if meta.get("article_text"):
+        enriched["article_text"] = meta["article_text"]
+    if meta.get("page_title") and len((enriched.get("title") or "").strip()) < 8:
+        enriched["title"] = meta["page_title"]
+    return enriched
+
+
 def generate_article_with_openai(item: dict[str, Any], site_tone: str = "") -> dict[str, Any]:
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
@@ -315,15 +414,18 @@ def generate_article_with_openai(item: dict[str, Any], site_tone: str = "") -> d
     source_payload = {
         "titulo_encontrado": item.get("title") or "",
         "resumo_descricao": item.get("description") or "",
+        "recorte_textual_da_fonte_para_apuracao": (item.get("article_text") or "")[:5500],
         "fonte": item.get("source") or "",
         "url": item.get("url") or "",
         "data_publicacao": item.get("published_at") or "",
         "tom_do_site": site_tone or "Portal regional brasileiro, linguagem jornalística clara, objetiva e informativa.",
     }
     prompt = (
-        "Crie uma matéria jornalística ORIGINAL em português do Brasil, sem copiar frases da fonte. "
-        "Use apenas os fatos presentes no payload. Não invente dados, falas, números ou contexto. "
-        "Quando faltar informação, escreva de forma cautelosa e deixe claro que é um rascunho para revisão. "
+        "Crie uma matéria jornalística ORIGINAL em português do Brasil. Não copie trechos, frases ou a estrutura da fonte. "
+        "Use o recorte textual apenas para entender os fatos principais e reescreva com linguagem própria. "
+        "A matéria deve ser mais completa do que um resumo curto, com 5 a 8 parágrafos, lead forte, contexto e fechamento. "
+        "Não invente dados, falas, números, acusações ou informações não presentes no payload. "
+        "Quando faltar informação, use formulações cautelosas e evite afirmar como fato. "
         "Inclua atribuição e link da fonte no final. Retorne somente JSON válido com as chaves: "
         "titulo, subtitulo, resumo, categoria, tags, corpo_html, fonte_nome, fonte_url.\n\n"
         f"PAYLOAD:\n{json.dumps(source_payload, ensure_ascii=False)}"
@@ -340,7 +442,7 @@ def generate_article_with_openai(item: dict[str, Any], site_tone: str = "") -> d
                 "model": model,
                 "input": prompt,
                 "temperature": 0.35,
-                "max_output_tokens": 1800,
+                "max_output_tokens": 3200,
             },
             timeout=45,
         )

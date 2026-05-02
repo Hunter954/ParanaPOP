@@ -15,7 +15,7 @@ from .storage import delete_media, is_managed_media_url, list_media_files, local
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
-from .news_api import search_google_news, generate_article_with_openai
+from .news_api import search_google_news, generate_article_with_openai, enrich_news_item
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .wp_client import WPClient
 from .sync import sync_categories, sync_posts, localize_existing_wp_images
@@ -823,6 +823,7 @@ def materias_api_page():
                     continue
                 item = available_items[idx]
                 try:
+                    item = enrich_news_item(item, include_text=True)
                     article = generate_article_with_openai(item, site_tone=site_tone)
                     title = (article.get("titulo") or item.get("title") or "Matéria").strip()
                     content_html = (article.get("corpo_html") or "").strip()
@@ -874,7 +875,7 @@ def materias_api_page():
         except Exception:
             limit = 15
         try:
-            results = search_google_news(query, day=selected_date or None, limit=limit, enrich_images=False)
+            results = search_google_news(query, day=selected_date or None, limit=limit, enrich_images=True)
             if not results:
                 flash("Nenhum resultado encontrado para essa busca.", "warning")
         except Exception as exc:

@@ -7,7 +7,7 @@
   <div class="panel-head">
     <div>
       <h2>Buscar matérias</h2>
-      <p>Pesquise por tema e, se quiser, filtre por uma data específica. O sistema tenta Google News RSS e usa Bing News RSS como fallback quando o Google limita a requisição.</p>
+      <p>Pesquise por tema e, se quiser, filtre por uma data específica. O sistema tenta Google News RSS e usa Bing News RSS como fallback, já buscando imagem destacada quando a fonte permitir.</p>
     </div>
     {% if openai_enabled %}
       <span class="badge text-bg-success">GPT ativo</span>
@@ -36,7 +36,7 @@
   </form>
 
   <div class="alert alert-info mt-4 mb-0">
-    <strong>Importante:</strong> o sistema não copia texto integral de outros portais. Ele cria um rascunho original, com link de fonte, para você revisar antes de publicar.
+    <strong>Importante:</strong> o sistema não copia texto integral de outros portais. Ele usa título, resumo e um recorte da fonte como base de apuração para criar uma matéria original com GPT, linkando a fonte. A imagem é baixada para o seu armazenamento quando possível.
   </div>
 </section>
 
@@ -79,6 +79,16 @@
           <input class="form-check-input" type="checkbox" name="selected_items" value="{{ loop.index0 }}" id="mat-api-{{ loop.index0 }}">
           <label class="form-check-label" for="mat-api-{{ loop.index0 }}">Selecionar</label>
         </div>
+        {% if item.image %}
+        <div class="materia-api-thumb">
+          <img src="{{ item.image }}" alt="Imagem da matéria" loading="lazy">
+        </div>
+        {% else %}
+        <div class="materia-api-thumb materia-api-thumb-empty">
+          <i class="bi bi-image"></i>
+          <span>Sem imagem</span>
+        </div>
+        {% endif %}
         <div class="materia-api-body">
           <div class="d-flex justify-content-between gap-3 flex-wrap">
             <div>
@@ -114,10 +124,13 @@
   {{ super() }}
   <style>
     .materias-api-list{display:grid;gap:1rem;}
-    .materia-api-card{display:grid;grid-template-columns:150px 1fr;gap:1rem;border:1px solid var(--bs-border-color);border-radius:18px;padding:1rem;background:#fff;}
+    .materia-api-card{display:grid;grid-template-columns:140px 180px 1fr;gap:1rem;border:1px solid var(--bs-border-color);border-radius:18px;padding:1rem;background:#fff;}
     .materia-api-check{border-right:1px solid var(--bs-border-color);padding-right:1rem;display:flex;align-items:flex-start;gap:.5rem;}
+    .materia-api-thumb{width:180px;min-height:108px;border-radius:14px;overflow:hidden;background:#f2f4f7;display:flex;align-items:center;justify-content:center;color:#667085;flex-direction:column;font-size:.85rem;}
+    .materia-api-thumb img{width:100%;height:120px;object-fit:cover;display:block;}
+    .materia-api-thumb i{font-size:1.6rem;margin-bottom:.25rem;}
     .materia-api-body h3{font-size:1.05rem;margin:0 0 .35rem;font-weight:800;}
     .materia-api-body p{color:#475467;line-height:1.55;}
-    @media (max-width: 768px){.materia-api-card{grid-template-columns:1fr}.materia-api-check{border-right:0;border-bottom:1px solid var(--bs-border-color);padding-bottom:.75rem}}
+    @media (max-width: 992px){.materia-api-card{grid-template-columns:1fr}.materia-api-check{border-right:0;border-bottom:1px solid var(--bs-border-color);padding-bottom:.75rem}.materia-api-thumb{width:100%;}.materia-api-thumb img{height:190px;}}
   </style>
 {% endblock %}
