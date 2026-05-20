@@ -2,7 +2,7 @@ import os
 import threading, time
 from pathlib import Path
 from sqlalchemy import inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from flask import Flask
 from flask_login import LoginManager
 from dotenv import load_dotenv
@@ -115,6 +115,64 @@ def _ensure_defaults():
             _commit_or_rollback()
 
 
+def _bootstrap_database(app: Flask) -> bool:
+    """Run lightweight startup DB setup without killing the web process.
+
+    Railway can start the web service while the Postgres private endpoint is
+    still becoming reachable. Previously, db.create_all() ran during app import
+    and any temporary DB timeout killed the Gunicorn worker, causing Cloudflare
+    502. This function retries briefly and, by default, lets the app boot even
+    if Postgres is still unavailable.
+    """
+    retries = max(1, int(app.config.get("DB_BOOTSTRAP_RETRIES", 5)))
+    delay = float(app.config.get("DB_BOOTSTRAP_RETRY_DELAY", 3))
+    required = bool(app.config.get("DB_BOOTSTRAP_REQUIRED", False))
+
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            db.create_all()
+            _ensure_schema_updates()
+            _ensure_defaults()
+
+            admin_email = (os.getenv("ADMIN_EMAIL") or "admin@admin.com").strip().lower()
+            admin_password = os.getenv("ADMIN_PASSWORD") or "senha123"
+
+            u = User.query.filter_by(email=admin_email).first()
+            if not u:
+                u = User(email=admin_email, is_admin=True, is_active=True)
+                u.set_password(admin_password)
+                db.session.add(u)
+            else:
+                u.is_admin = True
+                u.is_active = True
+                if not u.password_hash:
+                    u.set_password(admin_password)
+            if not _commit_or_rollback():
+                u = User.query.filter_by(email=admin_email).first()
+                if u:
+                    u.is_admin = True
+                    u.is_active = True
+                    if not u.password_hash:
+                        u.set_password(admin_password)
+                    _commit_or_rollback()
+            print("ADMIN OK:", admin_email)
+            return True
+        except (OperationalError, SQLAlchemyError) as exc:
+            db.session.rollback()
+            last_error = exc
+            print(f"DB BOOTSTRAP WARNING: attempt {attempt}/{retries} failed: {exc}")
+            if attempt < retries:
+                time.sleep(delay)
+
+    message = f"DB BOOTSTRAP FAILED after {retries} attempt(s): {last_error}"
+    if required:
+        raise RuntimeError(message) from last_error
+    print(message)
+    print("Continuing web boot. Fix DATABASE_URL/Postgres connectivity in Railway if pages still fail.")
+    return False
+
+
 def _auto_sync_loop(app: Flask):
     with app.app_context():
         client = WPClient(app.config["WP_BASE_URL"])
@@ -144,32 +202,7 @@ def create_app():
     app.jinja_env.globals["now"] = datetime.now
 
     with app.app_context():
-        db.create_all()
-        _ensure_schema_updates()
-        _ensure_defaults()
-
-        admin_email = (os.getenv("ADMIN_EMAIL") or "admin@admin.com").strip().lower()
-        admin_password = os.getenv("ADMIN_PASSWORD") or "senha123"
-
-        u = User.query.filter_by(email=admin_email).first()
-        if not u:
-            u = User(email=admin_email, is_admin=True, is_active=True)
-            u.set_password(admin_password)
-            db.session.add(u)
-        else:
-            u.is_admin = True
-            u.is_active = True
-            if not u.password_hash:
-                u.set_password(admin_password)
-        if not _commit_or_rollback():
-            u = User.query.filter_by(email=admin_email).first()
-            if u:
-                u.is_admin = True
-                u.is_active = True
-                if not u.password_hash:
-                    u.set_password(admin_password)
-                _commit_or_rollback()
-        print("ADMIN OK:", admin_email)
+        _bootstrap_database(app)
 
     if app.config.get("AUTO_SYNC_INTERVAL", 0) and app.config["AUTO_SYNC_INTERVAL"] > 0:
         t = threading.Thread(target=_auto_sync_loop, args=(app,), daemon=True)
