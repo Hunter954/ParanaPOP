@@ -6,6 +6,7 @@ import json
 
 from flask import Blueprint, render_template, abort, request, current_app, jsonify, make_response, url_for
 from sqlalchemy import desc, func, or_
+from sqlalchemy.exc import IntegrityError
 
 from .models import db, Post, Category, AdSlot, SiteSetting, PageView, AnalyticsSession
 from .sync import download_external_image
@@ -295,6 +296,22 @@ def _track_view(post_id=None):
         db.session.rollback()
 
 
+def _apply_analytics_event(session: AnalyticsSession, event: str, duration: int, referrer: str) -> None:
+    """Apply analytics event changes to an existing session safely."""
+    if event == "pageview":
+        session.pageviews = max(1, (session.pageviews or 0) + 1)
+        session.is_bounce = session.pageviews <= 1
+
+    if event == "heartbeat":
+        session.duration_seconds = max(session.duration_seconds or 0, duration)
+        if duration >= 10 or (session.pageviews or 0) > 1:
+            session.is_bounce = False
+
+    session.updated_at = datetime.utcnow()
+    if not session.referrer and referrer:
+        session.referrer = referrer
+
+
 @site_bp.post("/analytics/collect")
 def analytics_collect():
     payload = request.get_json(silent=True) or {}
@@ -306,12 +323,16 @@ def analytics_collect():
     event = (payload.get("event") or "pageview").strip()
     page_path = (payload.get("page_path") or request.path or "/").strip()[:800]
     referrer = (payload.get("referrer") or request.referrer or "").strip()[:800]
-    duration = max(0, min(int(payload.get("duration_seconds") or 0), 7200))
+    try:
+        duration = max(0, min(int(payload.get("duration_seconds") or 0), 7200))
+    except (TypeError, ValueError):
+        duration = 0
     is_new_user = bool(payload.get("is_new_user"))
 
     try:
         session = AnalyticsSession.query.filter_by(session_id=session_id).first()
         now = datetime.utcnow()
+
         if not session:
             session = AnalyticsSession(
                 session_id=session_id,
@@ -328,20 +349,28 @@ def analytics_collect():
             )
             db.session.add(session)
         else:
-            if event == "pageview":
-                session.pageviews = max(1, (session.pageviews or 0) + 1)
-                session.is_bounce = session.pageviews <= 1
-            if event == "heartbeat":
-                session.duration_seconds = max(session.duration_seconds or 0, duration)
-                if duration >= 10 or (session.pageviews or 0) > 1:
-                    session.is_bounce = False
-            session.updated_at = now
-            if not session.referrer and referrer:
-                session.referrer = referrer
+            _apply_analytics_event(session, event, duration, referrer)
+
         db.session.commit()
         return jsonify({"ok": True})
+
+    except IntegrityError:
+        # Another Gunicorn thread/worker may have inserted the same session_id
+        # between SELECT and INSERT. Treat this as success and update that row.
+        db.session.rollback()
+        try:
+            session = AnalyticsSession.query.filter_by(session_id=session_id).first()
+            if session:
+                _apply_analytics_event(session, event, duration, referrer)
+                db.session.commit()
+            return jsonify({"ok": True})
+        except Exception:
+            db.session.rollback()
+            return jsonify({"ok": True})
+
     except Exception:
         db.session.rollback()
+        current_app.logger.exception("analytics_collect failed")
         return jsonify({"ok": False}), 500
 
 

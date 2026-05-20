@@ -2,6 +2,7 @@ import os
 import threading, time
 from pathlib import Path
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 from flask import Flask
 from flask_login import LoginManager
 from dotenv import load_dotenv
@@ -60,6 +61,16 @@ def _ensure_schema_updates():
                     conn.execute(text(stmt))
 
 
+def _commit_or_rollback() -> bool:
+    try:
+        db.session.commit()
+        return True
+    except IntegrityError:
+        # Handles startup race conditions when multiple workers/threads boot together.
+        db.session.rollback()
+        return False
+
+
 def _ensure_defaults():
     defaults = [
         ("header_top", "Publicidade (Topo - faixa)"),
@@ -72,6 +83,7 @@ def _ensure_defaults():
     for key, name in defaults:
         if not AdSlot.query.filter_by(key=key).first():
             db.session.add(AdSlot(key=key, name=name, html="", is_active=True))
+            _commit_or_rollback()
 
     for key, value in [
         ("live_embed_html", ""),
@@ -100,8 +112,7 @@ def _ensure_defaults():
     ]:
         if not SiteSetting.query.filter_by(key=key).first():
             db.session.add(SiteSetting(key=key, value=value))
-
-    db.session.commit()
+            _commit_or_rollback()
 
 
 def _auto_sync_loop(app: Flask):
@@ -137,8 +148,8 @@ def create_app():
         _ensure_schema_updates()
         _ensure_defaults()
 
-        admin_email = "admin@admin.com"
-        admin_password = "senha123"
+        admin_email = (os.getenv("ADMIN_EMAIL") or "admin@admin.com").strip().lower()
+        admin_password = os.getenv("ADMIN_PASSWORD") or "senha123"
 
         u = User.query.filter_by(email=admin_email).first()
         if not u:
@@ -150,7 +161,14 @@ def create_app():
             u.is_active = True
             if not u.password_hash:
                 u.set_password(admin_password)
-        db.session.commit()
+        if not _commit_or_rollback():
+            u = User.query.filter_by(email=admin_email).first()
+            if u:
+                u.is_admin = True
+                u.is_active = True
+                if not u.password_hash:
+                    u.set_password(admin_password)
+                _commit_or_rollback()
         print("ADMIN OK:", admin_email)
 
     if app.config.get("AUTO_SYNC_INTERVAL", 0) and app.config["AUTO_SYNC_INTERVAL"] > 0:

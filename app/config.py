@@ -1,9 +1,26 @@
 import os
 
+
+def _database_url() -> str:
+    """Return a SQLAlchemy-compatible database URL.
+
+    Some hosts expose postgres:// while SQLAlchemy expects postgresql://.
+    Railway normally uses postgresql://, but this keeps deploys safer.
+    """
+    url = os.getenv("DATABASE_URL", "sqlite:///dev.db")
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret")
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///dev.db")
+    SQLALCHEMY_DATABASE_URI = _database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
 
     WP_BASE_URL = os.getenv("WP_BASE_URL", "https://paranapop.com.br").rstrip("/")
     WP_PER_PAGE = int(os.getenv("WP_PER_PAGE", "20"))
