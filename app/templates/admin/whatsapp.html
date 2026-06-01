@@ -1,0 +1,159 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}WhatsApp{% endblock %}
+{% block page_title %}WhatsApp automático{% endblock %}
+{% block page_subtitle %}Conecte o serviço Baileys externo, escolha o grupo e envie artes automaticamente quando uma matéria nova for publicada.{% endblock %}
+
+{% block admin_content %}
+<div class="admin-grid-2">
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h2>Conexão do serviço</h2>
+        <p>Este painel controla o serviço WhatsApp separado. Depois vamos subir o Baileys em outro serviço/repositório no Railway.</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.whatsapp_save_settings') }}" class="vstack gap-3">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_enabled" name="whatsapp_enabled" {% if cfg.enabled %}checked{% endif %}>
+        <label class="form-check-label" for="whatsapp_enabled"><strong>Ativar integração WhatsApp</strong></label>
+        <div class="form-help">Se desligado, nenhuma matéria será enviada automaticamente.</div>
+      </div>
+
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_auto_send" name="whatsapp_auto_send" {% if cfg.auto_send %}checked{% endif %}>
+        <label class="form-check-label" for="whatsapp_auto_send"><strong>Enviar automaticamente ao publicar matéria nova</strong></label>
+        <div class="form-help">O envio automático acontece apenas na primeira publicação. Edições posteriores não reenviam automaticamente.</div>
+      </div>
+
+      <div>
+        <label class="form-label">URL do serviço WhatsApp</label>
+        <input type="url" class="form-control" name="whatsapp_service_url" value="{{ cfg.service_url }}" placeholder="https://seu-servico-whatsapp.up.railway.app ou URL interna Railway">
+        <div class="form-help mt-2">Exemplo Railway interno: <code>http://paranapop-whatsapp.railway.internal:3001</code>.</div>
+      </div>
+
+      <div>
+        <label class="form-label">Grupo padrão</label>
+        <div class="input-group">
+          <input type="text" class="form-control" name="whatsapp_default_group_id" id="whatsappDefaultGroupId" value="{{ cfg.default_group_id }}" placeholder="1203630xxxx@g.us">
+          <input type="text" class="form-control" name="whatsapp_default_group_name" id="whatsappDefaultGroupName" value="{{ cfg.default_group_name }}" placeholder="Nome do grupo">
+        </div>
+        <div class="form-help mt-2">Você pode selecionar na lista abaixo quando o serviço estiver conectado ou preencher manualmente.</div>
+      </div>
+
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-2">Formatos enviados</div>
+        <div class="d-flex gap-3 flex-wrap">
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="whatsapp_send_feed" {% if cfg.send_feed %}checked{% endif %}> Feed</label>
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="whatsapp_send_stories" {% if cfg.send_stories %}checked{% endif %}> Stories</label>
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="whatsapp_send_facebook" {% if cfg.send_facebook %}checked{% endif %}> Facebook</label>
+        </div>
+        <div class="form-help mt-2">O serviço receberá 3 imagens separadas e mais um texto com título, resumo e sugestão de descrição.</div>
+      </div>
+
+      <div>
+        <label class="form-label">Mensagem/descrição enviada junto</label>
+        <textarea class="form-control" name="whatsapp_caption_template" rows="9">{{ cfg.caption_template }}</textarea>
+        <div class="form-help mt-2">Variáveis aceitas: <code>{{ '{{titulo}}' }}</code>, <code>{{ '{{resumo}}' }}</code>, <code>{{ '{{url}}' }}</code>, <code>{{ '{{categoria}}' }}</code>.</div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-dark" type="submit"><i class="bi bi-save me-1"></i>Salvar configurações</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.whatsapp_page') }}"><i class="bi bi-arrow-clockwise me-1"></i>Atualizar status/grupos</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h2>Status e teste</h2>
+        <p>Quando o serviço Node/Baileys estiver online, o status, QR Code e grupos aparecem aqui.</p>
+      </div>
+    </div>
+
+    <div class="vstack gap-3">
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-1">Status</div>
+        {% if status %}
+          {% if status.ok %}
+            {% set st = status.data or {} %}
+            <div><strong>{{ st.status or st.state or status.message }}</strong></div>
+            {% if st.phone %}<div class="text-muted small">Número: {{ st.phone }}</div>{% endif %}
+            {% if st.qr %}
+              <div class="alert alert-warning mt-3 mb-0">QR Code aguardando leitura no serviço WhatsApp. No serviço novo, vamos retornar uma imagem/base64 aqui.</div>
+            {% endif %}
+          {% else %}
+            <div class="text-danger"><strong>{{ status.message }}</strong></div>
+          {% endif %}
+        {% else %}
+          <div class="text-muted"><strong>Informe a URL do serviço para consultar.</strong></div>
+        {% endif %}
+      </div>
+
+      <form method="post" action="{{ url_for('admin.whatsapp_test') }}" class="preview-box" style="padding:14px 16px;">
+        <label class="form-label">Enviar mensagem teste</label>
+        <textarea class="form-control mb-2" name="test_message" rows="3">Teste de integração do painel Paraná POP ✅</textarea>
+        <button class="btn btn-outline-dark" type="submit"><i class="bi bi-send me-1"></i>Enviar teste</button>
+      </form>
+
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-2">Contrato esperado do serviço externo</div>
+        <ul class="mb-0 small">
+          <li><code>GET /status</code> para conexão e QR Code.</li>
+          <li><code>GET /groups</code> para listar grupos.</li>
+          <li><code>POST /send-message</code> para teste.</li>
+          <li><code>POST /send-news</code> para enviar as 3 artes + descrição.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+
+<section class="panel-card mt-4">
+  <div class="panel-head">
+    <div>
+      <h2>Grupos encontrados</h2>
+      <p>Selecione o grupo que receberá as artes da matéria nova.</p>
+    </div>
+  </div>
+
+  {% if groups and groups.ok and groups.data and groups.data.groups %}
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Grupo</th><th>ID</th><th class="text-end">Ação</th></tr></thead>
+        <tbody>
+          {% for group in groups.data.groups %}
+          <tr>
+            <td><strong>{{ group.name or group.subject or 'Grupo sem nome' }}</strong>{% if group.participants %}<div class="small text-muted">{{ group.participants }} participantes</div>{% endif %}</td>
+            <td><code>{{ group.id }}</code></td>
+            <td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary js-select-group" data-id="{{ group.id }}" data-name="{{ group.name or group.subject or '' }}">Selecionar</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% elif groups and not groups.ok %}
+    <div class="alert alert-warning mb-0">{{ groups.message }}</div>
+  {% else %}
+    <div class="alert alert-secondary mb-0">Nenhum grupo carregado ainda. Salve a URL do serviço, conecte o WhatsApp dedicado e atualize esta página.</div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('.js-select-group').forEach(function (button) {
+        button.addEventListener('click', function () {
+          const id = button.getAttribute('data-id') || '';
+          const name = button.getAttribute('data-name') || '';
+          document.getElementById('whatsappDefaultGroupId').value = id;
+          document.getElementById('whatsappDefaultGroupName').value = name;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      });
+    });
+  </script>
+{% endblock %}

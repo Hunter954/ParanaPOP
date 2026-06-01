@@ -17,6 +17,17 @@ from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, pos
 from .sync import download_external_image
 from .news_api import search_google_news, generate_article_with_openai, enrich_news_item, test_openai_connection
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
+from .social_whatsapp import (
+    DEFAULT_CAPTION_TEMPLATE,
+    auto_send_post_to_whatsapp,
+    get_whatsapp_groups,
+    get_whatsapp_status,
+    mark_post_sent,
+    save_whatsapp_settings,
+    send_post_to_whatsapp,
+    send_whatsapp_test_message,
+    whatsapp_settings,
+)
 from .wp_client import WPClient
 from .sync import sync_categories, sync_posts, localize_existing_wp_images
 from html import unescape, escape
@@ -880,11 +891,22 @@ def materias_api_page():
                     errors.append(str(exc)[:180])
 
             db.session.commit()
+            whatsapp_sent = 0
+            whatsapp_errors = []
             for post in created:
                 if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get('enabled'):
                     _broadcast_post_to_hub(post)
+                if post.published_at and post.published_at <= datetime.utcnow():
+                    wa_result = auto_send_post_to_whatsapp(post)
+                    if wa_result.ok and whatsapp_settings().get('enabled') and whatsapp_settings().get('auto_send'):
+                        whatsapp_sent += 1
+                    elif not wa_result.ok:
+                        whatsapp_errors.append(wa_result.message)
             if created:
-                flash(f"{len(created)} matéria(s) criada(s) com sucesso como {'publicadas' if publish_now else 'rascunho'}.", "success")
+                extra = f" WhatsApp: {whatsapp_sent} envio(s)." if whatsapp_sent else ""
+                flash(f"{len(created)} matéria(s) criada(s) com sucesso como {'publicadas' if publish_now else 'rascunho'}.{extra}", "success")
+            if whatsapp_errors:
+                flash("Alguns envios para WhatsApp falharam: " + " | ".join(whatsapp_errors[:3]), "warning")
             if errors:
                 flash("Algumas matérias não foram criadas: " + " | ".join(errors[:3]), "warning")
             return redirect(url_for("admin.posts_list", source="local"))
@@ -973,6 +995,13 @@ def posts_new():
         db.session.commit()
         if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get('enabled'):
             _broadcast_post_to_hub(post)
+        if post.published_at and post.published_at <= datetime.utcnow():
+            wa_result = auto_send_post_to_whatsapp(post)
+            if not wa_result.ok:
+                flash(f"Matéria criada, mas o envio para WhatsApp falhou: {wa_result.message}", "warning")
+            elif whatsapp_settings().get('enabled') and whatsapp_settings().get('auto_send'):
+                flash("Matéria criada e enviada para o WhatsApp.", "success")
+                return redirect(url_for("admin.posts_edit", post_id=post.id))
         flash("Matéria criada com sucesso.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
     return render_template("admin/post_form.html", form=form, mode="new", post=None, hub=_hub_config(), now_utc=datetime.utcnow(), **_common_admin_context("posts"))
@@ -985,6 +1014,7 @@ def posts_edit(post_id):
     if r:
         return r
     post = Post.query.get_or_404(post_id)
+    was_published = bool(post.published_at and post.published_at <= datetime.utcnow())
     form = PostAdminForm(obj=post)
     _bind_post_form_choices(form)
     if request.method == "GET":
@@ -1013,6 +1043,14 @@ def posts_edit(post_id):
             _delete_local_media(old_featured_image)
         if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get('enabled'):
             _broadcast_post_to_hub(post)
+        is_published_now = bool(post.published_at and post.published_at <= datetime.utcnow())
+        if is_published_now and not was_published:
+            wa_result = auto_send_post_to_whatsapp(post)
+            if not wa_result.ok:
+                flash(f"Matéria atualizada, mas o envio para WhatsApp falhou: {wa_result.message}", "warning")
+            elif whatsapp_settings().get('enabled') and whatsapp_settings().get('auto_send'):
+                flash("Matéria publicada e enviada para o WhatsApp.", "success")
+                return redirect(url_for("admin.posts_edit", post_id=post.id))
         flash("Matéria atualizada com sucesso.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
     return render_template("admin/post_form.html", form=form, mode="edit", post=_normalize_post_media(post), hub=_hub_config(), now_utc=datetime.utcnow(), **_common_admin_context("posts"))
@@ -1390,6 +1428,65 @@ def _extract_place_address_components(components: list[dict] | None) -> dict:
             data['neighborhood'] = long_name
     return data
 
+
+
+@admin_bp.get("/whatsapp")
+@login_required
+def whatsapp_page():
+    r = _require_admin()
+    if r:
+        return r
+    cfg = whatsapp_settings()
+    status = get_whatsapp_status() if cfg.get("service_url") else None
+    groups = get_whatsapp_groups() if cfg.get("service_url") else None
+    return render_template(
+        "admin/whatsapp.html",
+        cfg=cfg,
+        status=status,
+        groups=groups,
+        default_caption_template=DEFAULT_CAPTION_TEMPLATE,
+        **_common_admin_context("whatsapp"),
+    )
+
+
+@admin_bp.post("/whatsapp/settings")
+@login_required
+def whatsapp_save_settings():
+    r = _require_admin()
+    if r:
+        return r
+    save_whatsapp_settings(request.form)
+    db.session.commit()
+    flash("Configurações do WhatsApp salvas.", "success")
+    return redirect(url_for("admin.whatsapp_page"))
+
+
+@admin_bp.post("/whatsapp/test")
+@login_required
+def whatsapp_test():
+    r = _require_admin()
+    if r:
+        return r
+    result = send_whatsapp_test_message(request.form.get("test_message"))
+    flash(result.message, "success" if result.ok else "danger")
+    return redirect(url_for("admin.whatsapp_page"))
+
+
+@admin_bp.post("/posts/<int:post_id>/send-whatsapp")
+@login_required
+def posts_send_whatsapp(post_id):
+    r = _require_admin()
+    if r:
+        return r
+    post = Post.query.get_or_404(post_id)
+    if not post.published_at or post.published_at > datetime.utcnow():
+        flash("Publique a matéria antes de enviar para o WhatsApp.", "warning")
+        return redirect(url_for("admin.posts_edit", post_id=post.id))
+    result = send_post_to_whatsapp(post)
+    if result.ok:
+        mark_post_sent(post.id)
+    flash(result.message, "success" if result.ok else "danger")
+    return redirect(url_for("admin.posts_edit", post_id=post.id))
 
 
 @admin_bp.get("/settings")

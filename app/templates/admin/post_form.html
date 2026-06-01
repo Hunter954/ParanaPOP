@@ -74,6 +74,7 @@
       <button class="btn btn-outline-secondary" type="submit" name="post_action" value="draft">Salvar rascunho</button>
       {% if post and post.published_at and post.published_at <= now_utc %}<a class="btn btn-outline-secondary" href="{{ url_for('site.post', slug=post.slug) }}" target="_blank" rel="noopener">Visualizar</a>{% endif %}
       {% if post and hub.enabled and hub.remotes and post.published_at and post.published_at <= now_utc %}<button class="btn btn-outline-primary" type="submit" formaction="{{ url_for('admin.hub_posts_push_single', post_id=post.id) }}" formmethod="post">Enviar aos espelhos</button>{% endif %}
+      {% if post and post.published_at and post.published_at <= now_utc %}<button class="btn btn-outline-success" type="submit" formaction="{{ url_for('admin.posts_send_whatsapp', post_id=post.id) }}" formmethod="post"><i class="bi bi-whatsapp me-1"></i>Gerar e enviar WhatsApp</button>{% endif %}
     </div>
   </section>
 </form>

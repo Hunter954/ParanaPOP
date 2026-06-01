@@ -109,6 +109,16 @@ def _ensure_defaults():
         ("hub_receive_token", ""),
         ("hub_auto_push", "1"),
         ("hub_remote_sites_json", "[]"),
+        ("whatsapp_enabled", "0"),
+        ("whatsapp_auto_send", "1"),
+        ("whatsapp_service_url", ""),
+        ("whatsapp_default_group_id", ""),
+        ("whatsapp_default_group_name", ""),
+        ("whatsapp_send_feed", "1"),
+        ("whatsapp_send_stories", "1"),
+        ("whatsapp_send_facebook", "1"),
+        ("whatsapp_caption_template", ""),
+        ("whatsapp_sent_post_ids_json", "[]"),
     ]:
         if not SiteSetting.query.filter_by(key=key).first():
             db.session.add(SiteSetting(key=key, value=value))
