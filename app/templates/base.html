@@ -122,10 +122,9 @@
           {% for c in nav_categories[:7] %}
             <a class="nav-link" href="{{ url_for('site.category', slug=c.slug) }}">{{ c.name }}</a>
           {% endfor %}
-
           <form class="top-search-form" action="{{ url_for('site.search') }}" method="get" role="search" aria-label="Buscar matéria">
             <input class="top-search-input" type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Buscar matéria" aria-label="Buscar matéria">
-            <button class="top-search-button" type="submit" aria-label="Buscar">
+            <button class="top-search-button" type="submit" aria-label="Buscar matéria">
               <i class="bi bi-search" aria-hidden="true"></i>
             </button>
           </form>
