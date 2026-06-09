@@ -28,6 +28,11 @@ img{max-width:100%;display:block}
 .main-nav{display:flex;align-items:center;gap:20px;flex-wrap:nowrap;min-width:0}
 .nav-link{text-decoration:none;text-transform:uppercase;font-size:14px;font-weight:900;letter-spacing:.01em;white-space:nowrap;padding:0}
 .nav-link:hover{opacity:.75}
+.top-search-form{display:flex;align-items:center;min-width:210px;height:38px;border:1px solid rgba(0,0,0,.14);border-radius:999px;background:#fff;overflow:hidden;margin-left:2px;box-shadow:0 4px 14px rgba(0,0,0,.04)}
+.top-search-input{flex:1;min-width:0;height:100%;border:0;background:transparent;padding:0 10px 0 14px;font-size:12px;font-weight:800;outline:none;color:#111}
+.top-search-input::placeholder{color:#777;text-transform:uppercase;font-size:11px;font-weight:900}
+.top-search-button{width:40px;height:100%;border:0;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px}
+.top-search-button:hover{background:var(--accent)}
 .live-chip{background:var(--accent);color:#fff;text-decoration:none;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:900;text-transform:uppercase;line-height:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;min-width:146px;white-space:nowrap;text-align:center}
 .live-chip__icon,.live-chip__label{display:inline-flex;align-items:center;justify-content:center;line-height:1}
 .live-chip__icon{flex:0 0 auto}
@@ -204,6 +209,7 @@ img{max-width:100%;display:block}
   .site-header-container,.site-footer-container{padding-left:14px;padding-right:14px}
   .main-nav{gap:14px}
   .nav-link{font-size:13px}
+  .top-search-form{min-width:170px;height:36px}
 
   .home-news-layout{
     grid-template-columns:350px minmax(0,1fr);
@@ -241,6 +247,7 @@ img{max-width:100%;display:block}
   .header-topline{flex-direction:column;align-items:flex-start}
   .main-nav{gap:12px;flex-wrap:wrap}
   .nav-link{font-size:14px}
+  .top-search-form{min-width:240px;max-width:100%}
   .brand-row{grid-template-columns:1fr;gap:18px}
   .brand{justify-content:flex-start}
   .header-panels{grid-template-columns:1fr}
@@ -278,6 +285,7 @@ img{max-width:100%;display:block}
   .header-shell{gap:12px}
   .main-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:10px 14px}
   .nav-link{font-size:13px;white-space:normal}
+  .top-search-form{grid-column:1 / -1;width:100%;min-width:0}
   .live-chip{font-size:11px;min-height:42px;min-width:132px}
   .brand-text{font-size:34px}
   .feature-thumb{height:220px}
