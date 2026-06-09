@@ -1150,3 +1150,39 @@ img{max-width:100%;display:block}
   opacity:.72;
   cursor:wait;
 }
+
+/* Ajuste fino da busca no topo: alinhamento mais equilibrado e placeholder discreto */
+@media (min-width: 1200px){
+  .desktop-topline{gap:24px}
+  .main-nav{flex:1 1 auto}
+  .top-search-form{
+    width:260px;
+    height:30px;
+    margin-left:20px;
+    padding:0 9px 0 14px;
+    background:rgba(255,255,255,.32);
+    border-color:rgba(0,0,0,.14);
+  }
+}
+
+.top-search-input{
+  font-size:12px;
+  font-weight:500;
+  text-transform:none;
+  letter-spacing:0;
+}
+.top-search-input::placeholder{
+  color:rgba(0,0,0,.42);
+  opacity:1;
+  font-style:italic;
+  font-weight:400;
+}
+.top-search-button{color:rgba(0,0,0,.82)}
+
+@media (max-width: 1199px) and (min-width: 992px){
+  .desktop-topline{gap:18px}
+  .top-search-form{
+    width:205px;
+    margin-left:16px;
+  }
+}
