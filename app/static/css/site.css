@@ -1186,3 +1186,6 @@ img{max-width:100%;display:block}
     margin-left:16px;
   }
 }
+
+.home-calendar-print-badge{position:fixed;right:18px;bottom:18px;z-index:40;background:#111827;color:#fff;border-radius:999px;padding:.55rem .9rem;font-size:.82rem;font-weight:800;box-shadow:0 14px 40px rgba(15,23,42,.24)}
+@media print{.home-calendar-print-badge{display:none}}

@@ -1,0 +1,100 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Calendário Home{% endblock %}
+{% block page_title %}Calendário Home{% endblock %}
+{% block page_subtitle %}Escolha uma data para a home exibir somente as notícias publicadas naquele dia, facilitando o print diário.{% endblock %}
+{% block admin_content %}
+<section class="home-calendar-hero panel-card">
+  <div>
+    <span class="eyebrow">Controle da capa</span>
+    <h2>Home por data específica</h2>
+    <p>Quando ativado, a página inicial passa a montar os destaques, blocos e listas usando apenas matérias publicadas na data selecionada.</p>
+  </div>
+  <div class="home-calendar-status {% if enabled %}is-on{% else %}is-off{% endif %}">
+    <i class="bi {% if enabled %}bi-toggle-on{% else %}bi-toggle-off{% endif %}"></i>
+    <strong>{% if enabled %}Ativo{% else %}Desativado{% endif %}</strong>
+    <small>{{ selected_date_label }}</small>
+  </div>
+</section>
+
+<section class="admin-grid-2 mt-4">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h2>Selecionar dia da home</h2>
+        <p>Use o calendário abaixo e salve. Para voltar ao fluxo normal, desmarque a ativação.</p>
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('admin.home_calendar_page') }}" class="vstack gap-3">
+      <label class="home-calendar-toggle">
+        <input type="checkbox" name="home_calendar_enabled" value="1" {% if enabled %}checked{% endif %}>
+        <span>
+          <strong>Ativar Calendário Home</strong>
+          <small>A home pública usará a data selecionada enquanto esta opção estiver ligada.</small>
+        </span>
+      </label>
+
+      <div>
+        <label class="form-label">Data das notícias</label>
+        <input class="form-control form-control-lg" type="date" name="home_calendar_date" value="{{ selected_date_iso }}" required>
+        <div class="form-help mt-2">Encontramos {{ post_count }} matéria(s) publicada(s) em {{ selected_date_label }}.</div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+        <a class="btn btn-outline-dark" href="{{ home_url }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir home</a>
+        <button class="btn btn-dark" type="submit"><i class="bi bi-check2-circle me-1"></i>Salvar configuração</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h2>Atalhos recentes</h2>
+        <p>Confira rapidamente quantas matérias existem nos últimos dias antes de escolher.</p>
+      </div>
+    </div>
+    <div class="home-calendar-days">
+      {% for day in days_summary %}
+        <button class="home-calendar-day" type="button" data-calendar-day="{{ day.iso }}">
+          <span>{{ day.label }}</span>
+          <strong>{{ day.count }}</strong>
+        </button>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="panel-card mt-4">
+  <div class="panel-head">
+    <div>
+      <h2>Prévia das notícias do dia</h2>
+      <p>As primeiras matérias abaixo serão usadas para montar os destaques da home quando a função estiver ativa.</p>
+    </div>
+  </div>
+
+  <div class="home-calendar-preview">
+    {% for post in selected_posts %}
+      <article class="home-calendar-post">
+        <div class="home-calendar-thumb" style="background-image:url('{{ post.featured_image or '' }}')"></div>
+        <div>
+          <span>{{ format_date_br(post.published_at) }}</span>
+          <h3>{{ post.title }}</h3>
+          <small>{{ post.categories[0].name if post.categories else 'Notícias' }}</small>
+        </div>
+      </article>
+    {% else %}
+      <div class="text-muted">Nenhuma matéria publicada nesta data. Escolha outro dia ou publique matérias com essa data.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll('[data-calendar-day]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const input = document.querySelector('input[name="home_calendar_date"]');
+      if (input) input.value = button.dataset.calendarDay;
+    });
+  });
+</script>
+{% endblock %}

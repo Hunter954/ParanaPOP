@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from html import unescape, escape
 from pathlib import Path
 import re
@@ -281,6 +281,29 @@ def _hub_token_is_valid() -> bool:
 def _published_posts_query():
     return Post.query.filter(Post.published_at.isnot(None), Post.published_at <= datetime.utcnow())
 
+
+def _home_calendar_date():
+    enabled = (_setting("home_calendar_enabled", "0") or "").strip().lower() in {"1", "true", "yes", "on", "sim"}
+    if not enabled:
+        return None
+    raw_date = (_setting("home_calendar_date", "") or "").strip()
+    if not raw_date:
+        return None
+    try:
+        return datetime.strptime(raw_date, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _home_posts_query():
+    q = _published_posts_query()
+    selected_day = _home_calendar_date()
+    if selected_day:
+        start = datetime.combine(selected_day, time.min)
+        end = start + timedelta(days=1)
+        q = q.filter(Post.published_at >= start, Post.published_at < end)
+    return q
+
 def _track_view(post_id=None):
     try:
         pv = PageView(
@@ -484,7 +507,8 @@ def hub_posts_delete_api():
 def home():
     _track_view(None)
 
-    latest = _published_posts_query().order_by(desc(Post.published_at), desc(Post.id)).limit(24).all()
+    home_calendar_day = _home_calendar_date()
+    latest = _normalize_posts_media(_home_posts_query().order_by(desc(Post.published_at), desc(Post.id)).limit(24).all())
     lead_post = latest[0] if latest else None
     latest_queue = latest[1:4] if len(latest) > 1 else []
     excluded_ids = {p.id for p in [lead_post, *latest_queue] if p}
@@ -493,7 +517,7 @@ def home():
         cat = Category.query.filter_by(slug=slug).first()
         if not cat:
             return None, []
-        q = (_published_posts_query().join(Post.categories)
+        q = (_home_posts_query().join(Post.categories)
              .filter(Category.id == cat.id))
         if exclude_ids:
             q = q.filter(~Post.id.in_(list(exclude_ids)))
@@ -507,7 +531,7 @@ def home():
 
     category_sections = []
     for cat in Category.query.order_by(Category.name.asc()).limit(8).all():
-        posts = _normalize_posts_media((_published_posts_query().join(Post.categories)
+        posts = _normalize_posts_media((_home_posts_query().join(Post.categories)
                  .filter(Category.id == cat.id)
                  .order_by(desc(Post.published_at), desc(Post.id))
                  .limit(6).all()))
@@ -532,7 +556,7 @@ def home():
     popular_map = {pid: c for pid, c in popular_ids if pid}
     popular_posts = []
     if popular_map:
-        posts = _normalize_posts_media(_published_posts_query().filter(Post.id.in_(list(popular_map.keys()))).all())
+        posts = _normalize_posts_media(_home_posts_query().filter(Post.id.in_(list(popular_map.keys()))).all())
         posts_by_id = {p.id: p for p in posts}
         popular_posts = [posts_by_id[pid] for pid, _ in popular_ids if pid in posts_by_id]
 
@@ -554,6 +578,7 @@ def home():
         category_sections=category_sections,
         live_title=live_title,
         live_embed_html=live_embed_html,
+        home_calendar_day=home_calendar_day,
         ad_header=_get_ad("header_top"),
         ad_home_middle=_get_ad("home_top"),
         ad_article_end=_get_ad("home_mid"),

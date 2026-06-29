@@ -448,6 +448,36 @@ def _parse_date_input(value: str | None, fallback: date) -> date:
     except ValueError:
         return fallback
 
+def _post_count_for_day(day: date) -> int:
+    start = datetime.combine(day, time.min)
+    end = start + timedelta(days=1)
+    return Post.query.filter(Post.published_at >= start, Post.published_at < end).count()
+
+
+def _posts_for_day(day: date, limit: int = 12):
+    start = datetime.combine(day, time.min)
+    end = start + timedelta(days=1)
+    return _normalize_posts_media(
+        Post.query.filter(Post.published_at >= start, Post.published_at < end)
+        .order_by(desc(Post.published_at), desc(Post.id))
+        .limit(limit)
+        .all()
+    )
+
+
+def _home_calendar_days_summary(days: int = 14):
+    today = datetime.utcnow().date()
+    items = []
+    for offset in range(days):
+        day = today - timedelta(days=offset)
+        items.append({
+            'date': day,
+            'iso': day.isoformat(),
+            'label': day.strftime('%d/%m/%Y'),
+            'count': _post_count_for_day(day),
+        })
+    return items
+
 
 def _build_chart_data(daily_series, metric_key: str):
     width = 980
@@ -774,6 +804,43 @@ def dashboard():
         **_common_admin_context("dashboard"),
     )
 
+
+
+@admin_bp.route("/calendario-home", methods=["GET", "POST"])
+@login_required
+def home_calendar_page():
+    r = _require_admin()
+    if r:
+        return r
+
+    today = datetime.utcnow().date()
+    current_date = _parse_date_input(_setting("home_calendar_date", ""), today)
+
+    if request.method == "POST":
+        selected_date = _parse_date_input(request.form.get("home_calendar_date"), today)
+        is_enabled = bool(request.form.get("home_calendar_enabled"))
+        _save_setting("home_calendar_enabled", "1" if is_enabled else "0")
+        _save_setting("home_calendar_date", selected_date.isoformat())
+        db.session.commit()
+        status = "ativado" if is_enabled else "desativado"
+        flash(f"Calendário Home {status}. Data configurada: {selected_date.strftime('%d/%m/%Y')}.", "success")
+        return redirect(url_for("admin.home_calendar_page"))
+
+    enabled = _setting_bool("home_calendar_enabled", False)
+    selected_posts = _posts_for_day(current_date, limit=16)
+    post_count = _post_count_for_day(current_date)
+    return render_template(
+        "admin/home_calendar.html",
+        enabled=enabled,
+        selected_date=current_date,
+        selected_date_iso=current_date.isoformat(),
+        selected_date_label=current_date.strftime('%d/%m/%Y'),
+        selected_posts=selected_posts,
+        post_count=post_count,
+        days_summary=_home_calendar_days_summary(14),
+        home_url=url_for("site.home", _external=True),
+        **_common_admin_context("home_calendar"),
+    )
 
 
 @admin_bp.post("/materias-api/test-openai")

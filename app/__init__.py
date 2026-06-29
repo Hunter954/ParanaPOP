@@ -104,6 +104,8 @@ def _ensure_defaults():
         ("x_url", ""),
         ("site_keywords", "notícias, Paraná, Foz do Iguaçu, portal de notícias, atualidades"),
         ("top_menu_category_ids", "[]"),
+        ("home_calendar_enabled", "0"),
+        ("home_calendar_date", ""),
         ("hub_enabled", "0"),
         ("hub_site_key", ""),
         ("hub_receive_token", ""),
