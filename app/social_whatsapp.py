@@ -74,6 +74,9 @@ def whatsapp_settings() -> dict[str, Any]:
         "send_stories": _setting_bool("whatsapp_send_stories", True),
         "send_facebook": _setting_bool("whatsapp_send_facebook", True),
         "caption_template": _setting("whatsapp_caption_template", DEFAULT_CAPTION_TEMPLATE) or DEFAULT_CAPTION_TEMPLATE,
+        "bot_publish_enabled": _setting_bool("whatsapp_bot_publish_enabled", False),
+        "bot_publish_token": (_setting("whatsapp_bot_publish_token", "") or "").strip(),
+        "bot_publish_category_id": (_setting("whatsapp_bot_publish_category_id", "") or "").strip(),
     }
 
 
@@ -87,6 +90,8 @@ def save_whatsapp_settings(form) -> None:
     _save_setting("whatsapp_send_stories", "1" if form.get("whatsapp_send_stories") == "on" else "0")
     _save_setting("whatsapp_send_facebook", "1" if form.get("whatsapp_send_facebook") == "on" else "0")
     _save_setting("whatsapp_caption_template", (form.get("whatsapp_caption_template") or DEFAULT_CAPTION_TEMPLATE).strip())
+    _save_setting("whatsapp_bot_publish_enabled", "1" if form.get("whatsapp_bot_publish_enabled") == "on" else "0")
+    _save_setting("whatsapp_bot_publish_category_id", (form.get("whatsapp_bot_publish_category_id") or "").strip())
 
 
 def _client_timeout() -> int:

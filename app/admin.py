@@ -6,12 +6,14 @@ import requests
 from datetime import datetime, timedelta, date, time
 from pathlib import Path
 from uuid import uuid4
+import base64
+import secrets
 from urllib.parse import urlparse
 
-from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort
+from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy import func, desc, or_
-from .storage import delete_media, is_managed_media_url, list_media_files, local_path_from_url, media_root, normalize_media_url, rewrite_media_urls, save_file_storage
+from .storage import delete_media, is_managed_media_url, list_media_files, local_path_from_url, media_root, normalize_media_url, rewrite_media_urls, save_file_storage, save_bytes
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
@@ -729,6 +731,52 @@ def _common_admin_context(section: str, **extra):
     }
     data.update(extra)
     return data
+
+
+def _bot_publish_token() -> str:
+    token = (_setting("whatsapp_bot_publish_token", "") or "").strip()
+    if not token:
+        token = secrets.token_urlsafe(32)
+        _save_setting("whatsapp_bot_publish_token", token)
+        db.session.commit()
+    return token
+
+
+def _bot_publish_settings() -> dict:
+    return {
+        "enabled": _setting_bool("whatsapp_bot_publish_enabled", False),
+        "token": _bot_publish_token(),
+        "category_id": (_setting("whatsapp_bot_publish_category_id", "") or "").strip(),
+    }
+
+
+def _authorized_bot_request(data: dict) -> bool:
+    expected = (_setting("whatsapp_bot_publish_token", "") or "").strip()
+    received = (request.headers.get("X-Bot-Token") or request.headers.get("Authorization") or data.get("token") or "").strip()
+    if received.lower().startswith("bearer "):
+        received = received[7:].strip()
+    return bool(expected and received and secrets.compare_digest(expected, received))
+
+
+def _plain_text_to_html(text: str) -> str:
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", (text or "").strip()) if b.strip()]
+    if not blocks:
+        return ""
+    return "\n".join(f"<p>{escape(block).replace(chr(10), '<br>')}</p>" for block in blocks)
+
+
+def _excerpt_from_text(text: str, max_len: int = 240) -> str:
+    clean = re.sub(r"\s+", " ", text or "").strip()
+    if len(clean) <= max_len:
+        return clean
+    return clean[:max_len - 1].rsplit(" ", 1)[0].strip() + "…"
+
+
+def _bot_public_post_url(post: Post) -> str:
+    try:
+        return url_for("site.post", slug=post.slug, _external=True)
+    except Exception:
+        return f"/p/{post.slug}"
 
 
 def _bind_post_form_choices(form: PostAdminForm):
@@ -1512,6 +1560,109 @@ def _extract_place_address_components(components: list[dict] | None) -> dict:
             data['neighborhood'] = long_name
     return data
 
+
+
+@admin_bp.route("/bot-publicar", methods=["GET", "POST"])
+@login_required
+def bot_publicar_page():
+    r = _require_admin()
+    if r:
+        return r
+    cfg = _bot_publish_settings()
+    categories = Category.query.order_by(Category.name.asc()).all()
+    if request.method == "POST":
+        action = (request.form.get("action") or "save").strip()
+        if action == "regenerate_token":
+            _save_setting("whatsapp_bot_publish_token", secrets.token_urlsafe(32))
+            flash("Token do Bot Publicar recriado. Salve/sincronize a configuração no serviço WhatsApp.", "success")
+        else:
+            _save_setting("whatsapp_bot_publish_enabled", "1" if request.form.get("whatsapp_bot_publish_enabled") == "on" else "0")
+            _save_setting("whatsapp_bot_publish_category_id", (request.form.get("whatsapp_bot_publish_category_id") or "").strip())
+            flash("Configurações do Bot Publicar salvas.", "success")
+        db.session.commit()
+        return redirect(url_for("admin.bot_publicar_page"))
+    api_url = url_for("admin.bot_publish_api", _external=True)
+    return render_template(
+        "admin/bot_publicar.html",
+        cfg=cfg,
+        categories=categories,
+        api_url=api_url,
+        **_common_admin_context("bot_publicar"),
+    )
+
+
+@admin_bp.post("/api/whatsapp-bot/publish")
+def bot_publish_api():
+    data = request.get_json(silent=True) or {}
+    if not _setting_bool("whatsapp_bot_publish_enabled", False):
+        return jsonify({"ok": False, "message": "Bot Publicar está desativado no admin."}), 403
+    if not _authorized_bot_request(data):
+        return jsonify({"ok": False, "message": "Token do Bot Publicar inválido."}), 401
+
+    title = (data.get("title") or data.get("titulo") or "").strip()
+    text = (data.get("content") or data.get("texto") or data.get("body") or "").strip()
+    if not title or not text:
+        return jsonify({"ok": False, "message": "Título e texto da matéria são obrigatórios."}), 400
+
+    image_url = ""
+    image_b64 = (data.get("image_base64") or "").strip()
+    if image_b64:
+        try:
+            if "," in image_b64 and image_b64.lower().startswith("data:"):
+                meta, image_b64 = image_b64.split(",", 1)
+                content_type = meta.split(";")[0].replace("data:", "")
+            else:
+                content_type = data.get("image_mimetype") or "image/jpeg"
+            content = base64.b64decode(image_b64, validate=True)
+            image_url = save_bytes(content, "bot-publicar", data.get("image_filename") or "materia.jpg", content_type)
+        except Exception as exc:
+            return jsonify({"ok": False, "message": f"Não consegui salvar a imagem: {str(exc)[:160]}"}), 400
+    else:
+        image_url = (data.get("image_url") or "").strip()
+
+    now = datetime.utcnow()
+    post = Post(
+        source="local",
+        title=title,
+        slug=_ensure_unique_slug(Post, title or "materia"),
+        excerpt=_excerpt_from_text(text),
+        content_html=_plain_text_to_html(text),
+        featured_image=image_url,
+        author_name=(data.get("author_name") or "Bot WhatsApp").strip()[:190],
+        published_at=now,
+        updated_at=now,
+    )
+    category_id = (data.get("category_id") or _setting("whatsapp_bot_publish_category_id", "") or "").strip()
+    category = None
+    if category_id:
+        try:
+            category = Category.query.get(int(category_id))
+        except Exception:
+            category = None
+    if not category:
+        category = Category.query.filter(func.lower(Category.name) == "notícias").first()
+        if not category:
+            category = Category(name="Notícias", slug=_ensure_unique_slug(Category, "noticias"))
+            db.session.add(category)
+            db.session.flush()
+    post.categories = [category]
+    db.session.add(post)
+    db.session.commit()
+
+    if _hub_config().get('enabled'):
+        try:
+            _broadcast_post_to_hub(post)
+        except Exception:
+            pass
+
+    post_url = _bot_public_post_url(post)
+    return jsonify({
+        "ok": True,
+        "message": "Matéria publicada com sucesso.",
+        "post_id": post.id,
+        "title": post.title,
+        "url": post_url,
+    })
 
 
 @admin_bp.get("/whatsapp")

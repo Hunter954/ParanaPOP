@@ -42,6 +42,16 @@
       </div>
 
       <div class="preview-box" style="padding:14px 16px;">
+        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-2">
+          <div>
+            <div class="small text-muted">Bot Publicar</div>
+            <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="whatsapp_bot_publish_enabled" {% if cfg.bot_publish_enabled %}checked{% endif %}> Ativar comando <code>/publicar</code></label>
+          </div>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.bot_publicar_page') }}">Abrir painel</a>
+        </div>
+      </div>
+
+      <div class="preview-box" style="padding:14px 16px;">
         <div class="small text-muted mb-2">Formatos enviados</div>
         <div class="d-flex gap-3 flex-wrap">
           <label class="form-check"><input class="form-check-input" type="checkbox" name="whatsapp_send_feed" {% if cfg.send_feed %}checked{% endif %}> Feed</label>
