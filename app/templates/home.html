@@ -6,7 +6,7 @@
 {% set cidade_sections = category_sections if category_sections else ([{"category": selected_cat, "posts": selected_posts}] if selected_cat else []) %}
 
 {% if home_calendar_day %}
-<div class="home-calendar-print-badge">Home configurada para {{ home_calendar_day.strftime('%d/%m/%Y') }}</div>
+<div class="home-calendar-print-badge">Home configurada até {{ home_calendar_day.strftime('%d/%m/%Y') }}</div>
 {% endif %}
 
 <section class="pp-section">

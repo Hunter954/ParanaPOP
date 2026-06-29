@@ -1,13 +1,13 @@
 {% extends 'admin/layout.html' %}
 {% block admin_title %}Calendário Home{% endblock %}
 {% block page_title %}Calendário Home{% endblock %}
-{% block page_subtitle %}Escolha uma data para a home exibir somente as notícias publicadas naquele dia, facilitando o print diário.{% endblock %}
+{% block page_subtitle %}Escolha uma data para a home exibir as notícias daquele dia para trás, facilitando o print diário.{% endblock %}
 {% block admin_content %}
 <section class="home-calendar-hero panel-card">
   <div>
     <span class="eyebrow">Controle da capa</span>
-    <h2>Home por data específica</h2>
-    <p>Quando ativado, a página inicial passa a montar os destaques, blocos e listas usando apenas matérias publicadas na data selecionada.</p>
+    <h2>Home por data de referência</h2>
+    <p>Quando ativado, a página inicial passa a montar os destaques, blocos e listas usando matérias publicadas até o fim da data selecionada.</p>
   </div>
   <div class="home-calendar-status {% if enabled %}is-on{% else %}is-off{% endif %}">
     <i class="bi {% if enabled %}bi-toggle-on{% else %}bi-toggle-off{% endif %}"></i>
@@ -29,14 +29,14 @@
         <input type="checkbox" name="home_calendar_enabled" value="1" {% if enabled %}checked{% endif %}>
         <span>
           <strong>Ativar Calendário Home</strong>
-          <small>A home pública usará a data selecionada enquanto esta opção estiver ligada.</small>
+          <small>A home pública usará a data selecionada como limite enquanto esta opção estiver ligada.</small>
         </span>
       </label>
 
       <div>
-        <label class="form-label">Data das notícias</label>
+        <label class="form-label">Data limite das notícias</label>
         <input class="form-control form-control-lg" type="date" name="home_calendar_date" value="{{ selected_date_iso }}" required>
-        <div class="form-help mt-2">Encontramos {{ post_count }} matéria(s) publicada(s) em {{ selected_date_label }}.</div>
+        <div class="form-help mt-2">Encontramos {{ post_count }} matéria(s) publicada(s) em {{ selected_date_label }} e {{ total_until_count }} matéria(s) de {{ selected_date_label }} para trás.</div>
       </div>
 
       <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
@@ -67,8 +67,8 @@
 <section class="panel-card mt-4">
   <div class="panel-head">
     <div>
-      <h2>Prévia das notícias do dia</h2>
-      <p>As primeiras matérias abaixo serão usadas para montar os destaques da home quando a função estiver ativa.</p>
+      <h2>Prévia da home congelada</h2>
+      <p>As primeiras matérias abaixo serão usadas para montar os destaques da home, puxando publicações de {{ selected_date_label }} para trás.</p>
     </div>
   </div>
 
@@ -83,7 +83,7 @@
         </div>
       </article>
     {% else %}
-      <div class="text-muted">Nenhuma matéria publicada nesta data. Escolha outro dia ou publique matérias com essa data.</div>
+      <div class="text-muted">Nenhuma matéria encontrada até esta data. Escolha outro dia ou publique matérias com data anterior ou igual.</div>
     {% endfor %}
   </div>
 </section>

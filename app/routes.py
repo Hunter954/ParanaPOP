@@ -299,9 +299,10 @@ def _home_posts_query():
     q = _published_posts_query()
     selected_day = _home_calendar_date()
     if selected_day:
-        start = datetime.combine(selected_day, time.min)
-        end = start + timedelta(days=1)
-        q = q.filter(Post.published_at >= start, Post.published_at < end)
+        # Monta a home como se o dia selecionado fosse o "hoje":
+        # entram matérias publicadas até o fim daquela data, não apenas as do dia exato.
+        end = datetime.combine(selected_day, time.max)
+        q = q.filter(Post.published_at <= end)
     return q
 
 def _track_view(post_id=None):
