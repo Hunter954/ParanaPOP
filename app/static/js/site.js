@@ -1,4 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
+
+  document.querySelectorAll('[data-worldcup-track]').forEach((track) => {
+    const section = track.closest('.worldcup-strip');
+    const prev = section?.querySelector('[data-worldcup-prev]');
+    const next = section?.querySelector('[data-worldcup-next]');
+    const step = () => Math.max(220, Math.floor(track.clientWidth * 0.72));
+    prev?.addEventListener('click', () => track.scrollBy({ left: -step(), behavior: 'smooth' }));
+    next?.addEventListener('click', () => track.scrollBy({ left: step(), behavior: 'smooth' }));
+  });
   document.querySelectorAll('[data-rotative]').forEach((section) => {
     const track = section.querySelector('[data-rotative-track]');
     const title = section.querySelector('.rotative-title');

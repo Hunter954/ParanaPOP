@@ -1189,3 +1189,94 @@ img{max-width:100%;display:block}
 
 .home-calendar-print-badge{position:fixed;right:18px;bottom:18px;z-index:40;background:#111827;color:#fff;border-radius:999px;padding:.55rem .9rem;font-size:.82rem;font-weight:800;box-shadow:0 14px 40px rgba(15,23,42,.24)}
 @media print{.home-calendar-print-badge{display:none}}
+
+/* Agenda Copa do Mundo */
+.home-news-layout{
+  grid-template-areas:
+    "mainhead mainhead sidehead"
+    "feature story sidebar"
+    "cards cards sidebar"
+    "worldcup worldcup sidebar"
+    "banner banner sidebar";
+}
+.worldcup-strip{grid-area:worldcup;margin:6px 0 2px;background:linear-gradient(135deg,#063b22 0%,#0b5a31 44%,#101010 100%);border-radius:18px;box-shadow:0 16px 40px rgba(0,0,0,.16);overflow:hidden;color:#fff;position:relative}
+.worldcup-strip::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 14% 0%,rgba(246,213,0,.22),transparent 28%),radial-gradient(circle at 88% 20%,rgba(255,255,255,.14),transparent 22%);pointer-events:none}
+.worldcup-strip-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px 12px;border-bottom:1px solid rgba(255,255,255,.14)}
+.worldcup-kicker{display:inline-flex;margin-bottom:2px;color:#f6d500;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em}
+.worldcup-strip-head h2{margin:0;font-size:22px;line-height:1;font-weight:900;letter-spacing:-.03em;color:#fff}
+.worldcup-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.worldcup-link{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;border-radius:999px;background:#f6d500;color:#111;text-decoration:none;font-size:12px;font-weight:900;text-transform:uppercase;white-space:nowrap;box-shadow:0 10px 22px rgba(0,0,0,.18)}
+.worldcup-link:hover{color:#111;filter:brightness(.96)}
+.worldcup-nav{width:36px;height:36px;border:1px solid rgba(255,255,255,.24);border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-size:24px;line-height:1;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(8px)}
+.worldcup-nav:hover{background:rgba(255,255,255,.22)}
+.worldcup-track{position:relative;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding:12px 12px 14px;gap:10px}
+.worldcup-track::-webkit-scrollbar{display:none}
+.worldcup-card{scroll-snap-align:start;flex:0 0 196px;min-height:132px;padding:13px 13px 12px;border-radius:16px;background:rgba(255,255,255,.93);color:#151515;box-shadow:inset 0 0 0 1px rgba(255,255,255,.5);display:flex;flex-direction:column;justify-content:space-between;gap:10px;position:relative;overflow:hidden}
+.worldcup-card.is-brazil{background:linear-gradient(180deg,#fffef2,#f8ffd8);box-shadow:inset 0 0 0 2px rgba(246,213,0,.72),0 10px 22px rgba(0,0,0,.18)}
+.worldcup-card.is-live{animation:worldcupPulse 1.7s ease-in-out infinite}
+.worldcup-date-row{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#404040;font-size:12px;font-weight:900;white-space:nowrap}
+.worldcup-date-row strong{padding:5px 8px;border-radius:999px;background:#039642;color:#fff;font-size:10px;line-height:1;text-transform:uppercase}
+.worldcup-teams{display:flex;flex-direction:column;gap:7px}
+.worldcup-team-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:7px;min-width:0;font-size:14px;font-weight:800;line-height:1.1}
+.worldcup-team-row span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.worldcup-team-row b,.worldcup-team-row strong{font-size:16px;font-weight:900;color:#0b5a31}
+.worldcup-flag{font-size:17px;line-height:1}
+.worldcup-meta-row{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#606060;font-size:11px;font-weight:800;min-width:0}
+.worldcup-meta-row small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.worldcup-status{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:999px;background:#111;color:#fff;font-size:10px;text-transform:uppercase;white-space:nowrap}
+.worldcup-card.is-live .worldcup-status{background:#ff2020}
+.worldcup-card.is-finished .worldcup-status{background:#0b5a31}
+.worldcup-page{margin-top:18px}
+.worldcup-page-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:22px;padding:26px;border-radius:24px;background:linear-gradient(135deg,#063b22,#0b5a31 46%,#111);color:#fff;box-shadow:0 16px 40px rgba(0,0,0,.14)}
+.worldcup-page-hero h1{margin:0 0 8px;font-size:clamp(34px,5vw,58px);line-height:.92;font-weight:900;letter-spacing:-.055em}
+.worldcup-page-hero p{margin:0;color:rgba(255,255,255,.78);font-size:17px;font-weight:600}
+.worldcup-back{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 16px;border-radius:999px;background:#f6d500;color:#111;text-decoration:none;font-size:13px;font-weight:900;text-transform:uppercase;white-space:nowrap}
+.worldcup-full-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.worldcup-full-card{background:#fff;border-radius:18px;padding:16px;box-shadow:0 1px 0 rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.06)}
+.worldcup-full-card.is-brazil{border-color:rgba(246,213,0,.86);box-shadow:0 12px 28px rgba(0,0,0,.08), inset 0 0 0 1px rgba(246,213,0,.58)}
+.worldcup-full-card.is-live{border-color:#ff2020}
+.worldcup-full-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;font-size:12px;font-weight:900;color:#555}
+.worldcup-full-top strong{display:inline-flex;align-items:center;min-height:24px;padding:0 9px;border-radius:999px;background:#111;color:#fff;font-size:10px;text-transform:uppercase;white-space:nowrap}
+.worldcup-teams--full{gap:10px}
+.worldcup-teams--full .worldcup-team-row{font-size:17px;grid-template-columns:26px minmax(0,1fr) auto}
+.worldcup-full-footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-top:15px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08);color:#5f5f5f;font-size:12px;font-weight:800}
+.worldcup-full-footer small{text-align:right;color:#888}
+@keyframes worldcupPulse{0%,100%{box-shadow:inset 0 0 0 2px rgba(255,32,32,.26),0 10px 22px rgba(0,0,0,.16)}50%{box-shadow:inset 0 0 0 2px rgba(255,32,32,.68),0 14px 30px rgba(255,32,32,.18)}}
+
+@media (max-width: 1199px){
+  .home-news-layout{
+    grid-template-areas:
+      "mainhead sidehead"
+      "feature story"
+      "cards cards"
+      "worldcup worldcup"
+      "banner banner"
+      "sidebar sidebar";
+  }
+  .worldcup-full-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width: 991px){
+  .home-news-layout{
+    grid-template-areas:
+      "mainhead"
+      "feature"
+      "story"
+      "cards"
+      "worldcup"
+      "sidehead"
+      "sidebar"
+      "banner";
+  }
+  .worldcup-strip-head{align-items:flex-start;flex-direction:column}
+  .worldcup-actions{width:100%;justify-content:space-between}
+  .worldcup-link{margin-left:auto}
+}
+@media (max-width: 767px){
+  .worldcup-strip{border-radius:16px;margin-top:2px}
+  .worldcup-strip-head{padding:14px 14px 10px}
+  .worldcup-strip-head h2{font-size:20px}
+  .worldcup-card{flex-basis:82%;min-height:126px}
+  .worldcup-nav{display:none}
+  .worldcup-page-hero{align-items:flex-start;flex-direction:column;padding:20px;border-radius:18px}
+  .worldcup-full-grid{grid-template-columns:1fr}
+}

@@ -68,6 +68,46 @@
       {% endfor %}
     </div>
 
+    <section class="worldcup-strip" aria-label="Agenda Copa do Mundo">
+      <div class="worldcup-strip-head">
+        <div>
+          <span class="worldcup-kicker">Agenda esportiva</span>
+          <h2>Copa do Mundo FIFA™</h2>
+        </div>
+        <div class="worldcup-actions">
+          <button type="button" class="worldcup-nav" data-worldcup-prev aria-label="Jogos anteriores">‹</button>
+          <button type="button" class="worldcup-nav" data-worldcup-next aria-label="Próximos jogos">›</button>
+          <a class="worldcup-link" href="{{ url_for('site.worldcup_page') }}">Ver agenda completa</a>
+        </div>
+      </div>
+      <div class="worldcup-track" data-worldcup-track>
+        {% for match in worldcup_matches %}
+        <article class="worldcup-card{% if match.is_brazil %} is-brazil{% endif %}{% if match.is_live %} is-live{% endif %}{% if match.is_finished %} is-finished{% endif %}">
+          <div class="worldcup-date-row">
+            <span>{{ match.date_label }} · {{ match.time_label }}</span>
+            {% if match.is_brazil %}<strong>🇧🇷 Vai, Brasil!</strong>{% endif %}
+          </div>
+          <div class="worldcup-teams">
+            <div class="worldcup-team-row">
+              <span class="worldcup-flag">{{ match.home_flag }}</span>
+              <span>{{ match.home_team }}</span>
+              {% if match.home_score is not none %}<b>{{ match.home_score }}</b>{% endif %}
+            </div>
+            <div class="worldcup-team-row">
+              <span class="worldcup-flag">{{ match.away_flag }}</span>
+              <span>{{ match.away_team }}</span>
+              {% if match.away_score is not none %}<b>{{ match.away_score }}</b>{% endif %}
+            </div>
+          </div>
+          <div class="worldcup-meta-row">
+            <span class="worldcup-status">{{ match.status_label }}</span>
+            <small>{{ match.stage }}</small>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
     <div class="home-inline-banner">
       {% if ad_home_middle %}
         <div class="ad-box">{{ ad_home_middle|safe }}</div>

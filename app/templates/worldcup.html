@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="pp-section worldcup-page">
+  <div class="worldcup-page-hero">
+    <div>
+      <span class="worldcup-kicker">Copa do Mundo FIFA™</span>
+      <h1>Agenda completa dos jogos</h1>
+      <p>Confira próximos jogos, partidas ao vivo e resultados encerrados da Copa.</p>
+    </div>
+    <a class="worldcup-back" href="{{ url_for('site.home') }}">Voltar para a home</a>
+  </div>
+
+  <div class="worldcup-full-grid">
+    {% for match in worldcup_matches %}
+    <article class="worldcup-full-card{% if match.is_brazil %} is-brazil{% endif %}{% if match.is_live %} is-live{% endif %}">
+      <div class="worldcup-full-top">
+        <span>{{ match.date_label }} · {{ match.time_label }}</span>
+        <strong>{{ match.status_label }}</strong>
+      </div>
+      <div class="worldcup-teams worldcup-teams--full">
+        <div class="worldcup-team-row">
+          <span class="worldcup-flag">{{ match.home_flag }}</span>
+          <span>{{ match.home_team }}</span>
+          {% if match.home_score is not none %}<strong>{{ match.home_score }}</strong>{% endif %}
+        </div>
+        <div class="worldcup-team-row">
+          <span class="worldcup-flag">{{ match.away_flag }}</span>
+          <span>{{ match.away_team }}</span>
+          {% if match.away_score is not none %}<strong>{{ match.away_score }}</strong>{% endif %}
+        </div>
+      </div>
+      <footer class="worldcup-full-footer">
+        <span>{{ match.stage }}</span>
+        {% if match.venue or match.city %}<small>{{ match.venue }}{% if match.city %} · {{ match.city }}{% endif %}</small>{% endif %}
+      </footer>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
