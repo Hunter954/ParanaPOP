@@ -121,6 +121,14 @@ def _ensure_defaults():
         ("whatsapp_send_facebook", "1"),
         ("whatsapp_caption_template", ""),
         ("whatsapp_sent_post_ids_json", "[]"),
+        ("instagram_bot_enabled", "0"),
+        ("instagram_bot_auto_send", "0"),
+        ("instagram_bot_service_url", ""),
+        ("instagram_bot_service_token", ""),
+        ("instagram_bot_send_feed", "1"),
+        ("instagram_bot_send_story", "0"),
+        ("instagram_bot_caption_template", ""),
+        ("instagram_bot_sent_post_ids_json", "[]"),
     ]:
         if not SiteSetting.query.filter_by(key=key).first():
             db.session.add(SiteSetting(key=key, value=value))

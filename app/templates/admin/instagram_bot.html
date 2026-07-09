@@ -1,0 +1,109 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Instagram Bot{% endblock %}
+{% block page_title %}Instagram Bot{% endblock %}
+{% block page_subtitle %}Conecte o novo serviço Python/Instagrapi e publique as artes geradas direto no Instagram.{% endblock %}
+
+{% block admin_content %}
+<div class="admin-grid-2">
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h2>Conexão do serviço</h2>
+        <p>Use aqui a URL do novo serviço Instagram que será publicado em outro repositório/Railway.</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.instagram_bot_save_settings') }}" class="vstack gap-3">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="instagram_bot_enabled" name="instagram_bot_enabled" {% if cfg.enabled %}checked{% endif %}>
+        <label class="form-check-label" for="instagram_bot_enabled"><strong>Ativar integração Instagram</strong></label>
+        <div class="form-help">Se desligado, nenhuma matéria será publicada no Instagram.</div>
+      </div>
+
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" role="switch" id="instagram_bot_auto_send" name="instagram_bot_auto_send" {% if cfg.auto_send %}checked{% endif %}>
+        <label class="form-check-label" for="instagram_bot_auto_send"><strong>Publicar automaticamente ao publicar matéria nova</strong></label>
+        <div class="form-help">Recomendado deixar desligado no começo e usar o botão manual dentro da matéria.</div>
+      </div>
+
+      <div>
+        <label class="form-label">URL do serviço Instagram</label>
+        <input type="url" class="form-control" name="instagram_bot_service_url" value="{{ cfg.service_url }}" placeholder="https://paranapop-instagram.up.railway.app">
+        <div class="form-help mt-2">Exemplo Railway interno: <code>http://paranapop-instagram.railway.internal:8080</code>.</div>
+      </div>
+
+      <div>
+        <label class="form-label">Token do serviço <span class="text-muted">opcional</span></label>
+        <input type="text" class="form-control" name="instagram_bot_service_token" value="{{ cfg.service_token }}" placeholder="Deixe vazio se não usar token no serviço">
+        <div class="form-help mt-2">Se preencher, o admin envia no cabeçalho <code>X-Service-Token</code>.</div>
+      </div>
+
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-2">Formatos publicados</div>
+        <div class="d-flex gap-3 flex-wrap">
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="instagram_bot_send_feed" {% if cfg.send_feed %}checked{% endif %}> Feed</label>
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="instagram_bot_send_story" {% if cfg.send_story %}checked{% endif %}> Story</label>
+        </div>
+        <div class="form-help mt-2">O feed usa a arte vertical 1080×1440 gerada pelo ParanáPOP. Story usa 1080×1920.</div>
+      </div>
+
+      <div>
+        <label class="form-label">Legenda padrão</label>
+        <textarea class="form-control" name="instagram_bot_caption_template" rows="9">{{ cfg.caption_template }}</textarea>
+        <div class="form-help mt-2">Variáveis aceitas: <code>{{ '{{titulo}}' }}</code>, <code>{{ '{{resumo}}' }}</code>, <code>{{ '{{url}}' }}</code>, <code>{{ '{{categoria}}' }}</code>.</div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-dark" type="submit"><i class="bi bi-save me-1"></i>Salvar configurações</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.instagram_bot_page') }}"><i class="bi bi-arrow-clockwise me-1"></i>Atualizar status</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <h2>Status e login</h2>
+        <p>Faça o login uma vez com usuário, senha e código 2FA. O serviço salva a sessão em volume persistente.</p>
+      </div>
+    </div>
+
+    <div class="vstack gap-3">
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-1">Status</div>
+        {% if status %}
+          {% if status.ok %}
+            {% set st = status.data or {} %}
+            <div><strong>{{ st.status or status.message }}</strong></div>
+            {% if st.username %}<div class="text-muted small">Conta: @{{ st.username }}</div>{% endif %}
+            {% if st.user_id %}<div class="text-muted small">ID: {{ st.user_id }}</div>{% endif %}
+          {% else %}
+            <div class="text-danger"><strong>{{ status.message }}</strong></div>
+          {% endif %}
+        {% else %}
+          <div class="text-muted"><strong>Informe a URL do serviço para consultar.</strong></div>
+        {% endif %}
+      </div>
+
+      <form method="post" action="{{ url_for('admin.instagram_bot_login') }}" class="preview-box" style="padding:14px 16px;">
+        <label class="form-label">Conectar Instagram</label>
+        <input class="form-control mb-2" name="username" placeholder="usuário do Instagram sem @" autocomplete="username">
+        <input class="form-control mb-2" name="password" type="password" placeholder="senha" autocomplete="current-password">
+        <input class="form-control mb-2" name="verification_code" placeholder="código 2FA, se pedir">
+        <button class="btn btn-outline-dark" type="submit"><i class="bi bi-instagram me-1"></i>Conectar / atualizar sessão</button>
+        <div class="form-help mt-2">Os dados são enviados direto ao serviço Instagram. O admin não salva a senha.</div>
+      </form>
+
+      <div class="preview-box" style="padding:14px 16px;">
+        <div class="small text-muted mb-2">Contrato esperado do novo serviço</div>
+        <ul class="mb-0 small">
+          <li><code>GET /status</code> para conferir login/sessão.</li>
+          <li><code>POST /login</code> para login com 2FA.</li>
+          <li><code>POST /publish</code> para publicar feed/story.</li>
+          <li><code>POST /test</code> para testar comunicação.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

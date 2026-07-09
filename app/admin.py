@@ -30,6 +30,16 @@ from .social_whatsapp import (
     send_whatsapp_test_message,
     whatsapp_settings,
 )
+from .social_instagram import (
+    DEFAULT_INSTAGRAM_CAPTION_TEMPLATE,
+    auto_send_post_to_instagram,
+    get_instagram_status,
+    instagram_settings,
+    login_instagram_service,
+    mark_post_sent_instagram,
+    save_instagram_settings,
+    send_post_to_instagram,
+)
 from .wp_client import WPClient
 from .sync import sync_categories, sync_posts, localize_existing_wp_images
 from html import unescape, escape
@@ -1025,6 +1035,8 @@ def materias_api_page():
             db.session.commit()
             whatsapp_sent = 0
             whatsapp_errors = []
+            instagram_sent = 0
+            instagram_errors = []
             for post in created:
                 if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get('enabled'):
                     _broadcast_post_to_hub(post)
@@ -1034,11 +1046,23 @@ def materias_api_page():
                         whatsapp_sent += 1
                     elif not wa_result.ok:
                         whatsapp_errors.append(wa_result.message)
+                    ig_result = auto_send_post_to_instagram(post)
+                    if ig_result.ok and instagram_settings().get('enabled') and instagram_settings().get('auto_send'):
+                        instagram_sent += 1
+                    elif not ig_result.ok:
+                        instagram_errors.append(ig_result.message)
             if created:
-                extra = f" WhatsApp: {whatsapp_sent} envio(s)." if whatsapp_sent else ""
+                extra_parts = []
+                if whatsapp_sent:
+                    extra_parts.append(f"WhatsApp: {whatsapp_sent} envio(s)")
+                if instagram_sent:
+                    extra_parts.append(f"Instagram: {instagram_sent} publicação(ões)")
+                extra = " " + " | ".join(extra_parts) + "." if extra_parts else ""
                 flash(f"{len(created)} matéria(s) criada(s) com sucesso como {'publicadas' if publish_now else 'rascunho'}.{extra}", "success")
             if whatsapp_errors:
                 flash("Alguns envios para WhatsApp falharam: " + " | ".join(whatsapp_errors[:3]), "warning")
+            if instagram_errors:
+                flash("Algumas publicações no Instagram falharam: " + " | ".join(instagram_errors[:3]), "warning")
             if errors:
                 flash("Algumas matérias não foram criadas: " + " | ".join(errors[:3]), "warning")
             return redirect(url_for("admin.posts_list", source="local"))
@@ -1129,10 +1153,18 @@ def posts_new():
             _broadcast_post_to_hub(post)
         if post.published_at and post.published_at <= datetime.utcnow():
             wa_result = auto_send_post_to_whatsapp(post)
+            ig_result = auto_send_post_to_instagram(post)
             if not wa_result.ok:
                 flash(f"Matéria criada, mas o envio para WhatsApp falhou: {wa_result.message}", "warning")
-            elif whatsapp_settings().get('enabled') and whatsapp_settings().get('auto_send'):
-                flash("Matéria criada e enviada para o WhatsApp.", "success")
+            if not ig_result.ok:
+                flash(f"Matéria criada, mas a publicação no Instagram falhou: {ig_result.message}", "warning")
+            sent_parts = []
+            if wa_result.ok and whatsapp_settings().get('enabled') and whatsapp_settings().get('auto_send'):
+                sent_parts.append("WhatsApp")
+            if ig_result.ok and instagram_settings().get('enabled') and instagram_settings().get('auto_send'):
+                sent_parts.append("Instagram")
+            if sent_parts:
+                flash("Matéria criada e enviada para: " + ", ".join(sent_parts) + ".", "success")
                 return redirect(url_for("admin.posts_edit", post_id=post.id))
         flash("Matéria criada com sucesso.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
@@ -1178,10 +1210,18 @@ def posts_edit(post_id):
         is_published_now = bool(post.published_at and post.published_at <= datetime.utcnow())
         if is_published_now and not was_published:
             wa_result = auto_send_post_to_whatsapp(post)
+            ig_result = auto_send_post_to_instagram(post)
             if not wa_result.ok:
                 flash(f"Matéria atualizada, mas o envio para WhatsApp falhou: {wa_result.message}", "warning")
-            elif whatsapp_settings().get('enabled') and whatsapp_settings().get('auto_send'):
-                flash("Matéria publicada e enviada para o WhatsApp.", "success")
+            if not ig_result.ok:
+                flash(f"Matéria atualizada, mas a publicação no Instagram falhou: {ig_result.message}", "warning")
+            sent_parts = []
+            if wa_result.ok and whatsapp_settings().get('enabled') and whatsapp_settings().get('auto_send'):
+                sent_parts.append("WhatsApp")
+            if ig_result.ok and instagram_settings().get('enabled') and instagram_settings().get('auto_send'):
+                sent_parts.append("Instagram")
+            if sent_parts:
+                flash("Matéria publicada e enviada para: " + ", ".join(sent_parts) + ".", "success")
                 return redirect(url_for("admin.posts_edit", post_id=post.id))
         flash("Matéria atualizada com sucesso.", "success")
         return redirect(url_for("admin.posts_edit", post_id=post.id))
@@ -1720,6 +1760,67 @@ def posts_send_whatsapp(post_id):
     result = send_post_to_whatsapp(post)
     if result.ok:
         mark_post_sent(post.id)
+    flash(result.message, "success" if result.ok else "danger")
+    return redirect(url_for("admin.posts_edit", post_id=post.id))
+
+
+@admin_bp.get("/instagram-bot")
+@login_required
+def instagram_bot_page():
+    r = _require_admin()
+    if r:
+        return r
+    cfg = instagram_settings()
+    status = get_instagram_status() if cfg.get("service_url") else None
+    return render_template(
+        "admin/instagram_bot.html",
+        cfg=cfg,
+        status=status,
+        default_caption_template=DEFAULT_INSTAGRAM_CAPTION_TEMPLATE,
+        **_common_admin_context("instagram_bot"),
+    )
+
+
+@admin_bp.post("/instagram-bot/settings")
+@login_required
+def instagram_bot_save_settings():
+    r = _require_admin()
+    if r:
+        return r
+    save_instagram_settings(request.form)
+    db.session.commit()
+    flash("Configurações do Instagram Bot salvas.", "success")
+    return redirect(url_for("admin.instagram_bot_page"))
+
+
+@admin_bp.post("/instagram-bot/login")
+@login_required
+def instagram_bot_login():
+    r = _require_admin()
+    if r:
+        return r
+    result = login_instagram_service(
+        request.form.get("username"),
+        request.form.get("password"),
+        request.form.get("verification_code"),
+    )
+    flash(result.message, "success" if result.ok else "danger")
+    return redirect(url_for("admin.instagram_bot_page"))
+
+
+@admin_bp.post("/posts/<int:post_id>/send-instagram")
+@login_required
+def posts_send_instagram(post_id):
+    r = _require_admin()
+    if r:
+        return r
+    post = Post.query.get_or_404(post_id)
+    if not post.published_at or post.published_at > datetime.utcnow():
+        flash("Publique a matéria antes de enviar para o Instagram.", "warning")
+        return redirect(url_for("admin.posts_edit", post_id=post.id))
+    result = send_post_to_instagram(post)
+    if result.ok:
+        mark_post_sent_instagram(post.id)
     flash(result.message, "success" if result.ok else "danger")
     return redirect(url_for("admin.posts_edit", post_id=post.id))
 
