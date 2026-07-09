@@ -35,6 +35,7 @@ from .social_instagram import (
     auto_send_post_to_instagram,
     get_instagram_status,
     instagram_settings,
+    import_instagram_session,
     login_instagram_service,
     mark_post_sent_instagram,
     save_instagram_settings,
@@ -1803,7 +1804,29 @@ def instagram_bot_login():
         request.form.get("username"),
         request.form.get("password"),
         request.form.get("verification_code"),
+        request.form.get("totp_secret"),
     )
+    flash(result.message, "success" if result.ok else "danger")
+    return redirect(url_for("admin.instagram_bot_page"))
+
+
+@admin_bp.post("/instagram-bot/import-session")
+@login_required
+def instagram_bot_import_session():
+    r = _require_admin()
+    if r:
+        return r
+    session_text = (request.form.get("session_json") or "").strip()
+    upload = request.files.get("session_file")
+    if upload and upload.filename:
+        try:
+            session_text = upload.read().decode("utf-8").strip()
+        except Exception:
+            session_text = ""
+    if not session_text:
+        flash("Envie o arquivo session.json ou cole o conteúdo da sessão.", "warning")
+        return redirect(url_for("admin.instagram_bot_page"))
+    result = import_instagram_session(session_text)
     flash(result.message, "success" if result.ok else "danger")
     return redirect(url_for("admin.instagram_bot_page"))
 

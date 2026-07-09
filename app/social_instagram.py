@@ -116,13 +116,18 @@ def get_instagram_status() -> InstagramResult:
     return _service_request("GET", "/status")
 
 
-def login_instagram_service(username: str, password: str, verification_code: str = "") -> InstagramResult:
+def login_instagram_service(username: str, password: str, verification_code: str = "", totp_secret: str = "") -> InstagramResult:
     payload = {
         "username": (username or "").strip(),
         "password": password or "",
         "verification_code": (verification_code or "").strip(),
+        "totp_secret": (totp_secret or "").strip(),
     }
     return _service_request("POST", "/login", json_payload=payload)
+
+
+def import_instagram_session(session_json: str) -> InstagramResult:
+    return _service_request("POST", "/import-session", json_payload={"session_json": session_json or ""})
 
 
 def send_instagram_test_message() -> InstagramResult:

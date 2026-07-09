@@ -89,16 +89,26 @@
         <label class="form-label">Conectar Instagram</label>
         <input class="form-control mb-2" name="username" placeholder="usuário do Instagram sem @" autocomplete="username">
         <input class="form-control mb-2" name="password" type="password" placeholder="senha" autocomplete="current-password">
-        <input class="form-control mb-2" name="verification_code" placeholder="código 2FA, se pedir">
+        <input class="form-control mb-2" name="verification_code" placeholder="código 2FA atual, se pedir">
+        <input class="form-control mb-2" name="totp_secret" placeholder="chave secreta do app autenticador para gerar 2FA sozinho (opcional)">
         <button class="btn btn-outline-dark" type="submit"><i class="bi bi-instagram me-1"></i>Conectar / atualizar sessão</button>
-        <div class="form-help mt-2">Os dados são enviados direto ao serviço Instagram. O admin não salva a senha.</div>
+        <div class="form-help mt-2">O admin não salva a senha. O 2FA só é gerado sozinho se você informar a chave secreta do autenticador; se não tiver essa chave, coloque o código atual manualmente.</div>
+      </form>
+
+      <form method="post" action="{{ url_for('admin.instagram_bot_import_session') }}" enctype="multipart/form-data" class="preview-box" style="padding:14px 16px;">
+        <label class="form-label">Importar sessão pronta <span class="text-muted">plano B sem proxy</span></label>
+        <input class="form-control mb-2" type="file" name="session_file" accept=".json,application/json">
+        <textarea class="form-control mb-2" name="session_json" rows="5" placeholder="Ou cole aqui o conteúdo do session.json"></textarea>
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-upload me-1"></i>Importar session.json</button>
+        <div class="form-help mt-2">Use isso quando o login direto pelo Railway cair em blacklist. A sessão precisa ser gerada em um computador/celular confiável e depois importada aqui.</div>
       </form>
 
       <div class="preview-box" style="padding:14px 16px;">
         <div class="small text-muted mb-2">Contrato esperado do novo serviço</div>
         <ul class="mb-0 small">
           <li><code>GET /status</code> para conferir login/sessão.</li>
-          <li><code>POST /login</code> para login com 2FA.</li>
+          <li><code>POST /login</code> para login com 2FA manual ou TOTP.</li>
+          <li><code>POST /import-session</code> para importar <code>session.json</code>.</li>
           <li><code>POST /publish</code> para publicar feed/story.</li>
           <li><code>POST /test</code> para testar comunicação.</li>
         </ul>
