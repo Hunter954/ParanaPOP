@@ -12,7 +12,6 @@ from .models import db, Post, Category, AdSlot, SiteSetting, PageView, Analytics
 from .sync import download_external_image
 from .storage import normalize_media_url, rewrite_media_urls, send_media, send_media_download
 from .art_generator import ArtGeneratorError, build_generator_payload, generate_variants
-from .worldcup import get_worldcup_matches
 
 site_bp = Blueprint("site", __name__)
 
@@ -581,7 +580,6 @@ def home():
         live_title=live_title,
         live_embed_html=live_embed_html,
         home_calendar_day=home_calendar_day,
-        worldcup_matches=get_worldcup_matches(limit=14, home_window=True),
         ad_header=_get_ad("header_top"),
         ad_home_middle=_get_ad("home_top"),
         ad_article_end=_get_ad("home_mid"),
@@ -590,31 +588,6 @@ def home():
         ad_sidebar_2=_get_ad("sidebar_2"),
     )
 
-
-@site_bp.get("/copa-do-mundo")
-def worldcup_page():
-    _track_view(None)
-    meta = _meta_defaults()
-    meta.update({
-        "meta_title": f"Agenda da Copa do Mundo | {_site_name()}",
-        "meta_description": "Agenda dos jogos da Copa do Mundo com horários, resultados e status das partidas.",
-        "meta_url": url_for("site.worldcup_page", _external=True),
-    })
-    return render_template(
-        "worldcup.html",
-        **meta,
-        worldcup_matches=get_worldcup_matches(limit=120, home_window=False),
-        ad_header=_get_ad("header_top"),
-        ad_sidebar_1=_get_ad("sidebar_1"),
-        ad_sidebar_2=_get_ad("sidebar_2"),
-    )
-
-
-@site_bp.get("/api/copa-do-mundo/jogos")
-def worldcup_matches_api():
-    limit = max(1, min(int(request.args.get("limit", "30")), 120))
-    force = (request.args.get("refresh") or "").lower() in {"1", "true", "sim"}
-    return jsonify({"ok": True, "matches": get_worldcup_matches(limit=limit, home_window=False, force_refresh=force)})
 
 
 @site_bp.get("/p/<slug>")
