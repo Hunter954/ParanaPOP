@@ -1744,6 +1744,249 @@ def bot_generate_photo_api():
         return jsonify({"ok": False, "message": f"Não consegui gerar as artes: {str(exc)[:180]}"}), 500
 
 
+
+def _whatsapp_menu_post_payload(post: Post) -> dict:
+    return {
+        "id": post.id,
+        "title": post.title,
+        "source": post.source,
+        "excerpt": post.excerpt or "",
+        "featured_image": normalize_media_url(post.featured_image or ""),
+        "published_at": post.published_at.strftime("%d/%m/%Y %H:%M") if post.published_at else "",
+        "categories": [{"id": category.id, "name": category.name} for category in (post.categories or [])],
+        "url": _bot_public_post_url(post),
+    }
+
+
+def _whatsapp_menu_slot_payload(slot: AdSlot) -> dict:
+    visual = _slot_visual_payload(slot)
+    has_content = bool((slot.html or "").strip() and visual.get("banners"))
+    return {
+        "id": slot.id,
+        "key": slot.key,
+        "name": slot.name,
+        "is_active": bool(slot.is_active),
+        "has_content": has_content,
+    }
+
+
+@admin_bp.post("/api/whatsapp-menu/action")
+def whatsapp_menu_action_api():
+    data = request.get_json(silent=True) or {}
+    if not _authorized_bot_request(data):
+        return jsonify({"ok": False, "message": "Token do Menu Admin inválido."}), 401
+
+    action = (data.get("action") or "").strip().lower()
+    try:
+        if action == "overview":
+            stats = _dashboard_stats()
+            active_users = db.session.query(func.count(User.id)).filter(User.is_active.is_(True)).scalar() or 0
+            return jsonify({
+                "ok": True,
+                "page_views_total": stats["pv_total"],
+                "page_views_24h": stats["pv_24h"],
+                "posts_total": stats["posts_total"],
+                "local_posts": stats["local_posts"],
+                "wp_posts": stats["wp_posts"],
+                "categories_total": stats["categories_total"],
+                "active_ads": stats["active_ads"],
+                "active_users": active_users,
+            })
+
+        if action in {"posts.list", "posts.search"}:
+            limit = min(max(int(data.get("limit") or 10), 1), 30)
+            query = Post.query
+            if action == "posts.search":
+                term = (data.get("query") or "").strip()
+                if not term:
+                    return jsonify({"ok": True, "posts": []})
+                query = query.filter(Post.title.ilike(f"%{term}%"))
+            posts = query.order_by(desc(Post.updated_at), desc(Post.published_at), desc(Post.id)).limit(limit).all()
+            return jsonify({"ok": True, "posts": [_whatsapp_menu_post_payload(post) for post in posts]})
+
+        if action == "posts.create":
+            title = (data.get("title") or "").strip()
+            content = (data.get("content") or "").strip()
+            if len(title) < 5:
+                return jsonify({"ok": False, "message": "Título muito curto."}), 400
+            if len(content) < 20:
+                return jsonify({"ok": False, "message": "Texto da matéria muito curto."}), 400
+            now = datetime.utcnow()
+            post = Post(
+                source="local",
+                title=title,
+                slug=_ensure_unique_slug(Post, title),
+                excerpt=(data.get("excerpt") or _excerpt_from_text(content)).strip(),
+                content_html=_plain_text_to_html(content),
+                featured_image=(data.get("featured_image") or "").strip(),
+                author_name="Redação",
+                published_at=now,
+                updated_at=now,
+            )
+            category_id = data.get("category_id")
+            if category_id:
+                category = Category.query.get(int(category_id))
+                if category:
+                    post.categories = [category]
+            db.session.add(post)
+            db.session.commit()
+            if _hub_config().get("enabled"):
+                _broadcast_post_to_hub(post)
+            return jsonify({"ok": True, "post": _whatsapp_menu_post_payload(post)})
+
+        if action == "posts.update":
+            post = Post.query.get(int(data.get("post_id") or 0))
+            if not post:
+                return jsonify({"ok": False, "message": "Matéria não encontrada."}), 404
+            if "title" in data:
+                title = (data.get("title") or "").strip()
+                if len(title) < 5:
+                    return jsonify({"ok": False, "message": "Título muito curto."}), 400
+                post.title = title
+                post.slug = _ensure_unique_slug(Post, title, object_id=post.id)
+            if "content" in data:
+                content = (data.get("content") or "").strip()
+                if len(content) < 20:
+                    return jsonify({"ok": False, "message": "Texto muito curto."}), 400
+                post.content_html = _plain_text_to_html(content)
+            if "excerpt" in data:
+                post.excerpt = (data.get("excerpt") or "").strip()
+            if "featured_image" in data:
+                post.featured_image = (data.get("featured_image") or "").strip()
+            if "category_id" in data:
+                category_id = data.get("category_id")
+                post.categories = []
+                if category_id:
+                    category = Category.query.get(int(category_id))
+                    if category:
+                        post.categories = [category]
+            post.updated_at = datetime.utcnow()
+            db.session.commit()
+            if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get("enabled"):
+                _broadcast_post_to_hub(post)
+            return jsonify({"ok": True, "post": _whatsapp_menu_post_payload(post)})
+
+        if action == "posts.delete":
+            post = Post.query.get(int(data.get("post_id") or 0))
+            if not post:
+                return jsonify({"ok": False, "message": "Matéria não encontrada."}), 404
+            if post.source != "local":
+                return jsonify({"ok": False, "message": "Somente matérias locais podem ser excluídas."}), 400
+            featured_image = post.featured_image or ""
+            post.categories = []
+            PageView.query.filter(PageView.post_id == post.id).update({PageView.post_id: None}, synchronize_session=False)
+            db.session.delete(post)
+            db.session.commit()
+            if is_managed_media_url(featured_image):
+                _delete_local_media(featured_image)
+            return jsonify({"ok": True})
+
+        if action == "categories.list":
+            categories = Category.query.order_by(Category.name.asc()).all()
+            return jsonify({"ok": True, "categories": [{"id": c.id, "name": c.name, "slug": c.slug} for c in categories]})
+
+        if action == "users.list":
+            users = User.query.order_by(User.is_active.desc(), User.email.asc()).limit(50).all()
+            return jsonify({"ok": True, "users": [{"id": u.id, "email": u.email, "is_active": bool(u.is_active), "is_admin": bool(u.is_admin)} for u in users]})
+
+        if action == "insights":
+            analytics = _analytics_stats(30)
+            current = analytics["current"]
+            popular_rows = (
+                db.session.query(Post, func.count(PageView.id).label("views"))
+                .outerjoin(PageView, PageView.post_id == Post.id)
+                .group_by(Post.id)
+                .order_by(desc("views"), desc(Post.published_at))
+                .limit(5)
+                .all()
+            )
+            popular = []
+            for post, views in popular_rows:
+                item = _whatsapp_menu_post_payload(post)
+                item["title"] = f"{item['title']} — {int(views or 0)} views"
+                popular.append(item)
+            sessions = current.get("sessions", 0) or 0
+            return jsonify({
+                "ok": True,
+                "page_views": current.get("pageviews", 0),
+                "visitors": current.get("total_users", 0),
+                "sessions": sessions,
+                "pages_per_session": round((current.get("pageviews", 0) or 0) / sessions, 2) if sessions else 0,
+                "avg_duration_seconds": current.get("avg_duration", 0),
+                "bounce_rate": current.get("bounce_rate", 0),
+                "popular_posts": popular,
+            })
+
+        if action == "ads.list":
+            slots = AdSlot.query.order_by(AdSlot.key.asc()).all()
+            payloads = [_whatsapp_menu_slot_payload(slot) for slot in slots]
+            if data.get("only_with_content"):
+                payloads = [slot for slot in payloads if slot["has_content"]]
+            return jsonify({"ok": True, "slots": payloads})
+
+        if action == "ads.create":
+            slot = AdSlot.query.get(int(data.get("slot_id") or 0))
+            if not slot:
+                return jsonify({"ok": False, "message": "Local de publicidade não encontrado."}), 404
+            image_url = (data.get("image_url") or "").strip()
+            link_url = (data.get("link_url") or "#").strip() or "#"
+            name = (data.get("name") or slot.name or "Publicidade").strip()
+            if not re.match(r"^https?://", image_url, re.I):
+                return jsonify({"ok": False, "message": "A imagem precisa ter uma URL pública válida."}), 400
+            slot.name = name
+            slot.is_active = True
+            slot.html = "__ADCFG__" + json.dumps({
+                "mode": "carousel",
+                "interval": 5000,
+                "banners": [{"title": name, "link": link_url, "image": image_url}],
+            }, ensure_ascii=False)
+            db.session.commit()
+            return jsonify({"ok": True, "slot": _whatsapp_menu_slot_payload(slot)})
+
+        if action == "ads.delete":
+            slot = AdSlot.query.get(int(data.get("slot_id") or 0))
+            if not slot:
+                return jsonify({"ok": False, "message": "Publicidade não encontrada."}), 404
+            slot.html = ""
+            slot.is_active = False
+            db.session.commit()
+            return jsonify({"ok": True, "slot": _whatsapp_menu_slot_payload(slot)})
+
+        if action == "settings.get":
+            return jsonify({
+                "ok": True,
+                "site_title": _setting("site_name", current_app.config.get("SITE_NAME", "Paraná Pop")),
+                "site_description": _setting("default_meta_description", ""),
+                "site_url": current_app.config.get("SITE_URL", request.url_root.rstrip("/")),
+                "logo_url": normalize_media_url(_setting("logo_url", "")),
+            })
+
+        if action == "settings.update":
+            changed = False
+            if "site_title" in data:
+                title = (data.get("site_title") or "").strip()
+                if not title:
+                    return jsonify({"ok": False, "message": "O título não pode ficar vazio."}), 400
+                _save_setting("site_name", title)
+                changed = True
+            if "site_description" in data:
+                _save_setting("default_meta_description", (data.get("site_description") or "").strip())
+                changed = True
+            if not changed:
+                return jsonify({"ok": False, "message": "Nenhuma configuração válida recebida."}), 400
+            db.session.commit()
+            return jsonify({"ok": True})
+
+        return jsonify({"ok": False, "message": "Ação do menu não reconhecida."}), 400
+    except (TypeError, ValueError):
+        db.session.rollback()
+        return jsonify({"ok": False, "message": "Dados inválidos para esta ação."}), 400
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Erro no Menu Admin do WhatsApp")
+        return jsonify({"ok": False, "message": str(exc) or "Erro interno no Menu Admin."}), 500
+
+
 @admin_bp.get("/whatsapp")
 @login_required
 def whatsapp_page():
