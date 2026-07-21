@@ -1760,13 +1760,23 @@ def _whatsapp_menu_post_payload(post: Post) -> dict:
 
 def _whatsapp_menu_slot_payload(slot: AdSlot) -> dict:
     visual = _slot_visual_payload(slot)
+    meta = _default_slot_layout_meta().get(slot.key, {})
     has_content = bool((slot.html or "").strip() and visual.get("banners"))
+    banner_names = []
+    for item in visual.get("banners") or []:
+        title = (item.get("title") or "").strip()
+        if title:
+            banner_names.append(title)
     return {
         "id": slot.id,
         "key": slot.key,
         "name": slot.name,
+        "label": meta.get("label", slot.name),
+        "hint": meta.get("hint", ""),
+        "dimensions": meta.get("dimensions", "Consulte o tamanho no painel"),
         "is_active": bool(slot.is_active),
         "has_content": has_content,
+        "banner_names": banner_names,
     }
 
 
