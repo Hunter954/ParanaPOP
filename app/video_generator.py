@@ -329,10 +329,10 @@ def generate_trivox_vertical_overlay(title: str) -> Image.Image:
     width, height = TRIVOX_VERTICAL_SIZE
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
-    logo = _load_logo("trivox.png", max_width=int(width * 0.28), max_height=int(height * 0.10))
+    logo = _load_logo("trivox.png", max_width=int(width * 0.36), max_height=int(height * 0.12))
     if logo:
-        x = (width - logo.width) // 2
-        y = 52
+        x = width - logo.width - 28
+        y = 28
         canvas.alpha_composite(logo, (x, y))
 
     box_left = 36
