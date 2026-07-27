@@ -30,14 +30,41 @@ class VideoGeneratorError(Exception):
     pass
 
 
-def _ffmpeg_binary() -> str:
-    configured = (current_app.config.get("FFMPEG_BINARY") or "ffmpeg").strip()
+def _media_binary(config_key: str, default: str) -> str:
+    configured = (current_app.config.get(config_key) or default).strip()
     resolved = shutil.which(configured)
     if not resolved:
         raise VideoGeneratorError(
-            "FFmpeg não está instalado. No Railway, adicione ffmpeg aos pacotes do Nixpacks."
+            f"{default} não está instalado no ambiente de processamento."
         )
     return resolved
+
+
+def _ffmpeg_binary() -> str:
+    return _media_binary("FFMPEG_BINARY", "ffmpeg")
+
+
+def _probe_duration(input_path: Path) -> float:
+    """Retorna a duração real do arquivo para impedir que a imagem em loop prolongue o vídeo."""
+    ffprobe = _media_binary("FFPROBE_BINARY", "ffprobe")
+    command = [
+        ffprobe,
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(input_path),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    if completed.returncode != 0:
+        detail = (completed.stderr or "erro desconhecido").strip()[-500:]
+        raise VideoGeneratorError(f"Não foi possível identificar a duração do vídeo: {detail}")
+    try:
+        duration = float((completed.stdout or "").strip())
+    except (TypeError, ValueError) as exc:
+        raise VideoGeneratorError("O vídeo recebido não possui uma duração válida.") from exc
+    if duration <= 0:
+        raise VideoGeneratorError("O vídeo recebido possui duração inválida.")
+    return duration
 
 
 def generate_stories_overlay(title: str, category_text: str = "") -> Image.Image:
@@ -155,11 +182,14 @@ def generate_paranapop_stories_video(
         overlay_path = tmp_dir / "overlay.png"
         output_path = tmp_dir / "paranapop-stories.mp4"
         input_path.write_bytes(video_content)
+        input_duration = _probe_duration(input_path)
+        output_duration = min(input_duration, float(max_seconds))
         generate_stories_overlay(title=title, category_text=category_text).save(overlay_path, "PNG")
 
         filter_complex = (
             "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-            "crop=1080:1920,setsar=1[base];[base][1:v]overlay=0:0:format=auto[v]"
+            "crop=1080:1920,setsar=1[base];"
+            "[base][1:v]overlay=0:0:format=auto:shortest=1:eof_action=endall[v]"
         )
         command = [
             ffmpeg,
@@ -172,7 +202,7 @@ def generate_paranapop_stories_video(
             "-filter_complex", filter_complex,
             "-map", "[v]",
             "-map", "0:a?",
-            "-t", str(max_seconds),
+            "-t", f"{output_duration:.3f}",
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-crf", "22",
@@ -184,7 +214,12 @@ def generate_paranapop_stories_video(
             str(output_path),
         ]
         try:
-            completed = subprocess.run(command, capture_output=True, text=True, timeout=max(120, max_seconds * 3))
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=max(120, int(output_duration * 3)),
+            )
         except subprocess.TimeoutExpired as exc:
             raise VideoGeneratorError("O processamento do vídeo excedeu o tempo permitido.") from exc
         if completed.returncode != 0 or not output_path.exists():
