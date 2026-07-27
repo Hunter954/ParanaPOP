@@ -65,4 +65,7 @@ class Config:
     R2_PUBLIC_BASE_URL = (os.getenv("R2_PUBLIC_BASE_URL") or "").strip().rstrip("/")
     R2_LOCAL_DIR = (os.getenv("R2_LOCAL_DIR") or MEDIA_ROOT).strip()
     USE_R2 = bool(R2_BUCKET and R2_ENDPOINT and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
-    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(32 * 1024 * 1024)))
+    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(96 * 1024 * 1024)))
+    FFMPEG_BINARY = (os.getenv("FFMPEG_BINARY") or "ffmpeg").strip()
+    VIDEO_MAX_BYTES = int(os.getenv("VIDEO_MAX_BYTES", str(80 * 1024 * 1024)))
+    VIDEO_MAX_SECONDS = int(os.getenv("VIDEO_MAX_SECONDS", "180"))

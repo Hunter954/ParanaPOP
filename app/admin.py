@@ -18,6 +18,7 @@ from .storage import delete_media, is_managed_media_url, list_media_files, local
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
 from .art_generator import generate_variants
+from .video_generator import VideoGeneratorError, generate_paranapop_stories_video
 from .news_api import search_google_news, generate_article_with_openai, enrich_news_item, test_openai_connection
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
 from .social_whatsapp import (
@@ -1743,6 +1744,43 @@ def bot_generate_photo_api():
         current_app.logger.exception("Falha ao gerar artes manuais do Paraná Pop")
         return jsonify({"ok": False, "message": f"Não consegui gerar as artes: {str(exc)[:180]}"}), 500
 
+
+
+@admin_bp.post("/api/whatsapp-bot/generate-video")
+def bot_generate_video_api():
+    data = request.get_json(silent=True) or {}
+    if not _authorized_bot_request(data):
+        return jsonify({"ok": False, "message": "Token do gerador de vídeo inválido."}), 401
+
+    title = (data.get("title") or data.get("titulo") or "").strip()
+    category = (data.get("category") or data.get("categoria") or "").strip()
+    video_b64 = (data.get("video_base64") or "").strip()
+    if not title or not category or not video_b64:
+        return jsonify({"ok": False, "message": "Vídeo, título e categoria são obrigatórios."}), 400
+
+    try:
+        if "," in video_b64 and video_b64.lower().startswith("data:"):
+            _meta, video_b64 = video_b64.split(",", 1)
+        content = base64.b64decode(video_b64, validate=True)
+        max_bytes = int(current_app.config.get("VIDEO_MAX_BYTES", 80 * 1024 * 1024))
+        if len(content) > max_bytes:
+            return jsonify({"ok": False, "message": f"O vídeo excede o limite de {max_bytes // (1024 * 1024)} MB."}), 413
+
+        generated = generate_paranapop_stories_video(
+            video_content=content,
+            title=title[:500],
+            category_text=category[:120],
+            filename_hint=data.get("video_filename") or "video.mp4",
+        )
+        url = generated.get("url") or ""
+        if url.startswith("/"):
+            generated["url"] = request.host_url.rstrip("/") + url
+        return jsonify({"ok": True, "brand": "paranapop", "videos": [generated]})
+    except VideoGeneratorError as exc:
+        return jsonify({"ok": False, "message": str(exc)[:700]}), 400
+    except Exception as exc:
+        current_app.logger.exception("Falha ao gerar vídeo manual do Paraná Pop")
+        return jsonify({"ok": False, "message": f"Não consegui gerar o vídeo: {str(exc)[:180]}"}), 500
 
 
 def _whatsapp_menu_post_payload(post: Post) -> dict:
