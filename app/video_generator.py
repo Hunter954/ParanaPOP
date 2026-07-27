@@ -117,15 +117,15 @@ def _fit_multiline_title(
 ) -> tuple[object, list[str]]:
     clean = _normalize_text(text)
     if not clean:
-        return _load_font(min_size, bold=True), []
+        return _load_font(min_size), []
 
     for size in range(max_size, min_size - 1, -2):
-        font = _load_font(size, bold=True)
+        font = _load_font(size)
         lines = _wrap_text(clean, font, max_width)
         if lines and len(lines) <= max_lines:
             return font, lines
 
-    font = _load_font(min_size, bold=True)
+    font = _load_font(min_size)
     words = clean.split()
     lines = _wrap_text(clean, font, max_width)
     if len(lines) <= max_lines:
