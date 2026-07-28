@@ -340,6 +340,33 @@ async function requestManualVideo(session) {
   return response.data;
 }
 
+async function resolveGeneratedVideo(source) {
+  const value = String(source || '').trim();
+  if (!value) throw new Error('URL do vídeo gerado não informada.');
+
+  // O resolveMedia padrão é limitado por MAX_MEDIA_BYTES (15 MB por padrão),
+  // adequado para imagens, mas insuficiente para os vídeos renderizados.
+  if (/^https?:\/\//i.test(value)) {
+    const response = await axios.get(value, {
+      responseType: 'arraybuffer',
+      timeout: Math.max(config.mediaDownloadTimeoutMs, 120000),
+      maxContentLength: config.maxVideoBytes,
+      maxBodyLength: config.maxVideoBytes,
+      validateStatus: (status) => status >= 200 && status < 300
+    });
+    const buffer = Buffer.from(response.data);
+    if (buffer.length > config.maxVideoBytes) {
+      throw new Error(`O vídeo gerado excede o limite de ${Math.floor(config.maxVideoBytes / 1_000_000)} MB.`);
+    }
+    return {
+      buffer,
+      mimetype: String(response.headers['content-type'] || 'video/mp4').split(';')[0].trim()
+    };
+  }
+
+  return resolveMedia(value);
+}
+
 async function sendGeneratedVideos(jid, result, brand) {
   const videos = Array.isArray(result?.videos)
     ? result.videos
@@ -347,7 +374,7 @@ async function sendGeneratedVideos(jid, result, brand) {
   if (!videos.length) throw new Error(result?.message || 'O gerador não devolveu nenhum vídeo.');
 
   for (const item of videos) {
-    const media = await resolveMedia(item.url || item.video_url);
+    const media = await resolveGeneratedVideo(item.url || item.video_url);
     await sock.sendMessage(jid, {
       video: media.buffer,
       mimetype: item.mimetype || media.mimetype || 'video/mp4',
