@@ -16,6 +16,11 @@ import { handleAdminMenu } from './adminMenu.js';
 
 const logger = P({ level: process.env.LOG_LEVEL || 'info' });
 
+// Garante que o Axios não herde o limite genérico de mídia (15 MB) durante
+// o fluxo de vídeo. Paraná Pop e Portal Trivox usam MAX_VIDEO_BYTES.
+axios.defaults.maxContentLength = config.maxVideoBytes;
+axios.defaults.maxBodyLength = Math.ceil(config.maxVideoBytes * 1.5);
+
 let sock = null;
 let qrText = null;
 let qrDataUrl = null;
@@ -334,7 +339,8 @@ async function requestManualVideo(session) {
         'X-Bot-Token': session.brand.token,
         'Content-Type': 'application/json'
       },
-      maxBodyLength: config.maxVideoBytes * 1.5
+      maxContentLength: config.maxVideoBytes,
+      maxBodyLength: Math.ceil(config.maxVideoBytes * 1.5)
     }
   );
   return response.data;
