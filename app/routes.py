@@ -624,6 +624,14 @@ def post(slug):
 
     related_label = post.categories[0].name if post.categories else "Notícias"
 
+    readable_text = _clean_text(post.content_html or post.excerpt or "", 200000)
+    reading_time = max(1, round(len(readable_text.split()) / 220))
+    months_pt = ("janeiro", "fevereiro", "março", "abril", "maio", "junho",
+                 "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+    published_label = ""
+    if post.published_at:
+        published_label = f"{post.published_at.day} de {months_pt[post.published_at.month - 1]} de {post.published_at.year}"
+
     meta = _meta_defaults()
     meta.update({
         "meta_title": _clean_text(post.title, 110),
@@ -643,6 +651,8 @@ def post(slug):
         latest_posts=latest_posts,
         related_posts=related_posts,
         related_label=related_label,
+        reading_time=reading_time,
+        published_label=published_label,
         ad_header=_get_ad("header_top"),
         ad_article_end=_get_ad("home_mid"),
         ad_sidebar_1=_get_ad("sidebar_1"),
