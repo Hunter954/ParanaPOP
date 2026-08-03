@@ -18,7 +18,7 @@ from flask import Response, current_app, send_file, send_from_directory
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
-_ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".avif"}
+_ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".jfif", ".png", ".webp", ".gif", ".svg", ".avif", ".heic", ".heif"}
 
 
 @dataclass
@@ -168,29 +168,46 @@ def save_file_storage(file_storage: FileStorage | None, subdir: str = "general")
     if not file_storage or not getattr(file_storage, "filename", ""):
         return ""
 
-    ext = _file_ext(file_storage.filename) or ".bin"
+    original_name = secure_filename(file_storage.filename or "")
+    ext = _file_ext(original_name).lower()
+    if not ext or ext not in _ALLOWED_IMAGE_EXTS:
+        raise ValueError("Formato de imagem não permitido. Use JPG, JPEG, JFIF, PNG, WEBP, GIF, SVG, AVIF, HEIC ou HEIF.")
+
     key = f"{subdir.strip('/')}/{datetime.utcnow().strftime('%Y/%m/%d')}/{uuid4().hex}{ext}".lstrip("/")
-    content_type = getattr(file_storage, "mimetype", "") or _content_type_for_name(file_storage.filename)
+    content_type = getattr(file_storage, "mimetype", "") or _content_type_for_name(original_name)
+
+    # Always rewind before handing the stream to a storage backend. Some
+    # validators inspect the upload first and leave the pointer away from zero.
+    try:
+        file_storage.stream.seek(0)
+    except Exception:
+        pass
 
     if using_r2():
-        extra_args = {"ContentType": content_type} if content_type else None
-        _r2_client().upload_fileobj(
-            Fileobj=file_storage,
-            Bucket=current_app.config["R2_BUCKET"].strip(),
-            Key=key,
-            ExtraArgs=extra_args or {},
-        )
         try:
-            file_storage.stream.seek(0)
-        except Exception:
-            pass
-        return media_url_from_key(key)
+            extra_args = {"ContentType": content_type} if content_type else None
+            _r2_client().upload_fileobj(
+                Fileobj=file_storage.stream,
+                Bucket=current_app.config["R2_BUCKET"].strip(),
+                Key=key,
+                ExtraArgs=extra_args or {},
+            )
+            return media_url_from_key(key)
+        except Exception as exc:
+            # Do not block publication when the object-storage service has a
+            # temporary configuration/network failure. Save to the mounted
+            # media volume and return the local /media URL instead.
+            current_app.logger.exception("Falha no upload R2; usando armazenamento local: %s", exc)
+            try:
+                file_storage.stream.seek(0)
+            except Exception:
+                pass
 
-    folder = media_root() / subdir / datetime.utcnow().strftime("%Y/%m/%d")
-    folder.mkdir(parents=True, exist_ok=True)
-    full_path = folder / f"{uuid4().hex}{ext}"
+    root = media_root()
+    full_path = root / key
+    full_path.parent.mkdir(parents=True, exist_ok=True)
     file_storage.save(full_path)
-    return media_url_from_key(full_path.relative_to(media_root()).as_posix())
+    return f"{media_prefix()}/{key}"
 
 
 def save_bytes(content: bytes, folder: str, filename_hint: str = "file", content_type: str = "") -> str:

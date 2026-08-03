@@ -3,6 +3,16 @@
 {% block page_title %}{% if mode=='new' %}Nova matéria{% else %}Editar matéria{% endif %}{% endblock %}
 {% block page_subtitle %}Editor visual sem API externa, slug gerado no código e opção de agendar a publicação.{% endblock %}
 {% block admin_content %}
+{% if form.errors %}
+<div class="alert alert-danger" role="alert">
+  <strong>Não foi possível salvar a matéria.</strong>
+  <ul class="mb-0 mt-2">
+    {% for field_name, errors in form.errors.items() %}
+      {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 <form method="post" enctype="multipart/form-data" class="admin-grid-2 js-post-form">
   {{ form.csrf_token }}
   <section class="panel-card">
@@ -61,7 +71,12 @@
       <div><label class="form-label">Calendário da publicação</label>{{ form.scheduled_for(class='form-control', type='datetime-local') }}<div class="form-help mt-2">Se a data estiver no futuro a matéria fica em standby e entra automaticamente no horário configurado.</div></div>
       <div><label class="form-label">Categorias</label>{{ form.categories(class='form-select', multiple=true, size='8') }}</div>
       <div><label class="form-label">Imagem por link</label>{{ form.featured_image(class='form-control', placeholder='https://.../imagem.jpg') }}</div>
-      <div><label class="form-label">ou enviar arquivo</label>{{ form.featured_image_file(class='form-control') }}</div>
+      <div>
+        <label class="form-label">ou enviar arquivo</label>
+        {{ form.featured_image_file(class='form-control', accept='image/jpeg,image/png,image/webp,image/gif,image/svg+xml,image/avif,image/heic,image/heif,.jpg,.jpeg,.jfif,.png,.webp,.gif,.svg,.avif,.heic,.heif') }}
+        <div class="form-help mt-2">Formatos aceitos: JPG, JPEG, JFIF, PNG, WEBP, GIF, SVG, AVIF, HEIC e HEIF.</div>
+        {% for error in form.featured_image_file.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
+      </div>
       {% if post and post.featured_image %}
       <div class="preview-box">
         <div class="small text-muted mb-2">Imagem atual</div>

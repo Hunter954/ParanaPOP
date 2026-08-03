@@ -1137,8 +1137,14 @@ def posts_new():
     _bind_post_form_choices(form)
     if request.method == "POST" and form.validate_on_submit():
         featured_image = (form.featured_image.data or "").strip()
-        if form.featured_image_file.data:
-            featured_image = _save_upload(form.featured_image_file.data, "posts")
+        upload = form.featured_image_file.data
+        if upload and getattr(upload, "filename", ""):
+            try:
+                featured_image = _save_upload(upload, "posts")
+            except Exception as exc:
+                current_app.logger.exception("Erro ao salvar imagem destacada da nova matéria")
+                flash(f"Não foi possível salvar a foto: {exc}", "danger")
+                return render_template("admin/post_form.html", form=form, mode="new", post=None, hub=_hub_config(), now_utc=datetime.utcnow(), **_common_admin_context("posts"))
         now = datetime.utcnow()
         scheduled_for = form.scheduled_for.data
         post = Post(
@@ -1193,8 +1199,14 @@ def posts_edit(post_id):
     elif form.validate_on_submit():
         featured_image = (form.featured_image.data or "").strip()
         old_featured_image = post.featured_image or ""
-        if form.featured_image_file.data:
-            featured_image = _save_upload(form.featured_image_file.data, "posts")
+        upload = form.featured_image_file.data
+        if upload and getattr(upload, "filename", ""):
+            try:
+                featured_image = _save_upload(upload, "posts")
+            except Exception as exc:
+                current_app.logger.exception("Erro ao salvar imagem destacada da matéria %s", post.id)
+                flash(f"Não foi possível salvar a foto: {exc}", "danger")
+                return render_template("admin/post_form.html", form=form, mode="edit", post=post, hub=_hub_config(), now_utc=datetime.utcnow(), **_common_admin_context("posts"))
         post.title = (form.title.data or "").strip()
         post.slug = _ensure_unique_slug(Post, post.title or post.slug or "materia", object_id=post.id)
         post.excerpt = (form.excerpt.data or "").strip()
@@ -1210,7 +1222,7 @@ def posts_edit(post_id):
             post.published_at = None
         post.categories = Category.query.filter(Category.id.in_(form.categories.data or [])).all()
         db.session.commit()
-        if form.featured_image_file.data and old_featured_image and old_featured_image != featured_image:
+        if upload and getattr(upload, "filename", "") and old_featured_image and old_featured_image != featured_image:
             _delete_local_media(old_featured_image)
         if post.published_at and post.published_at <= datetime.utcnow() and _hub_config().get('enabled'):
             _broadcast_post_to_hub(post)

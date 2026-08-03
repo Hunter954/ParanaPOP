@@ -21,7 +21,7 @@ class AdSlotForm(FlaskForm):
     name = StringField("Nome", validators=[DataRequired(), Length(max=190)])
     image_url = StringField("Imagem (URL)", validators=[Length(max=800)])
     link_url = StringField("Link (URL)", validators=[Length(max=800)])
-    image_file = FileField("Imagem (arquivo)", validators=[Optional(), FileAllowed(["jpg", "jpeg", "png", "webp", "gif", "svg"], "Envie uma imagem válida.")])
+    image_file = FileField("Imagem (arquivo)", validators=[Optional(), FileAllowed(["jpg", "jpeg", "jfif", "png", "webp", "gif", "svg", "avif", "heic", "heif"], "Envie uma imagem válida.")])
     html = TextAreaField("HTML do anúncio")
     is_active = BooleanField("Ativo")
 
@@ -36,6 +36,6 @@ class PostAdminForm(FlaskForm):
     excerpt = TextAreaField("Resumo", validators=[Optional()])
     content_html = TextAreaField("Conteúdo", validators=[Optional()])
     featured_image = StringField("Imagem destacada (URL)", validators=[Optional(), Length(max=800)])
-    featured_image_file = FileField("Imagem destacada (arquivo)", validators=[Optional(), FileAllowed(["jpg", "jpeg", "png", "webp", "gif", "svg"], "Envie uma imagem válida.")])
+    featured_image_file = FileField("Imagem destacada (arquivo)", validators=[Optional(), FileAllowed(["jpg", "jpeg", "jfif", "png", "webp", "gif", "svg", "avif", "heic", "heif"], "Envie uma imagem válida.")])
     categories = SelectMultipleField("Categorias", coerce=int, validators=[Optional()])
     scheduled_for = DateTimeLocalField("Data e hora da publicação", format='%Y-%m-%dT%H:%M', validators=[Optional()])
