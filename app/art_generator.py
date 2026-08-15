@@ -521,21 +521,28 @@ def generate_art_image(title: str, image_source: str, variant: str, include_titl
 
 
 def generate_trivox_art_image(title: str, image_source: str, variant: str = "feed") -> Image.Image:
-    """Gera a arte do Portal Trivox no padrão do feed 1080x1440 enviado pelo cliente."""
+    """Gera a arte do Portal Trivox no padrão informado pelo cliente."""
     width = 1080
     height = 1440
-    canvas = Image.new("RGBA", (width, height), (239, 239, 239, 255))
-
-    header_height = 248
-    footer_height = 328
+    header_height = 251
+    footer_height = 272
     photo_height = height - header_height - footer_height
 
-    # Cabeçalho e rodapé no cinza claro do layout original do Trivox
+    # Fundo geral cinza claro e rodapé branco, como no padrão enviado.
+    canvas = Image.new("RGBA", (width, height), (239, 239, 239, 255))
     draw = ImageDraw.Draw(canvas)
-    light_bg = (239, 239, 239, 255)
-    draw.rectangle((0, 0, width, header_height), fill=light_bg)
-    draw.rectangle((0, header_height + photo_height, width, height), fill=light_bg)
+    draw.rectangle((0, header_height + photo_height, width, height), fill=(255, 255, 255, 255))
 
+    # Faixa superior com a arte completa do logo.
+    header_asset_path = _asset_path("trivox.png")
+    if header_asset_path.exists():
+        with Image.open(header_asset_path) as header_img:
+            header = header_img.convert("RGBA")
+        if header.size != (width, header_height):
+            header = _cover_resize(header, (width, header_height))
+        canvas.alpha_composite(header, (0, 0))
+
+    # Foto principal entre topo e rodapé.
     if image_source:
         try:
             background = _fetch_image(image_source)
@@ -545,49 +552,32 @@ def generate_trivox_art_image(title: str, image_source: str, variant: str = "fee
             photo = _cover_resize(background, (width, photo_height))
             canvas.alpha_composite(photo, (0, header_height))
 
-    # Logo centralizada no topo
-    logo_path = _asset_path("trivox.png")
-    if logo_path.exists():
-        with Image.open(logo_path) as logo_img:
-            logo = logo_img.convert("RGBA")
-        max_logo_width = 470
-        max_logo_height = 118
-        scale = min(max_logo_width / max(1, logo.width), max_logo_height / max(1, logo.height), 1)
-        logo = logo.resize(
-            (max(1, int(logo.width * scale)), max(1, int(logo.height * scale))),
-            Image.Resampling.LANCZOS,
-        )
-        logo_x = (width - logo.width) // 2
-        logo_y = max(46, (header_height - logo.height) // 2 - 2)
-        canvas.alpha_composite(logo, (logo_x, logo_y))
-
-    # Título centralizado no rodapé, com fonte parecida com a referência do cliente
+    # Título centralizado no rodapé branco.
     title_text = _normalize_text(title)
     if title_text:
-        title_area_left = 90
-        title_area_right = width - 90
+        title_area_left = 92
+        title_area_right = width - 92
         title_area_width = title_area_right - title_area_left
         title_center_x = width // 2
-        title_top = header_height + photo_height + 34
-        title_bottom = height - 42
+        title_top = header_height + photo_height + 36
+        title_bottom = height - 40
         available_height = title_bottom - title_top
 
-        # Ajuste de tamanho tentando respeitar até 4 linhas, centralizado.
         chosen_lines = []
         chosen_font = None
         chosen_boxes = []
         chosen_gap = 0
-        for size in range(72, 34, -2):
+        for size in range(74, 32, -2):
             lines, used_size = _wrap_text(
                 title_text,
                 max_size=size,
                 max_width=title_area_width,
                 max_lines=4,
-                min_size=34,
+                min_size=32,
             )
             font = _load_font(used_size)
             boxes = [_line_metrics(font, line) for line in lines]
-            line_gap = max(4, int(round(used_size * 0.10)))
+            line_gap = max(2, int(round(used_size * 0.06)))
             block_height = sum(box[5] for box in boxes) + line_gap * max(0, len(boxes) - 1)
             if block_height <= available_height:
                 chosen_lines = lines
@@ -595,22 +585,23 @@ def generate_trivox_art_image(title: str, image_source: str, variant: str = "fee
                 chosen_boxes = boxes
                 chosen_gap = line_gap
                 break
+
         if not chosen_font:
             lines, used_size = _wrap_text(
                 title_text,
-                max_size=34,
+                max_size=32,
                 max_width=title_area_width,
                 max_lines=4,
-                min_size=30,
+                min_size=28,
             )
             chosen_lines = lines
             chosen_font = _load_font(used_size)
             chosen_boxes = [_line_metrics(chosen_font, line) for line in chosen_lines]
-            chosen_gap = max(4, int(round(used_size * 0.10)))
+            chosen_gap = max(2, int(round(used_size * 0.06)))
 
         block_height = sum(box[5] for box in chosen_boxes) + chosen_gap * max(0, len(chosen_boxes) - 1)
-        current_y = title_top + max(0, (available_height - block_height) // 2) - 6
-        title_fill = (12, 54, 125, 255)
+        current_y = title_top + max(0, (available_height - block_height) // 2) - 4
+        title_fill = (10, 59, 141, 255)
         draw = ImageDraw.Draw(canvas)
         for index, line in enumerate(chosen_lines):
             left, top, _right, _bottom, line_width, line_height = chosen_boxes[index]
