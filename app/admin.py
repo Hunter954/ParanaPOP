@@ -17,7 +17,7 @@ from .storage import delete_media, is_managed_media_url, list_media_files, local
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
-from .art_generator import generate_variants
+from .art_generator import generate_variants, generate_trivox_variants
 from .video_generator import (
     VideoGeneratorError,
     generate_paranapop_stories_video,
@@ -1760,6 +1760,37 @@ def bot_generate_photo_api():
         current_app.logger.exception("Falha ao gerar artes manuais do Paraná Pop")
         return jsonify({"ok": False, "message": f"Não consegui gerar as artes: {str(exc)[:180]}"}), 500
 
+
+
+@admin_bp.post("/api/whatsapp-bot/generate-trivox-photo")
+def bot_generate_trivox_photo_api():
+    data = request.get_json(silent=True) or {}
+    if not _authorized_bot_request(data):
+        return jsonify({"ok": False, "message": "Token do gerador manual inválido."}), 401
+
+    title = (data.get("title") or data.get("titulo") or "").strip()
+    image_b64 = (data.get("image_base64") or "").strip()
+    if not title or not image_b64:
+        return jsonify({"ok": False, "message": "Imagem e título são obrigatórios."}), 400
+
+    try:
+        if "," in image_b64 and image_b64.lower().startswith("data:"):
+            meta, image_b64 = image_b64.split(",", 1)
+            content_type = meta.split(";")[0].replace("data:", "")
+        else:
+            content_type = data.get("image_mimetype") or "image/jpeg"
+        content = base64.b64decode(image_b64, validate=True)
+        source_url = save_bytes(content, "gerador/trivox-manual-source", data.get("image_filename") or "foto.jpg", content_type)
+        generated = generate_trivox_variants(title=title[:500], image_source=source_url)
+        base_url = request.host_url.rstrip("/")
+        for item in generated:
+            url = item.get("url") or ""
+            if url.startswith("/"):
+                item["url"] = base_url + url
+        return jsonify({"ok": True, "brand": "trivox", "images": generated})
+    except Exception as exc:
+        current_app.logger.exception("Falha ao gerar artes manuais do Portal Trivox")
+        return jsonify({"ok": False, "message": f"Não consegui gerar as artes do Trivox: {str(exc)[:180]}"}), 500
 
 
 @admin_bp.post("/api/whatsapp-bot/generate-video")

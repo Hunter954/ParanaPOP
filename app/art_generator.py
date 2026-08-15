@@ -519,6 +519,90 @@ def generate_art_image(title: str, image_source: str, variant: str, include_titl
     return canvas
 
 
+
+def generate_trivox_art_image(title: str, image_source: str, variant: str) -> Image.Image:
+    """Gera a arte manual do Portal Trivox sem depender do antigo plugin WordPress."""
+    spec = VARIANT_SPECS[variant]
+    width = int(spec["width"])
+    height = int(spec["height"])
+    canvas = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+
+    if image_source:
+        try:
+            background = _fetch_image(image_source)
+        except Exception as exc:
+            raise ArtGeneratorError(f"Não foi possível carregar a imagem informada: {exc}") from exc
+        if background is not None:
+            canvas.alpha_composite(_cover_resize(background, (width, height)))
+
+    # Escurecimento inferior próprio do Trivox para preservar leitura do título.
+    fade_height = int(height * 0.46)
+    fade = Image.new("RGBA", (width, fade_height), (0, 0, 0, 0))
+    fade_draw = ImageDraw.Draw(fade)
+    for y in range(fade_height):
+        ratio = y / max(1, fade_height - 1)
+        alpha = int(225 * (ratio ** 1.7))
+        fade_draw.line((0, y, width, y), fill=(0, 0, 0, alpha))
+    canvas.alpha_composite(fade, (0, height - fade_height))
+
+    logo_path = _asset_path("trivox.png")
+    if logo_path.exists():
+        with Image.open(logo_path) as logo_img:
+            logo = logo_img.convert("RGBA")
+        max_logo_width = int(width * 0.26)
+        max_logo_height = int(height * 0.10)
+        scale = min(max_logo_width / logo.width, max_logo_height / logo.height, 1)
+        logo = logo.resize((max(1, int(logo.width * scale)), max(1, int(logo.height * scale))), Image.Resampling.LANCZOS)
+        canvas.alpha_composite(logo, (64, 64))
+
+    title_text = _normalize_text(title).upper()
+    if title_text:
+        draw = ImageDraw.Draw(canvas)
+        pad_left = 64
+        pad_right = 64
+        max_width = width - pad_left - pad_right
+        # Usa a mesma tipografia instalada no gerador atual, mas sem badge de categoria.
+        lines, used_size = _wrap_text(
+            title_text,
+            max_size=int(spec.get("max_size", 44)) + 4,
+            max_width=max_width,
+            max_lines=int(spec.get("max_lines", 4)),
+            min_size=int(spec.get("min_size", 24)),
+        )
+        font = _load_font(used_size)
+        line_gap = max(8, int(round(used_size * 0.20)))
+        boxes = [_line_metrics(font, line) for line in lines]
+        total_height = sum(box[5] for box in boxes) + line_gap * max(0, len(boxes) - 1)
+        current_y = height - int(spec.get("bottom_gap", 58)) - total_height
+        # Filete na cor institucional para amarrar a identidade visual.
+        accent_y = max(height - fade_height + 24, current_y - 26)
+        draw.rounded_rectangle((pad_left, accent_y, pad_left + 118, accent_y + 10), radius=5, fill=(0, 62, 77, 255))
+        for index, line in enumerate(lines):
+            left, top, _right, _bottom, _line_width, line_height = boxes[index]
+            draw.text((pad_left - left, current_y - top), line, font=font, fill=(255, 255, 255, 255))
+            current_y += line_height + line_gap
+
+    return canvas
+
+
+def generate_trivox_variants(*, title: str, image_source: str) -> list[dict[str, str]]:
+    results: list[dict[str, str]] = []
+    for key, spec in VARIANT_SPECS.items():
+        image = generate_trivox_art_image(title=title, image_source=image_source, variant=key)
+        filename = f"trivox-arte-{key}-{uuid.uuid4().hex}.png"
+        buffer = BytesIO()
+        image.convert("RGB").save(buffer, format="PNG")
+        url = save_bytes(buffer.getvalue(), folder="gerador/trivox-generated", filename_hint=filename, content_type="image/png")
+        results.append({
+            "key": key,
+            "label": spec["label"],
+            "size": f"{spec['width']}x{spec['height']}",
+            "url": url,
+            "download_key": key_from_media_url(url) or f"gerador/trivox-generated/{filename}",
+            "download_name": filename,
+        })
+    return results
+
 def build_generator_payload(
     *,
     post_url: str,
