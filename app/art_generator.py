@@ -520,12 +520,21 @@ def generate_art_image(title: str, image_source: str, variant: str, include_titl
 
 
 
-def generate_trivox_art_image(title: str, image_source: str, variant: str) -> Image.Image:
-    """Gera a arte manual do Portal Trivox com identidade própria, alinhada ao /video do Trivox."""
-    spec = VARIANT_SPECS[variant]
-    width = int(spec["width"])
-    height = int(spec["height"])
-    canvas = Image.new("RGBA", (width, height), (245, 246, 247, 255))
+def generate_trivox_art_image(title: str, image_source: str, variant: str = "feed") -> Image.Image:
+    """Gera a arte do Portal Trivox no padrão do feed 1080x1440 enviado pelo cliente."""
+    width = 1080
+    height = 1440
+    canvas = Image.new("RGBA", (width, height), (239, 239, 239, 255))
+
+    header_height = 248
+    footer_height = 328
+    photo_height = height - header_height - footer_height
+
+    # Cabeçalho e rodapé no cinza claro do layout original do Trivox
+    draw = ImageDraw.Draw(canvas)
+    light_bg = (239, 239, 239, 255)
+    draw.rectangle((0, 0, width, header_height), fill=light_bg)
+    draw.rectangle((0, header_height + photo_height, width, height), fill=light_bg)
 
     if image_source:
         try:
@@ -533,131 +542,109 @@ def generate_trivox_art_image(title: str, image_source: str, variant: str) -> Im
         except Exception as exc:
             raise ArtGeneratorError(f"Não foi possível carregar a imagem informada: {exc}") from exc
         if background is not None:
-            canvas.alpha_composite(_cover_resize(background, (width, height)))
+            photo = _cover_resize(background, (width, photo_height))
+            canvas.alpha_composite(photo, (0, header_height))
 
-    # Vinheta leve apenas para dar contraste, sem usar o fade amarelo/preto do Paraná Pop.
-    shade_height = int(height * 0.50)
-    shade = Image.new("RGBA", (width, shade_height), (0, 0, 0, 0))
-    shade_draw = ImageDraw.Draw(shade)
-    for y in range(shade_height):
-        ratio = y / max(1, shade_height - 1)
-        alpha = int(118 * (ratio ** 1.8))
-        shade_draw.line((0, y, width, y), fill=(0, 18, 39, alpha))
-    canvas.alpha_composite(shade, (0, height - shade_height))
-
-    # Logo no canto superior direito, igual à linguagem usada no /video do Trivox.
+    # Logo centralizada no topo
     logo_path = _asset_path("trivox.png")
     if logo_path.exists():
         with Image.open(logo_path) as logo_img:
             logo = logo_img.convert("RGBA")
-        max_logo_width = int(width * (0.34 if variant == "stories" else 0.30))
-        max_logo_height = int(height * 0.105)
-        scale = min(max_logo_width / logo.width, max_logo_height / logo.height, 1)
+        max_logo_width = 470
+        max_logo_height = 118
+        scale = min(max_logo_width / max(1, logo.width), max_logo_height / max(1, logo.height), 1)
         logo = logo.resize(
             (max(1, int(logo.width * scale)), max(1, int(logo.height * scale))),
             Image.Resampling.LANCZOS,
         )
-        # A imagem histórica do logo possui fundo branco. Mantemos uma placa branca discreta,
-        # que faz parte da assinatura visual e evita contaminar as cores do símbolo.
-        plate_pad_x = max(16, int(width * 0.016))
-        plate_pad_y = max(10, int(width * 0.010))
-        logo_x = width - logo.width - 48
-        logo_y = 42
-        plate = Image.new(
-            "RGBA",
-            (logo.width + plate_pad_x * 2, logo.height + plate_pad_y * 2),
-            (255, 255, 255, 238),
-        )
-        plate_draw = ImageDraw.Draw(plate)
-        plate_draw.rounded_rectangle(
-            (0, 0, plate.width - 1, plate.height - 1),
-            radius=max(14, int(width * 0.014)),
-            fill=(255, 255, 255, 238),
-        )
-        plate.alpha_composite(logo, (plate_pad_x, plate_pad_y))
-        canvas.alpha_composite(plate, (logo_x - plate_pad_x, logo_y - plate_pad_y))
+        logo_x = (width - logo.width) // 2
+        logo_y = max(46, (header_height - logo.height) // 2 - 2)
+        canvas.alpha_composite(logo, (logo_x, logo_y))
 
-    title_text = _normalize_text(title).upper()
+    # Título centralizado no rodapé, com fonte parecida com a referência do cliente
+    title_text = _normalize_text(title)
     if title_text:
-        draw = ImageDraw.Draw(canvas)
-        margin_x = 48 if variant != "stories" else 54
-        bottom_margin = 70 if variant == "stories" else 54
-        max_box_width = int(width * (0.78 if variant == "stories" else 0.84))
-        padding_x = 30 if variant == "stories" else 26
-        padding_y = 22 if variant == "stories" else 18
-        max_font = int(spec.get("max_size", 44)) + (8 if variant == "stories" else 4)
-        min_font = int(spec.get("min_size", 24))
-        text_width = max(140, max_box_width - padding_x * 2)
-        lines, used_size = _wrap_text(
-            title_text,
-            max_size=max_font,
-            max_width=text_width,
-            max_lines=min(4, int(spec.get("max_lines", 4))),
-            min_size=min_font,
-        )
-        font = _load_font(used_size)
-        line_gap = max(8, int(round(used_size * 0.20)))
-        boxes = [_line_metrics(font, line) for line in lines]
-        widest = max((box[4] for box in boxes), default=0)
-        text_height = sum(box[5] for box in boxes) + line_gap * max(0, len(boxes) - 1)
-        box_width = min(max_box_width, widest + padding_x * 2)
-        box_height = text_height + padding_y * 2
-        box_left = margin_x
-        box_top = height - bottom_margin - box_height
-        box_right = box_left + box_width
-        box_bottom = box_top + box_height
+        title_area_left = 90
+        title_area_right = width - 90
+        title_area_width = title_area_right - title_area_left
+        title_center_x = width // 2
+        title_top = header_height + photo_height + 34
+        title_bottom = height - 42
+        available_height = title_bottom - title_top
 
-        # Caixa preta arredondada é a linguagem visual usada nas peças/vídeos do Trivox,
-        # completamente separada do fade + badge amarelo do Paraná Pop.
-        draw.rounded_rectangle(
-            (box_left, box_top, box_right, box_bottom),
-            radius=max(18, int(width * 0.022)),
-            fill=(4, 17, 29, 236),
-        )
-
-        # Assinatura tricolor do símbolo Trivox.
-        bar_y = box_top - 18
-        bar_h = 8
-        segment = max(34, int(box_width * 0.075))
-        colors = ((3, 72, 130, 255), (0, 132, 69, 255), (207, 29, 38, 255))
-        x = box_left + 4
-        for color in colors:
-            draw.rounded_rectangle((x, bar_y, x + segment, bar_y + bar_h), radius=4, fill=color)
-            x += segment + 7
-
-        current_y = box_top + padding_y
-        for index, line in enumerate(lines):
-            left, top, _right, _bottom, _line_width, line_height = boxes[index]
-            draw.text(
-                (box_left + padding_x - left, current_y - top),
-                line,
-                font=font,
-                fill=(255, 255, 255, 255),
+        # Ajuste de tamanho tentando respeitar até 4 linhas, centralizado.
+        chosen_lines = []
+        chosen_font = None
+        chosen_boxes = []
+        chosen_gap = 0
+        for size in range(72, 34, -2):
+            lines, used_size = _wrap_text(
+                title_text,
+                max_size=size,
+                max_width=title_area_width,
+                max_lines=4,
+                min_size=34,
             )
-            current_y += line_height + line_gap
+            font = _load_font(used_size)
+            boxes = [_line_metrics(font, line) for line in lines]
+            line_gap = max(4, int(round(used_size * 0.10)))
+            block_height = sum(box[5] for box in boxes) + line_gap * max(0, len(boxes) - 1)
+            if block_height <= available_height:
+                chosen_lines = lines
+                chosen_font = font
+                chosen_boxes = boxes
+                chosen_gap = line_gap
+                break
+        if not chosen_font:
+            lines, used_size = _wrap_text(
+                title_text,
+                max_size=34,
+                max_width=title_area_width,
+                max_lines=4,
+                min_size=30,
+            )
+            chosen_lines = lines
+            chosen_font = _load_font(used_size)
+            chosen_boxes = [_line_metrics(chosen_font, line) for line in chosen_lines]
+            chosen_gap = max(4, int(round(used_size * 0.10)))
+
+        block_height = sum(box[5] for box in chosen_boxes) + chosen_gap * max(0, len(chosen_boxes) - 1)
+        current_y = title_top + max(0, (available_height - block_height) // 2) - 6
+        title_fill = (12, 54, 125, 255)
+        draw = ImageDraw.Draw(canvas)
+        for index, line in enumerate(chosen_lines):
+            left, top, _right, _bottom, line_width, line_height = chosen_boxes[index]
+            line_x = title_center_x - (line_width // 2) - left
+            draw.text((line_x, current_y - top), line, font=chosen_font, fill=title_fill)
+            current_y += line_height + chosen_gap
 
     return canvas
 
 
 def generate_trivox_variants(*, title: str, image_source: str) -> list[dict[str, str]]:
-    results: list[dict[str, str]] = []
-    for key, spec in VARIANT_SPECS.items():
-        image = generate_trivox_art_image(title=title, image_source=image_source, variant=key)
-        filename = f"trivox-arte-{key}-{uuid.uuid4().hex}.png"
-        buffer = BytesIO()
-        image.convert("RGB").save(buffer, format="PNG")
-        url = save_bytes(buffer.getvalue(), folder="gerador/trivox-generated", filename_hint=filename, content_type="image/png")
-        results.append({
-            "key": key,
-            "label": spec["label"],
-            "size": f"{spec['width']}x{spec['height']}",
-            "url": url,
-            "download_key": key_from_media_url(url) or f"gerador/trivox-generated/{filename}",
-            "download_name": filename,
-        })
-    return results
+    """Portal Trivox envia somente a arte Feed Instagram 1080x1440 para o grupo do WhatsApp."""
+    image = generate_trivox_art_image(title=title, image_source=image_source, variant="feed")
+    filename = f"trivox-feed-{uuid.uuid4().hex}.png"
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    url = save_bytes(
+        buffer.getvalue(),
+        folder="gerador/trivox-generated",
+        filename_hint=filename,
+        content_type="image/png",
+    )
+    return [{
+        "key": "feed",
+        "label": "Feed Instagram",
+        "size": "1080x1440",
+        "url": url,
+        "download_key": key_from_media_url(url) or f"gerador/trivox-generated/{filename}",
+        "download_name": filename,
+    }]
+
 
 def build_generator_payload(
+
     *,
     post_url: str,
     custom_title: str,
