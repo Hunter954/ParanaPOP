@@ -521,11 +521,11 @@ def generate_art_image(title: str, image_source: str, variant: str, include_titl
 
 
 def generate_trivox_art_image(title: str, image_source: str, variant: str) -> Image.Image:
-    """Gera a arte manual do Portal Trivox sem depender do antigo plugin WordPress."""
+    """Gera a arte manual do Portal Trivox com identidade própria, alinhada ao /video do Trivox."""
     spec = VARIANT_SPECS[variant]
     width = int(spec["width"])
     height = int(spec["height"])
-    canvas = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+    canvas = Image.new("RGBA", (width, height), (245, 246, 247, 255))
 
     if image_source:
         try:
@@ -535,51 +535,105 @@ def generate_trivox_art_image(title: str, image_source: str, variant: str) -> Im
         if background is not None:
             canvas.alpha_composite(_cover_resize(background, (width, height)))
 
-    # Escurecimento inferior próprio do Trivox para preservar leitura do título.
-    fade_height = int(height * 0.46)
-    fade = Image.new("RGBA", (width, fade_height), (0, 0, 0, 0))
-    fade_draw = ImageDraw.Draw(fade)
-    for y in range(fade_height):
-        ratio = y / max(1, fade_height - 1)
-        alpha = int(225 * (ratio ** 1.7))
-        fade_draw.line((0, y, width, y), fill=(0, 0, 0, alpha))
-    canvas.alpha_composite(fade, (0, height - fade_height))
+    # Vinheta leve apenas para dar contraste, sem usar o fade amarelo/preto do Paraná Pop.
+    shade_height = int(height * 0.50)
+    shade = Image.new("RGBA", (width, shade_height), (0, 0, 0, 0))
+    shade_draw = ImageDraw.Draw(shade)
+    for y in range(shade_height):
+        ratio = y / max(1, shade_height - 1)
+        alpha = int(118 * (ratio ** 1.8))
+        shade_draw.line((0, y, width, y), fill=(0, 18, 39, alpha))
+    canvas.alpha_composite(shade, (0, height - shade_height))
 
+    # Logo no canto superior direito, igual à linguagem usada no /video do Trivox.
     logo_path = _asset_path("trivox.png")
     if logo_path.exists():
         with Image.open(logo_path) as logo_img:
             logo = logo_img.convert("RGBA")
-        max_logo_width = int(width * 0.26)
-        max_logo_height = int(height * 0.10)
+        max_logo_width = int(width * (0.34 if variant == "stories" else 0.30))
+        max_logo_height = int(height * 0.105)
         scale = min(max_logo_width / logo.width, max_logo_height / logo.height, 1)
-        logo = logo.resize((max(1, int(logo.width * scale)), max(1, int(logo.height * scale))), Image.Resampling.LANCZOS)
-        canvas.alpha_composite(logo, (64, 64))
+        logo = logo.resize(
+            (max(1, int(logo.width * scale)), max(1, int(logo.height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+        # A imagem histórica do logo possui fundo branco. Mantemos uma placa branca discreta,
+        # que faz parte da assinatura visual e evita contaminar as cores do símbolo.
+        plate_pad_x = max(16, int(width * 0.016))
+        plate_pad_y = max(10, int(width * 0.010))
+        logo_x = width - logo.width - 48
+        logo_y = 42
+        plate = Image.new(
+            "RGBA",
+            (logo.width + plate_pad_x * 2, logo.height + plate_pad_y * 2),
+            (255, 255, 255, 238),
+        )
+        plate_draw = ImageDraw.Draw(plate)
+        plate_draw.rounded_rectangle(
+            (0, 0, plate.width - 1, plate.height - 1),
+            radius=max(14, int(width * 0.014)),
+            fill=(255, 255, 255, 238),
+        )
+        plate.alpha_composite(logo, (plate_pad_x, plate_pad_y))
+        canvas.alpha_composite(plate, (logo_x - plate_pad_x, logo_y - plate_pad_y))
 
     title_text = _normalize_text(title).upper()
     if title_text:
         draw = ImageDraw.Draw(canvas)
-        pad_left = 64
-        pad_right = 64
-        max_width = width - pad_left - pad_right
-        # Usa a mesma tipografia instalada no gerador atual, mas sem badge de categoria.
+        margin_x = 48 if variant != "stories" else 54
+        bottom_margin = 70 if variant == "stories" else 54
+        max_box_width = int(width * (0.78 if variant == "stories" else 0.84))
+        padding_x = 30 if variant == "stories" else 26
+        padding_y = 22 if variant == "stories" else 18
+        max_font = int(spec.get("max_size", 44)) + (8 if variant == "stories" else 4)
+        min_font = int(spec.get("min_size", 24))
+        text_width = max(140, max_box_width - padding_x * 2)
         lines, used_size = _wrap_text(
             title_text,
-            max_size=int(spec.get("max_size", 44)) + 4,
-            max_width=max_width,
-            max_lines=int(spec.get("max_lines", 4)),
-            min_size=int(spec.get("min_size", 24)),
+            max_size=max_font,
+            max_width=text_width,
+            max_lines=min(4, int(spec.get("max_lines", 4))),
+            min_size=min_font,
         )
         font = _load_font(used_size)
         line_gap = max(8, int(round(used_size * 0.20)))
         boxes = [_line_metrics(font, line) for line in lines]
-        total_height = sum(box[5] for box in boxes) + line_gap * max(0, len(boxes) - 1)
-        current_y = height - int(spec.get("bottom_gap", 58)) - total_height
-        # Filete na cor institucional para amarrar a identidade visual.
-        accent_y = max(height - fade_height + 24, current_y - 26)
-        draw.rounded_rectangle((pad_left, accent_y, pad_left + 118, accent_y + 10), radius=5, fill=(0, 62, 77, 255))
+        widest = max((box[4] for box in boxes), default=0)
+        text_height = sum(box[5] for box in boxes) + line_gap * max(0, len(boxes) - 1)
+        box_width = min(max_box_width, widest + padding_x * 2)
+        box_height = text_height + padding_y * 2
+        box_left = margin_x
+        box_top = height - bottom_margin - box_height
+        box_right = box_left + box_width
+        box_bottom = box_top + box_height
+
+        # Caixa preta arredondada é a linguagem visual usada nas peças/vídeos do Trivox,
+        # completamente separada do fade + badge amarelo do Paraná Pop.
+        draw.rounded_rectangle(
+            (box_left, box_top, box_right, box_bottom),
+            radius=max(18, int(width * 0.022)),
+            fill=(4, 17, 29, 236),
+        )
+
+        # Assinatura tricolor do símbolo Trivox.
+        bar_y = box_top - 18
+        bar_h = 8
+        segment = max(34, int(box_width * 0.075))
+        colors = ((3, 72, 130, 255), (0, 132, 69, 255), (207, 29, 38, 255))
+        x = box_left + 4
+        for color in colors:
+            draw.rounded_rectangle((x, bar_y, x + segment, bar_y + bar_h), radius=4, fill=color)
+            x += segment + 7
+
+        current_y = box_top + padding_y
         for index, line in enumerate(lines):
             left, top, _right, _bottom, _line_width, line_height = boxes[index]
-            draw.text((pad_left - left, current_y - top), line, font=font, fill=(255, 255, 255, 255))
+            draw.text(
+                (box_left + padding_x - left, current_y - top),
+                line,
+                font=font,
+                fill=(255, 255, 255, 255),
+            )
             current_y += line_height + line_gap
 
     return canvas
