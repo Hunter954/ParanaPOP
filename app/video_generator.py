@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 from flask import current_app
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from .art_generator import (
     VARIANT_SPECS,
@@ -30,6 +30,11 @@ class VideoGeneratorError(Exception):
 PARANAPOP_STORIES_SIZE = (1080, 1920)
 TRIVOX_VERTICAL_SIZE = (1080, 1920)
 TRIVOX_HORIZONTAL_SIZE = (1920, 1080)
+TRIVOX_TEMPLATE_ASSET = "trivox-video-overlay.png"
+TRIVOX_SHADOW_OPACITY = 0.83
+TRIVOX_SHADOW_DISTANCE = 7
+TRIVOX_SHADOW_SPREAD_PERCENT = 7
+TRIVOX_SHADOW_SIZE = 13
 
 
 def _media_binary(config_key: str, default: str) -> str:
@@ -325,52 +330,80 @@ def generate_stories_overlay(title: str, category_text: str = "") -> Image.Image
     return canvas
 
 
+def _offset_mask(mask: Image.Image, dx: int, dy: int) -> Image.Image:
+    shifted = Image.new("L", mask.size, 0)
+    shifted.paste(mask, (dx, dy))
+    return shifted
+
+
+def _draw_trivox_shadowed_title(canvas: Image.Image, title: str) -> None:
+    width, height = canvas.size
+    max_width = width - 128
+    font, lines = _fit_multiline_title(
+        title,
+        max_width=max_width,
+        max_lines=4,
+        max_size=70,
+        min_size=36,
+    )
+    if not lines:
+        return
+
+    line_gap = max(10, int(font.size * 0.20))
+    metrics = []
+    total_height = 0
+    for line in lines:
+        left, top, right, bottom = _text_bbox(font, line)
+        line_width = right - left
+        line_height = bottom - top
+        metrics.append((left, top, line_width, line_height))
+        total_height += line_height
+    total_height += line_gap * (len(lines) - 1)
+
+    x = 64
+    block_bottom = height - 300
+    y = max(300, block_bottom - total_height)
+
+    text_mask = Image.new("L", (width, height), 0)
+    draw_mask = ImageDraw.Draw(text_mask)
+    current_y = y
+    for line, metric in zip(lines, metrics):
+        left, top, _line_width, line_height = metric
+        draw_mask.text((x - left, current_y - top), line, font=font, fill=255)
+        current_y += line_height + line_gap
+
+    spread_px = max(1, round(TRIVOX_SHADOW_SIZE * TRIVOX_SHADOW_SPREAD_PERCENT / 100))
+    shadow_mask = text_mask.filter(ImageFilter.MaxFilter(spread_px * 2 + 1))
+    shadow_mask = shadow_mask.filter(ImageFilter.GaussianBlur(radius=TRIVOX_SHADOW_SIZE / 2))
+    shadow_mask = _offset_mask(shadow_mask, 0, TRIVOX_SHADOW_DISTANCE)
+    shadow_mask = shadow_mask.point(lambda p: int(p * TRIVOX_SHADOW_OPACITY))
+
+    shadow_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    shadow_layer.putalpha(shadow_mask)
+    canvas.alpha_composite(shadow_layer)
+
+    text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    text_layer.putalpha(text_mask)
+    canvas.alpha_composite(text_layer)
+
+
 def generate_trivox_vertical_overlay(title: str) -> Image.Image:
     width, height = TRIVOX_VERTICAL_SIZE
-    canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    template_path = _asset_path(TRIVOX_TEMPLATE_ASSET)
+    if template_path.exists():
+        with Image.open(template_path) as source:
+            canvas = source.convert("RGBA")
+        if canvas.size != (width, height):
+            canvas = canvas.resize((width, height), Image.Resampling.LANCZOS)
+    else:
+        canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        logo = _load_logo("trivox.png", max_width=int(width * 0.36), max_height=int(height * 0.12))
+        if logo:
+            x = width - logo.width - 28
+            y = 28
+            canvas.alpha_composite(logo, (x, y))
 
-    logo = _load_logo("trivox.png", max_width=int(width * 0.36), max_height=int(height * 0.12))
-    if logo:
-        x = width - logo.width - 28
-        y = 28
-        canvas.alpha_composite(logo, (x, y))
-
-    box_left = 36
-    max_box_width = int(width * 0.76)
-    temp_canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    bbox = _draw_title_box(
-        temp_canvas,
-        title=title,
-        box_left=box_left,
-        box_top=0,
-        max_width=max_box_width,
-        max_lines=3,
-        align="left",
-        padding_x=26,
-        padding_y=18,
-        radius=24,
-        max_font_size=58,
-        min_font_size=28,
-    )
-    if bbox:
-        _, _, _, box_bottom = bbox
-        box_height = box_bottom
-        box_top = height - 150 - box_height
-        _draw_title_box(
-            canvas,
-            title=title,
-            box_left=box_left,
-            box_top=box_top,
-            max_width=max_box_width,
-            max_lines=3,
-            align="left",
-            padding_x=26,
-            padding_y=18,
-            radius=24,
-            max_font_size=58,
-            min_font_size=28,
-        )
-
+    _draw_trivox_shadowed_title(canvas, title)
     return canvas
 
 
@@ -540,18 +573,13 @@ def generate_trivox_video(
         video_info = _probe_video_info(input_path)
         output_duration = min(float(video_info["duration"]), float(max_seconds))
 
-        if bool(video_info["is_vertical"]):
-            overlay = generate_trivox_vertical_overlay(title=title)
-            output_size = TRIVOX_VERTICAL_SIZE
-            key = "stories"
-            label = "Vídeo Stories"
-            size_label = "1080x1920"
-        else:
-            overlay = generate_trivox_horizontal_overlay(title=title)
-            output_size = TRIVOX_HORIZONTAL_SIZE
-            key = "horizontal"
-            label = "Vídeo Horizontal"
-            size_label = "1920x1080"
+        # O padrão do Portal Trivox agora é exclusivamente Reels/Stories (9:16).
+        # Mesmo que a origem seja horizontal, o vídeo é recortado para 1080x1920.
+        overlay = generate_trivox_vertical_overlay(title=title)
+        output_size = TRIVOX_VERTICAL_SIZE
+        key = "reels"
+        label = "Vídeo Reels"
+        size_label = "1080x1920"
 
         overlay.save(overlay_path, "PNG")
         _render_video_with_overlay(
