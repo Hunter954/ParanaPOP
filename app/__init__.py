@@ -95,6 +95,8 @@ def _ensure_defaults():
         ("default_meta_description", "Últimas notícias, política, cidade, esportes e tudo que movimenta o Oeste do Paraná."),
         ("facebook_app_id", ""),
         ("google_site_verification", ""),
+        ("google_verification_filename", ""),
+        ("google_verification_file_content", ""),
         ("google_analytics_id", ""),
         ("contact_email", ""),
         ("contact_phone", ""),

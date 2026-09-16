@@ -22,11 +22,48 @@
     <div class="panel-card">
       <div class="panel-head"><div><h2>SEO e integrações</h2><p>Melhore indexação, metadados e validações no Google e redes sociais.</p></div></div>
       <div class="vstack gap-3">
-        <div><label class="form-label">Descrição padrão do site</label><textarea class="form-control" name="default_meta_description" rows="4">{{ default_meta_description }}</textarea></div>
-        <div><label class="form-label">Palavras-chave do site</label><textarea class="form-control" name="site_keywords" rows="3" placeholder="notícias, Paraná, Foz do Iguaçu, política, esportes">{{ site_keywords }}</textarea></div>
-        <div><label class="form-label">Google Site Verification</label><input class="form-control" name="google_site_verification" value="{{ google_site_verification }}"></div>
-        <div><label class="form-label">Facebook App ID</label><input class="form-control" name="facebook_app_id" value="{{ facebook_app_id }}"></div>
-        <div><label class="form-label">Google Analytics / Tag ID</label><input class="form-control" name="google_analytics_id" value="{{ google_analytics_id }}" placeholder="G-XXXXXXXXXX"></div>
+        <div>
+          <label class="form-label">Descrição padrão do site</label>
+          <textarea class="form-control" name="default_meta_description" rows="4" maxlength="320">{{ default_meta_description }}</textarea>
+          <div class="form-text">Use uma descrição clara do portal. Cada matéria continua usando título, resumo e imagem próprios quando disponíveis.</div>
+        </div>
+
+        <div>
+          <label class="form-label">Google Search Console — arquivo HTML de verificação</label>
+          <input class="form-control" type="file" name="google_verification_file" accept=".html,text/html">
+          <div class="form-text">Envie aqui o arquivo <code>google....html</code> baixado do Search Console. O sistema publica automaticamente o arquivo na raiz do domínio, sem login.</div>
+          {% if google_verification_filename %}
+            <div class="alert alert-success py-2 mt-2 mb-0">
+              <strong>Arquivo ativo:</strong>
+              <a href="/{{ google_verification_filename }}" target="_blank" rel="noopener">/{{ google_verification_filename }}</a>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" name="remove_google_verification_file" value="1" id="removeGoogleVerificationFile">
+                <label class="form-check-label" for="removeGoogleVerificationFile">Remover este arquivo ao salvar</label>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+
+        <div>
+          <label class="form-label">Google Site Verification — meta tag (opcional)</label>
+          <input class="form-control" name="google_site_verification" value="{{ google_site_verification }}" placeholder="Somente o valor do atributo content">
+          <div class="form-text">Alternativa ao arquivo HTML. Cole apenas o código de <code>content="..."</code>, não a tag inteira.</div>
+        </div>
+
+        <div>
+          <label class="form-label">Google Analytics 4 — ID de medição</label>
+          <input class="form-control" name="google_analytics_id" value="{{ google_analytics_id }}" placeholder="G-XXXXXXXXXX" pattern="G-[A-Za-z0-9]+">
+          <div class="form-text">Ao salvar um ID G-, o <code>gtag.js</code> é carregado no &lt;head&gt; em todas as páginas públicas.</div>
+        </div>
+
+        <details>
+          <summary class="fw-semibold">Configurações avançadas / compatibilidade</summary>
+          <div class="vstack gap-3 mt-3">
+            <div><label class="form-label">Palavras-chave internas</label><textarea class="form-control" name="site_keywords" rows="2" placeholder="notícias, Paraná, Foz do Iguaçu">{{ site_keywords }}</textarea><div class="form-text">Mantidas para organização/compatibilidade; não são usadas como meta keywords no HTML público.</div></div>
+            <div><label class="form-label">Facebook App ID</label><input class="form-control" name="facebook_app_id" value="{{ facebook_app_id }}"></div>
+          </div>
+        </details>
+
         <div><label class="form-label">Email de contato</label><input class="form-control" name="contact_email" value="{{ contact_email }}"></div>
         <div><label class="form-label">Telefone de contato</label><input class="form-control" name="contact_phone" value="{{ contact_phone }}"></div>
         <div class="row g-3">
@@ -80,7 +117,8 @@
       <li>Cadastre logo, favicon e imagem padrão de compartilhamento.</li>
       <li>Defina uma descrição padrão forte para home, categorias e busca.</li>
       <li>Use imagem destacada em todas as matérias para gerar thumbnail automática.</li>
-      <li>O sistema agora entrega Open Graph, Twitter Cards, canonical, robots e sitemap.</li>
+      <li>O sistema entrega canonical limpo, robots.txt, sitemap.xml, Open Graph, Twitter Cards e dados estruturados de notícias.</li>
+      <li>Para verificar o Search Console, envie o arquivo HTML acima e abra o link exibido antes de clicar em “Verificar” no Google.</li>
       <li>Acompanhe métricas de sessões, pageviews, duração média, bounce rate e novos usuários na aba Insights.</li>
     </ul>
   </div>

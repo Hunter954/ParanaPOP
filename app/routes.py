@@ -152,8 +152,9 @@ def _meta_defaults():
         "meta_description": _setting("default_meta_description", _site_tagline()),
         "meta_keywords": _setting("site_keywords", ""),
         "meta_image": _default_share_image(),
-        "meta_url": request.url,
+        "meta_url": request.base_url,
         "meta_type": "website",
+        "meta_robots": "index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1",
         "facebook_app_id": _setting("facebook_app_id", ""),
         "google_site_verification": _setting("google_site_verification", ""),
         "google_analytics_id": _setting("google_analytics_id", ""),
@@ -398,11 +399,31 @@ def analytics_collect():
         return jsonify({"ok": False}), 500
 
 
+
+
+@site_bp.get("/<string:verification_filename>")
+def google_verification_file(verification_filename):
+    """Serve the exact Google Search Console HTML verification file at the site root."""
+    saved_name = (_setting("google_verification_filename", "") or "").strip()
+    if not saved_name or verification_filename != saved_name:
+        abort(404)
+    content = _setting("google_verification_file_content", "")
+    if not content:
+        abort(404)
+    response = make_response(content)
+    response.headers["Content-Type"] = "text/html; charset=utf-8"
+    response.headers["Cache-Control"] = "public, max-age=300"
+    response.headers["X-Robots-Tag"] = "noindex"
+    return response
+
+
 @site_bp.get("/robots.txt")
 def robots_txt():
     lines = [
         "User-agent: *",
         "Allow: /",
+        "Disallow: /admin/",
+        "Disallow: /analytics/collect",
         f"Sitemap: {request.url_root.rstrip('/')}{url_for('site.sitemap_xml')}",
     ]
     response = make_response("\n".join(lines))
@@ -414,7 +435,6 @@ def robots_txt():
 def sitemap_xml():
     pages = [
         (url_for('site.home', _external=True), datetime.utcnow()),
-        (url_for('site.search', _external=True), datetime.utcnow()),
     ]
     for cat in Category.query.order_by(Category.updated_at.desc() if hasattr(Category, 'updated_at') else Category.id.desc()).all():
         pages.append((url_for('site.category', slug=cat.slug, _external=True), datetime.utcnow()))
@@ -783,6 +803,7 @@ def search():
     meta.update({
         "meta_title": f"Buscar{' - ' + term if term else ''} | {_site_name()}",
         "meta_description": f"Busca de notícias{' sobre ' + term if term else ''} no {_site_name()}.",
+        "meta_robots": "noindex,follow,max-image-preview:large",
         "meta_url": url_for("site.search", q=term, _external=True) if term else url_for("site.search", _external=True),
     })
     return render_template(

@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ meta_title or site_name_value }}</title>
   <meta name="description" content="{{ meta_description or '' }}">
-  {% if meta_keywords %}<meta name="keywords" content="{{ meta_keywords }}">{% endif %}
-  <meta name="robots" content="index,follow,max-image-preview:large">
+  <meta name="robots" content="{{ meta_robots or 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1' }}">
   <link rel="canonical" href="{{ meta_url or request.url }}">
   {% if favicon_url %}<link rel="icon" href="{{ favicon_url }}">{% endif %}
 
@@ -16,7 +15,8 @@
   <meta property="og:description" content="{{ meta_description or '' }}">
   <meta property="og:type" content="{{ meta_type or 'website' }}">
   <meta property="og:url" content="{{ meta_url or request.url }}">
-  {% if meta_image %}<meta property="og:image" content="{{ meta_image }}">{% endif %}
+  {% if meta_image %}<meta property="og:image" content="{{ meta_image }}">
+  <meta property="og:image:alt" content="{{ meta_title or site_name_value }}">{% endif %}
   {% if facebook_app_id %}<meta property="fb:app_id" content="{{ facebook_app_id }}">{% endif %}
   {% if article_published_time %}<meta property="article:published_time" content="{{ article_published_time }}">{% endif %}
   {% if article_modified_time %}<meta property="article:modified_time" content="{{ article_modified_time }}">{% endif %}
@@ -24,7 +24,8 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{{ meta_title or site_name_value }}">
   <meta name="twitter:description" content="{{ meta_description or '' }}">
-  {% if meta_image %}<meta name="twitter:image" content="{{ meta_image }}">{% endif %}
+  {% if meta_image %}<meta name="twitter:image" content="{{ meta_image }}">
+  <meta name="twitter:image:alt" content="{{ meta_title or site_name_value }}">{% endif %}
 
   {% if google_site_verification %}<meta name="google-site-verification" content="{{ google_site_verification }}">{% endif %}
 

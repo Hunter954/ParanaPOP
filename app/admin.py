@@ -2277,6 +2277,7 @@ def settings_page():
         default_meta_description=_setting("default_meta_description", ""),
         facebook_app_id=_setting("facebook_app_id", ""),
         google_site_verification=_setting("google_site_verification", ""),
+        google_verification_filename=_setting("google_verification_filename", ""),
         google_analytics_id=_setting("google_analytics_id", ""),
         contact_email=_setting("contact_email", ""),
         contact_phone=_setting("contact_phone", ""),
@@ -2318,6 +2319,31 @@ def save_logo():
     logo_file = request.files.get("logo_file")
     favicon_file = request.files.get("favicon_file")
     share_file = request.files.get("share_image_file")
+    google_verification_file = request.files.get("google_verification_file")
+
+    if google_verification_file and getattr(google_verification_file, "filename", ""):
+        filename = Path(google_verification_file.filename).name.strip()
+        if not re.fullmatch(r"google[a-zA-Z0-9_-]+\.html", filename):
+            flash("Arquivo de verificação inválido. Envie o .html original baixado do Google Search Console.", "danger")
+            return redirect(url_for("admin.settings_page"))
+        raw = google_verification_file.read()
+        if len(raw) > 100 * 1024:
+            flash("O arquivo de verificação do Google é maior que o esperado (limite: 100 KB).", "danger")
+            return redirect(url_for("admin.settings_page"))
+        try:
+            verification_content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            flash("O arquivo de verificação precisa ser um HTML UTF-8 válido.", "danger")
+            return redirect(url_for("admin.settings_page"))
+        if "google-site-verification" not in verification_content:
+            flash("O conteúdo não parece ser um arquivo oficial de verificação do Google.", "danger")
+            return redirect(url_for("admin.settings_page"))
+        _save_setting("google_verification_filename", filename)
+        _save_setting("google_verification_file_content", verification_content)
+    elif request.form.get("remove_google_verification_file") == "1":
+        _save_setting("google_verification_filename", "")
+        _save_setting("google_verification_file_content", "")
+
     if logo_file and getattr(logo_file, "filename", ""):
         logo_url = _save_upload(logo_file, "branding")
     if favicon_file and getattr(favicon_file, "filename", ""):
