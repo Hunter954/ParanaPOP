@@ -213,6 +213,7 @@ def build_whatsapp_news_payload(post: Post) -> dict[str, Any]:
         image_source=image_source,
         include_title=True,
         category_text=category,
+        variants=selected,
     )
     images = []
     for item in generated:

@@ -22,6 +22,9 @@ def _engine_options(database_url: str) -> dict:
     # Avoid hanging the whole Gunicorn worker for a long time when Railway
     # private networking/Postgres is temporarily unavailable.
     if database_url.startswith(("postgresql://", "postgres://")):
+        options.update(pool_size=int(os.getenv("DB_POOL_SIZE", "4")),
+                       max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "1")),
+                       pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "10")))
         options["connect_args"] = {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5"))}
 
     return options
@@ -69,3 +72,7 @@ class Config:
     FFMPEG_BINARY = (os.getenv("FFMPEG_BINARY") or "ffmpeg").strip()
     VIDEO_MAX_BYTES = int(os.getenv("VIDEO_MAX_BYTES", str(80 * 1024 * 1024)))
     VIDEO_MAX_SECONDS = int(os.getenv("VIDEO_MAX_SECONDS", "180"))
+
+    IMAGE_MAX_BYTES = int(os.getenv("IMAGE_MAX_BYTES", "15000000"))
+    IMAGE_MAX_PIXELS = int(os.getenv("IMAGE_MAX_PIXELS", "24000000"))
+    FFMPEG_THREADS = int(os.getenv("FFMPEG_THREADS", "2"))

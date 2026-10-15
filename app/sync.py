@@ -4,6 +4,8 @@ from urllib.parse import urlparse
 import mimetypes
 import re
 import uuid
+import tempfile
+from contextlib import contextmanager
 
 import bleach
 import requests
@@ -11,7 +13,7 @@ from flask import current_app
 from slugify import slugify
 
 from .models import db, Post, Category
-from .storage import is_managed_media_url, normalize_media_url, save_bytes
+from .storage import is_managed_media_url, normalize_media_url, save_bytes, save_stream
 from .wp_client import WPClient
 
 ALLOWED_TAGS = bleach.sanitizer.ALLOWED_TAGS.union({
@@ -59,31 +61,34 @@ def download_external_image(source_url: str | None, folder: str = "wp") -> str |
     if is_managed_media_url(source_url):
         return normalize_media_url(source_url)
 
-    response = requests.get(
-        source_url,
-        timeout=30,
-        stream=True,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
-            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            "Referer": "https://www.google.com/",
-        },
-    )
-    response.raise_for_status()
-    content_type = (response.headers.get("Content-Type") or "").lower()
-    if content_type and not content_type.startswith("image/") and "octet-stream" not in content_type:
-        return None
+    with download_image_temp(source_url) as downloaded:
+        filename = Path(urlparse(source_url).path).name or 'image.jpg'
+        return save_stream(downloaded, f"{folder.strip('/')}/{datetime.utcnow().strftime('%Y/%m')}",
+                           filename, getattr(downloaded, 'media_type', 'image/jpeg'))
 
-    ext = _guess_extension(source_url, response.headers.get("Content-Type", ""))
-    filename = f"{uuid.uuid4().hex}{ext}"
-    content = response.content
-    folder_key = f"{folder.strip('/')}/{datetime.utcnow().strftime('%Y/%m')}"
-    return save_bytes(
-        content,
-        folder=folder_key,
-        filename_hint=filename,
-        content_type=response.headers.get("Content-Type", "") or "application/octet-stream",
-    )
+
+@contextmanager
+def download_image_temp(url):
+    limit = current_app.config.get('IMAGE_MAX_BYTES', 15_000_000)
+    with requests.get(url, timeout=30, stream=True, headers={
+        'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*', 'Referer': 'https://www.google.com/',
+    }) as response:
+        response.raise_for_status()
+        content_type = (response.headers.get('Content-Type') or '').split(';')[0]
+        if content_type and not content_type.startswith('image/') and content_type != 'application/octet-stream':
+            raise ValueError('O endereço não devolveu uma imagem')
+        if int(response.headers.get('Content-Length') or 0) > limit:
+            raise ValueError('Imagem excede o limite permitido')
+        with tempfile.TemporaryFile() as temp:
+            size = 0
+            for chunk in response.iter_content(64 * 1024):
+                size += len(chunk)
+                if size > limit:
+                    raise ValueError('Imagem excede o limite permitido')
+                temp.write(chunk)
+            temp.seek(0)
+            temp.media_type = content_type or 'image/jpeg'
+            yield temp
 
 
 def localize_content_images(html: str | None) -> str | None:
@@ -185,11 +190,21 @@ def sync_posts(client: WPClient, max_pages: int = 10, per_page: int = 20, downlo
 
 
 def localize_existing_wp_images(limit: int | None = None) -> dict:
-    posts_query = Post.query.filter(Post.source == 'wp').order_by(Post.published_at.desc(), Post.id.desc())
-    if limit:
-        posts = posts_query.limit(limit).all()
-    else:
-        posts = posts_query.all()
+    def batches():
+        last_id = 0
+        remaining = limit
+        while remaining is None or remaining > 0:
+            size = min(50, remaining) if remaining is not None else 50
+            items = Post.query.filter(Post.source == 'wp', Post.id > last_id).order_by(Post.id).limit(size).all()
+            if not items:
+                break
+            for item in items:
+                yield item
+            last_id = items[-1].id
+            if remaining is not None:
+                remaining -= len(items)
+            db.session.commit()
+    posts = batches()
 
     updated = 0
     featured_downloaded = 0

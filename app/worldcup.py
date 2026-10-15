@@ -8,6 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
+from .http_client import get_document
 from flask import current_app
 
 from .models import db, SiteSetting
@@ -330,7 +331,7 @@ def _manual_matches() -> list[dict[str, Any]]:
 
 
 def _fetch_openfootball() -> list[dict[str, Any]]:
-    response = requests.get(OPENFOOTBALL_URL, timeout=10)
+    response = get_document(OPENFOOTBALL_URL, timeout=10)
     response.raise_for_status()
     payload = response.json()
     rows = payload.get("matches") if isinstance(payload, dict) else payload

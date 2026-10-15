@@ -438,7 +438,7 @@ def sitemap_xml():
     ]
     for cat in Category.query.order_by(Category.updated_at.desc() if hasattr(Category, 'updated_at') else Category.id.desc()).all():
         pages.append((url_for('site.category', slug=cat.slug, _external=True), datetime.utcnow()))
-    for post in _published_posts_query().order_by(desc(Post.updated_at), desc(Post.published_at)).limit(2000).all():
+    for post in _published_posts_query().with_entities(Post.slug, Post.updated_at, Post.published_at).order_by(desc(Post.updated_at), desc(Post.published_at)).limit(2000).all():
         pages.append((url_for('site.post', slug=post.slug, _external=True), post.updated_at or post.published_at or datetime.utcnow()))
     xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for loc, lastmod in pages:
@@ -815,3 +815,8 @@ def search():
         ad_sidebar_1=_get_ad("sidebar_1"),
         ad_sidebar_2=_get_ad("sidebar_2"),
     )
+
+
+@site_bp.get('/health')
+def health():
+    return jsonify(ok=True, memory_optimized=True, media_upload='multipart')

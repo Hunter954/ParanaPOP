@@ -194,6 +194,7 @@ def build_instagram_news_payload(post: Post) -> dict[str, Any]:
         image_source=image_source,
         include_title=True,
         category_text=category,
+        variants=({'feed'} if cfg.get('send_feed') else set()) | ({'stories'} if cfg.get('send_story') else set()),
     )
 
     images = []

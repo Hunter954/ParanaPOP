@@ -12,8 +12,9 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
-from sqlalchemy import func, desc, or_
-from .storage import delete_media, is_managed_media_url, list_media_files, local_path_from_url, media_root, normalize_media_url, rewrite_media_urls, save_file_storage, save_bytes
+from sqlalchemy import func, desc, or_, case, distinct
+from sqlalchemy.orm import load_only, selectinload
+from .storage import delete_media, is_managed_media_url, list_media_files, local_path_from_url, media_root, normalize_media_url, rewrite_media_urls, save_file_storage, save_bytes, save_stream
 
 from .models import db, User, AdSlot, SiteSetting, PageView, Post, Category, post_categories, AnalyticsSession
 from .sync import download_external_image
@@ -596,34 +597,26 @@ def _analytics_stats(days: int = 30, start_date: date | None = None, end_date: d
     previous_start = current_start - timedelta(days=window_days)
     previous_end = current_start
 
-    current_sessions = AnalyticsSession.query.filter(
-        AnalyticsSession.created_at >= current_start,
-        AnalyticsSession.created_at < current_end,
-    ).all()
-    previous_sessions = AnalyticsSession.query.filter(
-        AnalyticsSession.created_at >= previous_start,
-        AnalyticsSession.created_at < previous_end,
-    ).all()
-
-    def summarize(items):
-        sessions = len(items)
-        pageviews = sum((item.pageviews or 0) for item in items)
-        total_users = len({item.visitor_id for item in items if item.visitor_id})
-        bounce_sessions = sum(1 for item in items if item.is_bounce)
-        new_users = len({item.visitor_id for item in items if item.is_new_user and item.visitor_id})
-        avg_duration = round(sum((item.duration_seconds or 0) for item in items) / sessions) if sessions else 0
-        bounce_rate = round((bounce_sessions / sessions) * 100, 1) if sessions else 0
+    def summarize(start, end):
+        valid_visitor = func.nullif(AnalyticsSession.visitor_id, "")
+        row = db.session.query(
+            func.count(AnalyticsSession.id),
+            func.coalesce(func.sum(AnalyticsSession.pageviews), 0),
+            func.count(distinct(valid_visitor)),
+            func.coalesce(func.sum(case((AnalyticsSession.is_bounce.is_(True), 1), else_=0)), 0),
+            func.count(distinct(case((AnalyticsSession.is_new_user.is_(True), valid_visitor)))),
+            func.coalesce(func.sum(AnalyticsSession.duration_seconds), 0),
+        ).filter(AnalyticsSession.created_at >= start, AnalyticsSession.created_at < end).one()
+        sessions, pageviews, users, bounces, new_users, duration = row
         return {
-            "sessions": sessions,
-            "pageviews": pageviews,
-            "avg_duration": avg_duration,
-            "total_users": total_users,
-            "bounce_rate": bounce_rate,
+            "sessions": sessions, "pageviews": int(pageviews), "total_users": users,
+            "avg_duration": round(duration / sessions) if sessions else 0,
+            "bounce_rate": round(bounces / sessions * 100, 1) if sessions else 0,
             "new_users": new_users,
         }
 
-    current = summarize(current_sessions)
-    previous = summarize(previous_sessions)
+    current = summarize(current_start, current_end)
+    previous = summarize(previous_start, previous_end)
     cards = []
     labels = {
         "sessions": "Sessions",
@@ -668,31 +661,23 @@ def _analytics_stats(days: int = 30, start_date: date | None = None, end_date: d
         .all()
     )
 
-    by_day = {}
+    daily_rows = db.session.query(
+        func.date(AnalyticsSession.created_at).label("day"),
+        func.count(AnalyticsSession.id),
+        func.coalesce(func.sum(AnalyticsSession.pageviews), 0),
+        func.count(distinct(func.nullif(AnalyticsSession.visitor_id, ""))),
+    ).filter(
+        AnalyticsSession.created_at >= current_start, AnalyticsSession.created_at < current_end,
+    ).group_by(func.date(AnalyticsSession.created_at)).all()
+    by_day = {str(row[0]): row[1:] for row in daily_rows}
+    daily_series = []
     for offset in range(window_days):
         day = start_day + timedelta(days=offset)
-        by_day[day] = {"sessions": 0, "pageviews": 0, "visitor_ids": set()}
-
-    for item in current_sessions:
-        item_day = item.created_at.date()
-        if item_day not in by_day:
-            continue
-        bucket = by_day[item_day]
-        bucket["sessions"] += 1
-        bucket["pageviews"] += int(item.pageviews or 0)
-        if item.visitor_id:
-            bucket["visitor_ids"].add(item.visitor_id)
-
-    daily_series = []
-    for day in sorted(by_day.keys()):
-        bucket = by_day[day]
+        sessions, pageviews, users = by_day.get(day.isoformat(), (0, 0, 0))
         daily_series.append({
-            "iso": day.isoformat(),
-            "label": day.strftime('%d/%m'),
-            "label_short": day.strftime('%d/%m'),
-            "sessions": bucket["sessions"],
-            "pageviews": bucket["pageviews"],
-            "total_users": len(bucket["visitor_ids"]),
+            "iso": day.isoformat(), "label": day.strftime('%d/%m'),
+            "label_short": day.strftime('%d/%m'), "sessions": sessions,
+            "pageviews": int(pageviews), "total_users": users,
         })
 
     return {
@@ -717,16 +702,7 @@ def _dashboard_stats():
     wp_posts = db.session.query(func.count(Post.id)).filter(Post.source == "wp").scalar() or 0
     categories_total = db.session.query(func.count(Category.id)).scalar() or 0
     active_ads = db.session.query(func.count(AdSlot.id)).filter(AdSlot.is_active.is_(True)).scalar() or 0
-    recent_posts = Post.query.order_by(desc(Post.updated_at), desc(Post.published_at)).limit(8).all()
-    popular_posts = (
-        db.session.query(Post, func.count(PageView.id).label("views"))
-        .outerjoin(PageView, PageView.post_id == Post.id)
-        .group_by(Post.id)
-        .order_by(desc("views"), desc(Post.published_at))
-        .limit(8)
-        .all()
-    )
-    analytics = _analytics_stats(30)
+    recent_posts = Post.query.options(load_only(Post.id, Post.title, Post.slug, Post.source, Post.published_at, Post.updated_at)).order_by(desc(Post.updated_at), desc(Post.published_at)).limit(8).all()
     return {
         "pv_total": pv_total,
         "pv_24h": pv_24h,
@@ -735,16 +711,14 @@ def _dashboard_stats():
         "wp_posts": wp_posts,
         "categories_total": categories_total,
         "active_ads": active_ads,
-        "recent_posts": _normalize_posts_media(recent_posts),
-        "popular_posts": popular_posts,
-        "analytics": analytics,
+        "recent_posts": recent_posts,
     }
 
 
 def _common_admin_context(section: str, **extra):
     data = {
         "section": section,
-        "stats": _dashboard_stats(),
+        "stats": _dashboard_stats() if section == "dashboard" else {},
     }
     data.update(extra)
     return data
@@ -1115,10 +1089,19 @@ def posts_list():
         q = q.filter(Post.source == source)
     else:
         source = "all"
-    posts = q.order_by(desc(Post.published_at), desc(Post.updated_at), desc(Post.id)).all()
+    page = max(1, request.args.get("page", 1, type=int) or 1)
+    pagination = q.options(
+        load_only(Post.id, Post.title, Post.slug, Post.source, Post.published_at, Post.updated_at),
+        selectinload(Post.categories),
+    ).order_by(desc(Post.published_at), desc(Post.updated_at), desc(Post.id)).paginate(
+        page=page, per_page=40, error_out=False, count=False,
+    )
+    pagination.total = q.order_by(None).with_entities(func.count(Post.id)).scalar() or 0
+    posts = pagination.items
     return render_template(
         "admin/posts_list.html",
-        posts=_normalize_posts_media(posts),
+        posts=posts,
+        pagination=pagination,
         term=term,
         source=source,
         now_utc=datetime.utcnow(),
@@ -1340,14 +1323,16 @@ def categories_delete(category_id):
 @admin_bp.get("/media")
 @login_required
 def media_library():
+    page = max(1, request.args.get("page", 1, type=int) or 1)
     r = _require_admin()
     if r:
         return r
     files = [
         {'name': item.name, 'url': item.url, 'size_kb': item.size_kb, 'updated_at': item.updated_at}
-        for item in list_media_files()
+        for item in list_media_files(limit=49, offset=(page - 1) * 48)
     ]
-    return render_template("admin/media_library.html", files=files, **_common_admin_context("media"))
+    return render_template("admin/media_library.html", files=files[:48], page=page,
+                           has_next=len(files) > 48, **_common_admin_context("media"))
 
 
 @admin_bp.post("/media/upload")
@@ -1407,7 +1392,11 @@ def insights_page():
 
     visible_card_keys = {"sessions", "pageviews", "total_users"}
     visible_cards = [card for card in insights["cards"] if card["key"] in visible_card_keys]
-    dashboard_stats = _dashboard_stats()
+    dashboard_stats = {
+        "pv_total": db.session.query(func.count(PageView.id)).scalar() or 0,
+        "pv_24h": db.session.query(func.count(PageView.id)).filter(
+            PageView.created_at >= datetime.utcnow() - timedelta(hours=24)).scalar() or 0,
+    }
     visible_cards.append({
         "key": "pageviews_24h",
         "label": "Pageviews totais",
@@ -1650,9 +1639,50 @@ def bot_publicar_page():
     )
 
 
+def _bot_media_data():
+    return request.form.to_dict() if request.mimetype == 'multipart/form-data' else (request.get_json(silent=True) or {})
+
+
+def _bot_media_stream(data, kind):
+    """Multipart is spooled by Werkzeug; legacy JSON remains bounded for old clients."""
+    from io import BytesIO
+    limit = current_app.config.get('VIDEO_MAX_BYTES', 80 * 1024 * 1024) if kind == 'video' else current_app.config.get('IMAGE_MAX_BYTES', 15_000_000)
+    upload = request.files.get(kind)
+    if upload:
+        upload.stream.seek(0, 2)
+        size = upload.stream.tell()
+        upload.stream.seek(0)
+        if not size or size > limit:
+            raise ValueError('Arquivo vazio ou maior que o limite permitido')
+        return upload.stream, upload.filename or f'{kind}.bin', upload.mimetype
+    encoded = (data.get(f'{kind}_base64') or '').strip()
+    if encoded.lower().startswith('data:') and ',' in encoded:
+        encoded = encoded.split(',', 1)[1]
+    if not encoded or len(encoded) > ((limit + 2) // 3) * 4:
+        raise ValueError('Arquivo ausente ou maior que o limite permitido')
+    content = base64.b64decode(encoded, validate=True)
+    if len(content) > limit:
+        raise ValueError('Arquivo maior que o limite permitido')
+    return BytesIO(content), data.get(f'{kind}_filename') or f'{kind}.bin', data.get(f'{kind}_mimetype') or ('video/mp4' if kind == 'video' else 'image/jpeg')
+
+
+def _save_bot_image(data, folder):
+    stream, filename, mimetype = _bot_media_stream(data, 'image')
+    try:
+        # Decode only after validating file bytes/pixels; keep the original for publication.
+        from PIL import Image
+        with Image.open(stream) as image:
+            if image.width * image.height > current_app.config.get('IMAGE_MAX_PIXELS', 24_000_000):
+                raise ValueError('Imagem excede o limite de pixels permitido')
+        stream.seek(0)
+        return save_stream(stream, folder, filename, mimetype)
+    finally:
+        stream.close()
+
+
 @admin_bp.post("/api/whatsapp-bot/publish")
 def bot_publish_api():
-    data = request.get_json(silent=True) or {}
+    data = _bot_media_data()
     if not _setting_bool("whatsapp_bot_publish_enabled", False):
         return jsonify({"ok": False, "message": "Bot Publicar está desativado no admin."}), 403
     if not _authorized_bot_request(data):
@@ -1663,21 +1693,12 @@ def bot_publish_api():
     if not title or not text:
         return jsonify({"ok": False, "message": "Título e texto da matéria são obrigatórios."}), 400
 
-    image_url = ""
-    image_b64 = (data.get("image_base64") or "").strip()
-    if image_b64:
+    image_url = (data.get('image_url') or '').strip()
+    if data.get('image_base64') or request.files.get('image'):
         try:
-            if "," in image_b64 and image_b64.lower().startswith("data:"):
-                meta, image_b64 = image_b64.split(",", 1)
-                content_type = meta.split(";")[0].replace("data:", "")
-            else:
-                content_type = data.get("image_mimetype") or "image/jpeg"
-            content = base64.b64decode(image_b64, validate=True)
-            image_url = save_bytes(content, "bot-publicar", data.get("image_filename") or "materia.jpg", content_type)
+            image_url = _save_bot_image(data, 'bot-publicar')
         except Exception as exc:
-            return jsonify({"ok": False, "message": f"Não consegui salvar a imagem: {str(exc)[:160]}"}), 400
-    else:
-        image_url = (data.get("image_url") or "").strip()
+            return jsonify(ok=False, message=f'Não consegui salvar a imagem: {str(exc)[:160]}'), 400
 
     now = datetime.utcnow()
     post = Post(
@@ -1726,29 +1747,24 @@ def bot_publish_api():
 
 @admin_bp.post("/api/whatsapp-bot/generate-photo")
 def bot_generate_photo_api():
-    data = request.get_json(silent=True) or {}
+    data = _bot_media_data()
     if not _authorized_bot_request(data):
         return jsonify({"ok": False, "message": "Token do gerador manual inválido."}), 401
 
     title = (data.get("title") or data.get("titulo") or "").strip()
     category = (data.get("category") or data.get("categoria") or "").strip()
     image_b64 = (data.get("image_base64") or "").strip()
-    if not title or not category or not image_b64:
+    if not title or not category or not (image_b64 or request.files.get('image')):
         return jsonify({"ok": False, "message": "Imagem, título e categoria são obrigatórios."}), 400
 
     try:
-        if "," in image_b64 and image_b64.lower().startswith("data:"):
-            meta, image_b64 = image_b64.split(",", 1)
-            content_type = meta.split(";")[0].replace("data:", "")
-        else:
-            content_type = data.get("image_mimetype") or "image/jpeg"
-        content = base64.b64decode(image_b64, validate=True)
-        source_url = save_bytes(content, "gerador/manual-source", data.get("image_filename") or "foto.jpg", content_type)
+        source_url = _save_bot_image(data, 'gerador/manual-source')
         generated = generate_variants(
             title=title[:500],
             image_source=source_url,
             include_title=True,
             category_text=category[:120],
+            variants=set(filter(None, (data.get("formats") or "feed,stories,facebook").split(","))),
         )
         base_url = request.host_url.rstrip("/")
         for item in generated:
@@ -1756,6 +1772,8 @@ def bot_generate_photo_api():
             if url.startswith("/"):
                 item["url"] = base_url + url
         return jsonify({"ok": True, "brand": "paranapop", "images": generated})
+    except ValueError as exc:
+        return jsonify(ok=False, message=str(exc)), 400
     except Exception as exc:
         current_app.logger.exception("Falha ao gerar artes manuais do Paraná Pop")
         return jsonify({"ok": False, "message": f"Não consegui gerar as artes: {str(exc)[:180]}"}), 500
@@ -1764,23 +1782,17 @@ def bot_generate_photo_api():
 
 @admin_bp.post("/api/whatsapp-bot/generate-trivox-photo")
 def bot_generate_trivox_photo_api():
-    data = request.get_json(silent=True) or {}
+    data = _bot_media_data()
     if not _authorized_bot_request(data):
         return jsonify({"ok": False, "message": "Token do gerador manual inválido."}), 401
 
     title = (data.get("title") or data.get("titulo") or "").strip()
     image_b64 = (data.get("image_base64") or "").strip()
-    if not title or not image_b64:
+    if not title or not (image_b64 or request.files.get('image')):
         return jsonify({"ok": False, "message": "Imagem e título são obrigatórios."}), 400
 
     try:
-        if "," in image_b64 and image_b64.lower().startswith("data:"):
-            meta, image_b64 = image_b64.split(",", 1)
-            content_type = meta.split(";")[0].replace("data:", "")
-        else:
-            content_type = data.get("image_mimetype") or "image/jpeg"
-        content = base64.b64decode(image_b64, validate=True)
-        source_url = save_bytes(content, "gerador/trivox-manual-source", data.get("image_filename") or "foto.jpg", content_type)
+        source_url = _save_bot_image(data, 'gerador/trivox-manual-source')
         generated = generate_trivox_variants(title=title[:500], image_source=source_url)
         base_url = request.host_url.rstrip("/")
         for item in generated:
@@ -1788,6 +1800,8 @@ def bot_generate_trivox_photo_api():
             if url.startswith("/"):
                 item["url"] = base_url + url
         return jsonify({"ok": True, "brand": "trivox", "images": generated})
+    except ValueError as exc:
+        return jsonify(ok=False, message=str(exc)), 400
     except Exception as exc:
         current_app.logger.exception("Falha ao gerar artes manuais do Portal Trivox")
         return jsonify({"ok": False, "message": f"Não consegui gerar as artes do Trivox: {str(exc)[:180]}"}), 500
@@ -1795,74 +1809,76 @@ def bot_generate_trivox_photo_api():
 
 @admin_bp.post("/api/whatsapp-bot/generate-video")
 def bot_generate_video_api():
-    data = request.get_json(silent=True) or {}
+    data = _bot_media_data()
     if not _authorized_bot_request(data):
         return jsonify({"ok": False, "message": "Token do gerador de vídeo inválido."}), 401
 
     title = (data.get("title") or data.get("titulo") or "").strip()
     category = (data.get("category") or data.get("categoria") or "").strip()
     video_b64 = (data.get("video_base64") or "").strip()
-    if not title or not category or not video_b64:
+    if not title or not category or not (video_b64 or request.files.get('video')):
         return jsonify({"ok": False, "message": "Vídeo, título e categoria são obrigatórios."}), 400
 
     try:
-        if "," in video_b64 and video_b64.lower().startswith("data:"):
-            _meta, video_b64 = video_b64.split(",", 1)
-        content = base64.b64decode(video_b64, validate=True)
-        max_bytes = int(current_app.config.get("VIDEO_MAX_BYTES", 80 * 1024 * 1024))
-        if len(content) > max_bytes:
-            return jsonify({"ok": False, "message": f"O vídeo excede o limite de {max_bytes // (1024 * 1024)} MB."}), 413
-
+        stream, filename, _mimetype = _bot_media_stream(data, 'video')
         generated = generate_paranapop_stories_video(
-            video_content=content,
+            video_stream=stream,
             title=title[:500],
             category_text=category[:120],
-            filename_hint=data.get("video_filename") or "video.mp4",
+            filename_hint=filename,
         )
+        stream.close()
         url = generated.get("url") or ""
         if url.startswith("/"):
             generated["url"] = request.host_url.rstrip("/") + url
         return jsonify({"ok": True, "brand": "paranapop", "videos": [generated]})
+    except ValueError as exc:
+        return jsonify(ok=False, message=str(exc)), 400
     except VideoGeneratorError as exc:
         return jsonify({"ok": False, "message": str(exc)[:700]}), 400
     except Exception as exc:
         current_app.logger.exception("Falha ao gerar vídeo manual do Paraná Pop")
         return jsonify({"ok": False, "message": f"Não consegui gerar o vídeo: {str(exc)[:180]}"}), 500
 
+    finally:
+        if 'stream' in locals():
+            stream.close()
+
 
 @admin_bp.post("/api/whatsapp-bot/generate-trivox-video")
 def bot_generate_trivox_video_api():
-    data = request.get_json(silent=True) or {}
+    data = _bot_media_data()
     if not _authorized_bot_request(data):
         return jsonify({"ok": False, "message": "Token do gerador de vídeo inválido."}), 401
 
     title = (data.get("title") or data.get("titulo") or "").strip()
     video_b64 = (data.get("video_base64") or "").strip()
-    if not title or not video_b64:
+    if not title or not (video_b64 or request.files.get('video')):
         return jsonify({"ok": False, "message": "Vídeo e título são obrigatórios."}), 400
 
     try:
-        if "," in video_b64 and video_b64.lower().startswith("data:"):
-            _meta, video_b64 = video_b64.split(",", 1)
-        content = base64.b64decode(video_b64, validate=True)
-        max_bytes = int(current_app.config.get("VIDEO_MAX_BYTES", 80 * 1024 * 1024))
-        if len(content) > max_bytes:
-            return jsonify({"ok": False, "message": f"O vídeo excede o limite de {max_bytes // (1024 * 1024)} MB."}), 413
-
+        stream, filename, _mimetype = _bot_media_stream(data, 'video')
         generated = generate_trivox_video(
-            video_content=content,
+            video_stream=stream,
             title=title[:500],
-            filename_hint=data.get("video_filename") or "video.mp4",
+            filename_hint=filename,
         )
+        stream.close()
         url = generated.get("url") or ""
         if url.startswith("/"):
             generated["url"] = request.host_url.rstrip("/") + url
         return jsonify({"ok": True, "brand": "trivox", "videos": [generated]})
+    except ValueError as exc:
+        return jsonify(ok=False, message=str(exc)), 400
     except VideoGeneratorError as exc:
         return jsonify({"ok": False, "message": str(exc)[:700]}), 400
     except Exception as exc:
         current_app.logger.exception("Falha ao gerar vídeo manual do Portal Trivox")
         return jsonify({"ok": False, "message": f"Não consegui gerar o vídeo do Trivox: {str(exc)[:180]}"}), 500
+    finally:
+        if 'stream' in locals():
+            stream.close()
+
 
 
 def _whatsapp_menu_post_payload(post: Post) -> dict:
@@ -2639,3 +2655,13 @@ def sync_wp_now():
     except Exception as e:
         flash(f"Erro ao sincronizar: {e}", "danger")
     return redirect(url_for("admin.dashboard"))
+
+
+@admin_bp.get('/api/resources')
+@login_required
+def resource_status():
+    denied = _require_admin()
+    if denied:
+        return denied
+    from .resources import memory_snapshot
+    return jsonify(ok=True, memory=memory_snapshot(), database_pool=db.engine.pool.status())

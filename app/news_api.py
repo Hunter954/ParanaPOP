@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote_plus, urlparse, unquote
 
 import requests
+from .http_client import get_document
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -161,7 +162,7 @@ def _resolve_google_news_url(url: str) -> str:
     try:
         headers = dict(REQUEST_HEADERS)
         headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        resp = requests.get(url, headers=headers, timeout=18, allow_redirects=True)
+        resp = get_document(url, headers=headers, timeout=18, allow_redirects=True)
         final_url = resp.url or url
         if final_url and not _is_google_news_url(final_url):
             return final_url
@@ -215,7 +216,7 @@ def _fetch_page_metadata(url: str, include_text: bool = False) -> dict[str, str]
         headers = dict(REQUEST_HEADERS)
         headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         headers["Referer"] = "https://www.google.com/"
-        resp = requests.get(url, headers=headers, timeout=22, allow_redirects=True)
+        resp = get_document(url, headers=headers, timeout=22, allow_redirects=True)
         content_type = (resp.headers.get("Content-Type") or "").lower()
         resolved_url = resp.url or url
         if resp.status_code >= 400 or ("text/html" not in content_type and "application/xhtml" not in content_type):
@@ -263,7 +264,7 @@ def _get_rss(url: str, provider: str) -> bytes:
     last_error = None
     for attempt in range(3):
         try:
-            resp = requests.get(url, headers=REQUEST_HEADERS, timeout=25, allow_redirects=True)
+            resp = get_document(url, headers=REQUEST_HEADERS, timeout=25, allow_redirects=True)
             if resp.status_code in {429, 500, 502, 503, 504} and attempt < 2:
                 time.sleep(1.2 * (attempt + 1))
                 continue

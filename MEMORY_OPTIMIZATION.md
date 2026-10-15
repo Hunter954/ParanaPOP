@@ -1,0 +1,11 @@
+# Memory controls
+
+The admin now aggregates analytics in SQL, loads stats only where displayed and paginates article bodies out of lists. Media listings use a persistent metadata catalog; an initial background scan processes 500 R2 objects per page, records its cursor and resumes after interruption. Uploads update the catalog independently of editorial transactions. Reconcile externally added objects with `flask --app wsgi index-media`.
+
+Media endpoints advertise `X-Media-Upload: multipart` on OPTIONS and accept an `image` or `video` file with form fields. Legacy JSON clients remain supported with size limits. Downloads stream in 64 KiB chunks and preserve video Range requests. Public media redirects directly to R2.
+
+Only one heavy generation runs per process. Concurrent requests receive 429 and Retry-After before their bodies are parsed. Retain the existing single Gunicorn worker: the in-process admission lock is not a distributed queue. No extra always-on service was added. FFmpeg uses two codec threads and one filter-complex thread; output is uploaded from disk. Image sources are bounded by bytes and pixels and are loaded once per variant batch; only selected formats are generated, with URL reuse within a request.
+
+Configuration defaults: `IMAGE_MAX_BYTES=15000000`, `IMAGE_MAX_PIXELS=24000000`, `VIDEO_MAX_BYTES=83886080`, `FFMPEG_THREADS=2`, `DB_POOL_SIZE=4`, `DB_MAX_OVERFLOW=1`, `DB_POOL_TIMEOUT=10`. `MEDIA_INDEX_ON_START=0` disables reconciliation (useful for tests). PostgreSQL server buffers/connections and existing historical data are not modified. Safe startup diagnostics are logged as DB_RESOURCE_SNAPSHOT. Authenticated `/admin/api/resources` exposes process RSS/peak and pool state; `/health` is a lightweight release check.
+
+Validation: `python -m pip install -r requirements-dev.txt`; `PYTHONPATH=. python -m pytest -q tests`. Integration tests use SQLite and a real local FFmpeg binary. Compare representative 24–72h memory windows, job peaks, errors and latency after release; initial fresh-process memory is not a sustained savings measurement. New catalog tables are additive; rollback to the previous application commit leaves original editorial tables intact.

@@ -20,7 +20,7 @@
         {% for file in files %}
         <tr>
           <td><strong>{{ file.name }}</strong></td>
-          <td><input class="form-control form-control-sm" readonly value="{{ request.host_url[:-1] }}{{ file.url }}"></td>
+          <td><input class="form-control form-control-sm" readonly value="{{ file.url if file.url.startswith('http') else request.host_url.rstrip('/') ~ file.url }}"></td>
           <td>{{ file.size_kb }} KB</td>
           <td>{{ file.updated_at.strftime('%d/%m/%Y %H:%M') }}</td>
           <td class="text-end">
@@ -40,4 +40,8 @@
     </table>
   </div>
 </section>
+<nav class="d-flex gap-2 mt-3" aria-label="Páginas de mídia">
+{% if page > 1 %}<a class="btn btn-outline-dark" href="{{ url_for('admin.media_library', page=page-1) }}">Anterior</a>{% endif %}
+{% if has_next %}<a class="btn btn-outline-dark" href="{{ url_for('admin.media_library', page=page+1) }}">Próxima</a>{% endif %}
+</nav>
 {% endblock %}

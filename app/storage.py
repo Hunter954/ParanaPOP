@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import threading
+import shutil
+from functools import partial
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
@@ -12,11 +15,19 @@ import re
 from uuid import uuid4
 
 import boto3
+from boto3.s3.transfer import TransferConfig
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
-from flask import Response, current_app, send_file, send_from_directory
+from flask import Response, current_app, send_file, send_from_directory, redirect, request
+from sqlalchemy import desc
+from werkzeug.http import dump_options_header
+from .models import MediaAsset
+from .media_index import media_scope, record_asset, remove_asset
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
+
+_CLIENT_LOCK = threading.Lock()
+_TRANSFER_CONFIG = TransferConfig(max_concurrency=1, use_threads=False, max_io_queue=2)
 
 _ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".jfif", ".png", ".webp", ".gif", ".svg", ".avif", ".heic", ".heif"}
 
@@ -82,7 +93,7 @@ def key_from_media_url(url: str) -> str | None:
     prefix = media_prefix() + "/"
     public_prefix = (public_media_base() + "/") if public_media_base() else ""
 
-    if value.startswith(public_prefix):
+    if public_prefix and value.startswith(public_prefix):
         rel = value[len(public_prefix):].lstrip("/")
         return rel or None
     if target_path.startswith(prefix):
@@ -126,7 +137,9 @@ def local_path_from_url(url: str) -> Path | None:
     key = key_from_media_url(url)
     if not key:
         return None
-    return media_root() / key
+    root = media_root()
+    candidate = (root / key).resolve()
+    return candidate if candidate.is_relative_to(root) else None
 
 
 def _file_ext(filename: str) -> str:
@@ -137,12 +150,14 @@ def _file_ext(filename: str) -> str:
 
 def _guess_extension(filename: str = "", content_type: str = "") -> str:
     ext = Path(filename or "").suffix.lower()
+    if ext in {".mp4", ".mov", ".webm", ".m4v"}:
+        return ext
     if ext in _ALLOWED_IMAGE_EXTS:
         return ".jpg" if ext == ".jpeg" else ext
     guessed = mimetypes.guess_extension((content_type or "").split(";")[0].strip())
     if guessed in {".jpe", ".jpeg"}:
         return ".jpg"
-    if guessed in _ALLOWED_IMAGE_EXTS:
+    if guessed in _ALLOWED_IMAGE_EXTS | {".mp4", ".mov", ".webm", ".m4v"}:
         return guessed
     return ".bin"
 
@@ -152,7 +167,7 @@ def _content_type_for_name(filename: str, fallback: str = "application/octet-str
     return guessed or fallback
 
 
-def _r2_client():
+def _new_r2_client():
     cfg = current_app.config
     return boto3.client(
         "s3",
@@ -162,6 +177,35 @@ def _r2_client():
         region_name=cfg.get("R2_REGION", "auto").strip(),
         config=BotoConfig(signature_version="s3v4"),
     )
+
+
+
+def _r2_client():
+    app = current_app._get_current_object()
+    with _CLIENT_LOCK:
+        if 'r2_client' not in app.extensions:
+            app.extensions['r2_client'] = _new_r2_client()
+        return app.extensions['r2_client']
+
+
+def save_stream(stream: BinaryIO, folder: str, filename_hint='file', content_type='') -> str:
+    """Upload without reading the entire file into a Python bytes object."""
+    ext = _guess_extension(filename_hint, content_type)
+    key = f"{folder.strip('/')}/{uuid4().hex}{ext}"
+    stream.seek(0, 2)
+    size = stream.tell()
+    stream.seek(0)
+    if using_r2():
+        _r2_client().upload_fileobj(stream, current_app.config['R2_BUCKET'], key,
+            ExtraArgs={'ContentType': content_type or _content_type_for_name(filename_hint)},
+            Config=_TRANSFER_CONFIG)
+    else:
+        target = media_root() / key
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open('wb') as output:
+            shutil.copyfileobj(stream, output, length=64 * 1024)
+    record_asset(key, size)
+    return media_url_from_key(key)
 
 
 def save_file_storage(file_storage: FileStorage | None, subdir: str = "general") -> str:
@@ -191,7 +235,10 @@ def save_file_storage(file_storage: FileStorage | None, subdir: str = "general")
                 Bucket=current_app.config["R2_BUCKET"].strip(),
                 Key=key,
                 ExtraArgs=extra_args or {},
+                Config=_TRANSFER_CONFIG,
             )
+            file_storage.stream.seek(0, 2)
+            record_asset(key, file_storage.stream.tell())
             return media_url_from_key(key)
         except Exception as exc:
             # Do not block publication when the object-storage service has a
@@ -207,6 +254,7 @@ def save_file_storage(file_storage: FileStorage | None, subdir: str = "general")
     full_path = root / key
     full_path.parent.mkdir(parents=True, exist_ok=True)
     file_storage.save(full_path)
+    record_asset(key, full_path.stat().st_size)
     return f"{media_prefix()}/{key}"
 
 
@@ -225,12 +273,14 @@ def save_bytes(content: bytes, folder: str, filename_hint: str = "file", content
             Body=content,
             **(extra_args or {}),
         )
+        record_asset(key, len(content))
         return media_url_from_key(key)
 
     target_dir = media_root() / folder
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / f"{uuid4().hex}{ext}"
     target_path.write_bytes(content)
+    record_asset(target_path.relative_to(media_root()).as_posix(), len(content))
     return media_url_from_key(target_path.relative_to(media_root()).as_posix())
 
 
@@ -242,6 +292,7 @@ def delete_media(url: str) -> None:
     if using_r2():
         try:
             _r2_client().delete_object(Bucket=current_app.config["R2_BUCKET"].strip(), Key=key)
+            remove_asset(key)
         except Exception:
             pass
         return
@@ -250,6 +301,7 @@ def delete_media(url: str) -> None:
     if path.exists() and path.is_file():
         try:
             path.unlink()
+            remove_asset(key)
         except Exception:
             pass
 
@@ -270,52 +322,12 @@ def media_exists(url: str) -> bool:
     return path.exists() and path.is_file()
 
 
-def list_media_files(limit: int | None = None) -> list[MediaItem]:
-    if using_r2():
-        items: list[MediaItem] = []
-        client = _r2_client()
-        continuation_token = None
-        while True:
-            params = {
-                "Bucket": current_app.config["R2_BUCKET"].strip(),
-                "MaxKeys": 1000,
-            }
-            if continuation_token:
-                params["ContinuationToken"] = continuation_token
-            resp = client.list_objects_v2(**params)
-            for obj in resp.get("Contents", []):
-                key = obj.get("Key") or ""
-                if not key or key.endswith("/"):
-                    continue
-                items.append(
-                    MediaItem(
-                        key=key,
-                        name=Path(key).name,
-                        url=media_url_from_key(key),
-                        size_kb=max(1, round((obj.get("Size") or 0) / 1024)),
-                        updated_at=obj.get("LastModified"),
-                    )
-                )
-            if not resp.get("IsTruncated"):
-                break
-            continuation_token = resp.get("NextContinuationToken")
-        items.sort(key=lambda item: item.updated_at or datetime.min, reverse=True)
-        return items[:limit] if limit else items
-
-    root = media_root()
-    items = [
-        MediaItem(
-            key=p.relative_to(root).as_posix(),
-            name=p.name,
-            url=media_url_from_key(p.relative_to(root).as_posix()),
-            size_kb=max(1, round(p.stat().st_size / 1024)),
-            updated_at=datetime.fromtimestamp(p.stat().st_mtime),
-        )
-        for p in root.rglob("*")
-        if p.is_file()
-    ]
-    items.sort(key=lambda item: item.updated_at or datetime.min, reverse=True)
-    return items[:limit] if limit else items
+def list_media_files(limit: int = 48, offset: int = 0) -> list[MediaItem]:
+    rows = MediaAsset.query.filter_by(scope=media_scope()).order_by(
+        desc(MediaAsset.updated_at), desc(MediaAsset.id)).offset(max(0, offset)).limit(min(limit or 48, 200)).all()
+    return [MediaItem(key=row.key, name=Path(row.key).name, url=media_url_from_key(row.key),
+                      size_kb=max(1, round(row.size_bytes / 1024)), updated_at=row.updated_at)
+            for row in rows]
 
 
 def open_media_bytes(url_or_key: str) -> tuple[bytes, str, str]:
@@ -328,29 +340,67 @@ def open_media_bytes(url_or_key: str) -> tuple[bytes, str, str]:
             obj = _r2_client().get_object(Bucket=current_app.config["R2_BUCKET"].strip(), Key=key)
         except ClientError as exc:
             raise FileNotFoundError(key) from exc
-        body = obj["Body"].read()
+        limit = current_app.config.get('IMAGE_MAX_BYTES', 15_000_000)
+        with obj['Body'] as stream:
+            body = stream.read(limit + 1)
+        if len(body) > limit:
+            raise ValueError('Imagem excede o limite permitido')
         content_type = obj.get("ContentType") or _content_type_for_name(key)
         return body, content_type, Path(key).name
 
     path = media_root() / key
     if not path.exists() or not path.is_file():
         raise FileNotFoundError(key)
-    return path.read_bytes(), _content_type_for_name(path.name), path.name
+    with path.open('rb') as stream:
+        body = stream.read(current_app.config.get('IMAGE_MAX_BYTES', 15_000_000) + 1)
+    if len(body) > current_app.config.get('IMAGE_MAX_BYTES', 15_000_000):
+        raise ValueError('Imagem excede o limite permitido')
+    return body, _content_type_for_name(path.name), path.name
+
+
+def _r2_response(key, download_name=None):
+    params = {'Bucket': current_app.config['R2_BUCKET'], 'Key': key}
+    if request.headers.get('Range'):
+        params['Range'] = request.headers['Range']
+    client = _r2_client()
+    try:
+        obj = client.get_object(**params)
+    except ClientError as exc:
+        if exc.response.get('Error', {}).get('Code') == 'InvalidRange':
+            return Response(status=416, headers={'Accept-Ranges': 'bytes'})
+        raise FileNotFoundError(key) from exc
+    body = obj['Body']
+    def chunks():
+        try:
+            yield from iter(partial(body.read, 64 * 1024), b'')
+        finally:
+            body.close()
+    response = Response(chunks(), status=206 if obj.get('ContentRange') else 200,
+                        mimetype=obj.get('ContentType') or _content_type_for_name(key))
+    response.call_on_close(body.close)
+    response.headers['Content-Length'] = str(obj['ContentLength'])
+    response.headers['Accept-Ranges'] = 'bytes'
+    if obj.get('ContentRange'):
+        response.headers['Content-Range'] = obj['ContentRange']
+    if obj.get('ETag'):
+        response.headers['ETag'] = obj['ETag']
+    if download_name:
+        response.headers['Content-Disposition'] = dump_options_header('attachment', {'filename': download_name})
+    return response
 
 
 def send_media(filename: str) -> Response:
-    key = (filename or "").lstrip("/")
+    key = (filename or '').lstrip('/')
+    if public_media_enabled():
+        return redirect(public_media_url(key), code=302)
     if using_r2():
-        body, content_type, name = open_media_bytes(key)
-        return send_file(BytesIO(body), mimetype=content_type, download_name=name)
+        return _r2_response(key)
     return send_from_directory(media_root(), key)
 
 
 def send_media_download(key: str, download_name: str | None = None) -> Response:
-    body, content_type, name = open_media_bytes(key)
-    return send_file(
-        BytesIO(body),
-        mimetype=content_type,
-        as_attachment=True,
-        download_name=download_name or name,
-    )
+    key = (key or '').lstrip('/')
+    name = download_name or Path(key).name
+    if using_r2():
+        return _r2_response(key, name)
+    return send_from_directory(media_root(), key, as_attachment=True, download_name=name)

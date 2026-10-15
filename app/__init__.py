@@ -196,15 +196,15 @@ def _bootstrap_database(app: Flask) -> bool:
 
 
 def _auto_sync_loop(app: Flask):
-    with app.app_context():
-        client = WPClient(app.config["WP_BASE_URL"])
-        while True:
+    client = WPClient(app.config["WP_BASE_URL"])
+    while True:
+        with app.app_context():
             try:
                 sync_categories(client)
                 sync_posts(client, max_pages=50, per_page=app.config["WP_PER_PAGE"])
             except Exception:
                 pass
-            time.sleep(app.config["AUTO_SYNC_INTERVAL"])
+        time.sleep(app.config["AUTO_SYNC_INTERVAL"])
 
 
 def create_app():
@@ -219,12 +219,25 @@ def create_app():
 
     app.register_blueprint(site_bp)
     app.register_blueprint(admin_bp)
+    from .resources import install_resource_guards
+    install_resource_guards(app)
 
     from datetime import datetime
     app.jinja_env.globals["now"] = datetime.now
 
     with app.app_context():
-        _bootstrap_database(app)
+        bootstrap_ok = _bootstrap_database(app)
+        if bootstrap_ok:
+            from .resources import log_database_resources
+            log_database_resources(app)
+
+    from .media_index import start_media_index, reconcile_media
+    if bootstrap_ok and not app.config.get("TESTING") and os.getenv("MEDIA_INDEX_ON_START", "1") == "1":
+        start_media_index(app)
+
+    @app.cli.command('index-media')
+    def index_media_command():
+        reconcile_media(app, refresh=True)
 
     if app.config.get("AUTO_SYNC_INTERVAL", 0) and app.config["AUTO_SYNC_INTERVAL"] > 0:
         t = threading.Thread(target=_auto_sync_loop, args=(app,), daemon=True)

@@ -135,3 +135,22 @@ class AnalyticsSession(db.Model):
     is_new_user = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class MediaAsset(db.Model):
+    """Small searchable catalog; object contents remain in R2/on disk."""
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(100), nullable=False)
+    key = db.Column(db.String(1000), nullable=False)
+    size_bytes = db.Column(db.BigInteger, nullable=False, default=0)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint('scope', 'key', name='uq_media_asset_scope_key'),
+        db.Index('ix_media_asset_scope_updated', 'scope', 'updated_at', 'id'),
+    )
+
+
+class MediaIndexState(db.Model):
+    scope = db.Column(db.String(100), primary_key=True)
+    cursor = db.Column(db.Text, nullable=True)
+    complete = db.Column(db.Boolean, nullable=False, default=False)

@@ -10,11 +10,13 @@ import re
 import uuid
 
 import requests
-from PIL import Image, ImageDraw, ImageFont
-from flask import current_app
+from .http_client import get_document
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+from flask import current_app, g
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
+from .resources import bounded_generation
 from .models import Post
 from .storage import key_from_media_url, local_path_from_url, open_media_bytes, save_bytes
 
@@ -101,11 +103,13 @@ def save_uploaded_image(upload: FileStorage | None, folder: str = "gerador/sourc
     if not upload or not upload.filename:
         return ""
     filename = secure_filename(upload.filename)
-    content = upload.read()
+    upload.stream.seek(0, 2)
+    size = upload.stream.tell()
     upload.stream.seek(0)
-    if not content:
-        return ""
-    return _save_bytes(content, folder=folder, filename_hint=filename)
+    if size > current_app.config.get('IMAGE_MAX_BYTES', 15_000_000):
+        raise ArtGeneratorError('Imagem excede o limite permitido')
+    from .storage import save_stream
+    return save_stream(upload.stream, folder, filename, upload.mimetype)
 
 
 def _normalize_text(value: str | None) -> str:
@@ -167,7 +171,7 @@ def resolve_post_source(article_url: str) -> dict[str, str]:
     if slug and (not resolved["title"] or not resolved["image"] or not resolved["category"]) and wp_base:
         try:
             api_url = urljoin(wp_base + "/", "wp-json/wp/v2/posts")
-            response = requests.get(
+            response = get_document(
                 api_url,
                 params={"slug": slug, "_embed": 1, "status": "publish", "per_page": 1},
                 timeout=15,
@@ -181,7 +185,7 @@ def resolve_post_source(article_url: str) -> dict[str, str]:
                 category_name = ""
                 for cat_id in (post_payload.get("categories") or []):
                     try:
-                        cat_response = requests.get(
+                        cat_response = get_document(
                             urljoin(wp_base + "/", f"wp-json/wp/v2/categories/{cat_id}"),
                             timeout=10,
                         )
@@ -202,7 +206,7 @@ def resolve_post_source(article_url: str) -> dict[str, str]:
 
     if not resolved["title"] or not resolved["image"] or not resolved["category"]:
         try:
-            response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            response = get_document(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             response.raise_for_status()
             meta = _parse_meta_tags(response.text)
             if not resolved["title"]:
@@ -217,7 +221,18 @@ def resolve_post_source(article_url: str) -> dict[str, str]:
     return resolved
 
 
-def _fetch_image(source: str) -> Image.Image | None:
+def _prepare_source(image):
+    if image.width * image.height > current_app.config.get('IMAGE_MAX_PIXELS', 24_000_000):
+        raise ArtGeneratorError('A imagem excede o limite de pixels permitido.')
+    # JPEG draft avoids decoding a full camera-resolution bitmap where supported.
+    image.draft('RGB', (2160, 3840))
+    image.thumbnail((2160, 3840), Image.Resampling.LANCZOS)
+    return image.convert('RGBA')
+
+
+def _fetch_image(source: str | Image.Image) -> Image.Image | None:
+    if isinstance(source, Image.Image):
+        return source
     url = (source or "").strip()
     if not url:
         return None
@@ -225,32 +240,26 @@ def _fetch_image(source: str) -> Image.Image | None:
     local_path = _absolute_to_media_local(url)
     if local_path and local_path.exists():
         with Image.open(local_path) as image:
-            return image.convert("RGBA")
+            return _prepare_source(image)
 
     if url.startswith(current_app.config.get("MEDIA_URL_PREFIX", "/media").rstrip("/") + "/"):
         content, _content_type, _name = open_media_bytes(url)
         with Image.open(BytesIO(content)) as image:
-            return image.convert("RGBA")
+            return _prepare_source(image)
 
     if url.startswith("/") and Path(url).exists():
         with Image.open(url) as image:
-            return image.convert("RGBA")
+            return _prepare_source(image)
 
-    response = requests.get(url, timeout=25)
-    response.raise_for_status()
-    with Image.open(BytesIO(response.content)) as image:
-        return image.convert("RGBA")
+    from .sync import download_image_temp
+    with download_image_temp(url) as temp:
+        with Image.open(temp) as image:
+            return _prepare_source(image)
 
 
 def _cover_resize(image: Image.Image, size: tuple[int, int]) -> Image.Image:
-    dst_w, dst_h = size
-    src_w, src_h = image.size
-    scale = max(dst_w / src_w, dst_h / src_h)
-    new_size = (max(1, int(src_w * scale)), max(1, int(src_h * scale)))
-    resized = image.resize(new_size, Image.Resampling.LANCZOS)
-    x = (resized.width - dst_w) // 2
-    y = (resized.height - dst_h) // 2
-    return resized.crop((x, y, x + dst_w, y + dst_h))
+    # Crop before resizing; extreme panoramas must not create huge intermediate bitmaps.
+    return ImageOps.fit(image, size, method=Image.Resampling.LANCZOS)
 
 
 def _load_font(size: int) -> ImageFont.FreeTypeFont:
@@ -434,7 +443,10 @@ def generate_art_image(title: str, image_source: str, variant: str, include_titl
         except Exception as exc:
             raise ArtGeneratorError(f"Não foi possível carregar a imagem informada: {exc}") from exc
         if background is not None:
-            canvas.alpha_composite(_cover_resize(background, (width, height)))
+            with _cover_resize(background, (width, height)) as covered:
+                canvas.alpha_composite(covered)
+            if not isinstance(image_source, Image.Image):
+                background.close()
 
     fade_height = int(height * 0.38)
     fade_path = _asset_path("fadepop.png")
@@ -551,6 +563,8 @@ def generate_trivox_art_image(title: str, image_source: str, variant: str = "fee
         if background is not None:
             photo = _cover_resize(background, (width, photo_height))
             canvas.alpha_composite(photo, (0, header_height))
+            photo.close()
+            background.close()
 
     # Título centralizado no rodapé branco.
     title_text = _normalize_text(title)
@@ -612,12 +626,14 @@ def generate_trivox_art_image(title: str, image_source: str, variant: str = "fee
     return canvas
 
 
+@bounded_generation
 def generate_trivox_variants(*, title: str, image_source: str) -> list[dict[str, str]]:
     """Portal Trivox envia somente a arte Feed Instagram 1080x1440 para o grupo do WhatsApp."""
     image = generate_trivox_art_image(title=title, image_source=image_source, variant="feed")
     filename = f"trivox-feed-{uuid.uuid4().hex}.png"
     buffer = BytesIO()
     image.save(buffer, format="PNG")
+    image.close()
     url = save_bytes(
         buffer.getvalue(),
         folder="gerador/trivox-generated",
@@ -673,24 +689,42 @@ def build_generator_payload(
     }
 
 
-def generate_variants(*, title: str, image_source: str, include_title: bool, category_text: str) -> list[dict[str, str]]:
+@bounded_generation
+def generate_variants(*, title: str, image_source: str, include_title: bool, category_text: str, variants=None) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
-
-    for key, spec in VARIANT_SPECS.items():
-        image = generate_art_image(title=title, image_source=image_source, variant=key, include_title=include_title, category_text=category_text)
-        filename = f"arte-{key}-{uuid.uuid4().hex}.png"
-        buffer = BytesIO()
-        image.convert("RGB").save(buffer, format="PNG")
-        url = save_bytes(buffer.getvalue(), folder="gerador/generated", filename_hint=filename, content_type="image/png")
-        results.append(
-            {
-                "key": key,
-                "label": spec["label"],
-                "size": f"{spec['width']}x{spec['height']}",
-                "url": url,
-                "download_key": key_from_media_url(url) or f"gerador/generated/{filename}",
-                "download_name": filename,
-            }
-        )
-
-    return results
+    selected = set(VARIANT_SPECS) if variants is None else set(variants)
+    cache = g.setdefault('generated_art_urls', {})
+    cache_key = (title, str(image_source), include_title, category_text)
+    cached = cache.setdefault(cache_key, {})
+    missing = selected - cached.keys()
+    if not missing:
+        return [dict(cached[key]) for key in VARIANT_SPECS if key in selected]
+    if not selected:
+        return results
+    source = _fetch_image(image_source) if image_source else None
+    try:
+        for key, spec in VARIANT_SPECS.items():
+            if key not in missing:
+                continue
+            image = generate_art_image(title=title, image_source=source, variant=key,
+                include_title=include_title, category_text=category_text)
+            filename = f"arte-{key}-{uuid.uuid4().hex}.png"
+            try:
+                with BytesIO() as buffer:
+                    with image.convert('RGB') as rgb:
+                        rgb.save(buffer, format='PNG')
+                    from .storage import save_stream
+                    url = save_stream(buffer, 'gerador/generated', filename, 'image/png')
+            finally:
+                image.close()
+            results.append({
+                'key': key, 'label': spec['label'], 'size': f"{spec['width']}x{spec['height']}",
+                'url': url, 'download_key': key_from_media_url(url) or f'gerador/generated/{filename}',
+                'download_name': filename,
+            })
+    finally:
+        if source is not None:
+            source.close()
+    for item in results:
+        cached[item['key']] = item
+    return [dict(cached[key]) for key in VARIANT_SPECS if key in selected]

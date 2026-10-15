@@ -1,4 +1,5 @@
 import requests
+from .http_client import get_document
 from urllib.parse import urljoin
 
 class WPClient:
@@ -8,7 +9,7 @@ class WPClient:
 
     def _get(self, path: str, params: dict):
         url = urljoin(self.base_url, path.lstrip("/"))
-        r = requests.get(url, params=params, timeout=self.timeout)
+        r = get_document(url, params=params, timeout=self.timeout)
         r.raise_for_status()
         return r.json(), r.headers
 

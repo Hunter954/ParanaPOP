@@ -20,7 +20,8 @@ from .art_generator import (
     _normalize_text,
     _text_bbox,
 )
-from .storage import key_from_media_url, save_bytes
+from .storage import key_from_media_url, save_stream
+from .resources import bounded_generation
 
 
 class VideoGeneratorError(Exception):
@@ -476,6 +477,8 @@ def _render_video_with_overlay(
         "-hide_banner",
         "-loglevel", "error",
         "-y",
+        "-threads", str(max(1, current_app.config.get("FFMPEG_THREADS", 2))),
+        "-filter_complex_threads", "1",
         "-i", str(input_path),
         "-loop", "1",
         "-i", str(overlay_path),
@@ -484,6 +487,7 @@ def _render_video_with_overlay(
         "-map", "0:a?",
         "-t", f"{output_duration:.3f}",
         "-c:v", "libx264",
+        "-threads", str(max(1, current_app.config.get("FFMPEG_THREADS", 2))),
         "-preset", "veryfast",
         "-crf", "22",
         "-pix_fmt", "yuv420p",
@@ -507,10 +511,11 @@ def _render_video_with_overlay(
         raise VideoGeneratorError(f"Falha no FFmpeg: {detail}")
 
 
+@bounded_generation
 def generate_paranapop_stories_video(
-    *, video_content: bytes, title: str, category_text: str, filename_hint: str = "video.mp4"
+    *, video_content: bytes | None = None, video_stream=None, title: str, category_text: str, filename_hint: str = "video.mp4"
 ) -> dict[str, str]:
-    if not video_content:
+    if not video_content and video_stream is None:
         raise VideoGeneratorError("O vídeo recebido está vazio.")
     if not _normalize_text(title):
         raise VideoGeneratorError("O título é obrigatório.")
@@ -525,10 +530,17 @@ def generate_paranapop_stories_video(
         input_path = tmp_dir / f"input{input_ext}"
         overlay_path = tmp_dir / "overlay.png"
         output_path = tmp_dir / "paranapop-stories.mp4"
-        input_path.write_bytes(video_content)
+        if video_stream is not None:
+            video_stream.seek(0)
+            with input_path.open('wb') as target:
+                shutil.copyfileobj(video_stream, target, length=64 * 1024)
+        else:
+            input_path.write_bytes(video_content)
         video_info = _probe_video_info(input_path)
         output_duration = min(float(video_info["duration"]), float(max_seconds))
-        generate_stories_overlay(title=title, category_text=category_text).save(overlay_path, "PNG")
+        with generate_stories_overlay(title=title, category_text=category_text) as overlay:
+            overlay.save(overlay_path, "PNG")
+        overlay.close()
         _render_video_with_overlay(
             input_path=input_path,
             output_path=output_path,
@@ -536,10 +548,9 @@ def generate_paranapop_stories_video(
             output_size=PARANAPOP_STORIES_SIZE,
             output_duration=output_duration,
         )
-        output = output_path.read_bytes()
-
-    filename = f"video-stories-{uuid.uuid4().hex}.mp4"
-    url = save_bytes(output, folder="gerador/video-generated", filename_hint=filename, content_type="video/mp4")
+        filename = f"video-stories-{uuid.uuid4().hex}.mp4"
+        with output_path.open('rb') as output:
+            url = save_stream(output, 'gerador/video-generated', filename, 'video/mp4')
     return {
         "key": "stories",
         "label": "Vídeo Stories / Reels",
@@ -551,10 +562,11 @@ def generate_paranapop_stories_video(
     }
 
 
+@bounded_generation
 def generate_trivox_video(
-    *, video_content: bytes, title: str, filename_hint: str = "video.mp4"
+    *, video_content: bytes | None = None, video_stream=None, title: str, filename_hint: str = "video.mp4"
 ) -> dict[str, str]:
-    if not video_content:
+    if not video_content and video_stream is None:
         raise VideoGeneratorError("O vídeo recebido está vazio.")
     if not _normalize_text(title):
         raise VideoGeneratorError("O título é obrigatório.")
@@ -569,7 +581,12 @@ def generate_trivox_video(
         input_path = tmp_dir / f"input{input_ext}"
         overlay_path = tmp_dir / "overlay.png"
         output_path = tmp_dir / "trivox-video.mp4"
-        input_path.write_bytes(video_content)
+        if video_stream is not None:
+            video_stream.seek(0)
+            with input_path.open('wb') as target:
+                shutil.copyfileobj(video_stream, target, length=64 * 1024)
+        else:
+            input_path.write_bytes(video_content)
         video_info = _probe_video_info(input_path)
         output_duration = min(float(video_info["duration"]), float(max_seconds))
 
@@ -582,6 +599,7 @@ def generate_trivox_video(
         size_label = "1080x1920"
 
         overlay.save(overlay_path, "PNG")
+        overlay.close()
         _render_video_with_overlay(
             input_path=input_path,
             output_path=output_path,
@@ -589,10 +607,9 @@ def generate_trivox_video(
             output_size=output_size,
             output_duration=output_duration,
         )
-        output = output_path.read_bytes()
-
-    filename = f"trivox-video-{key}-{uuid.uuid4().hex}.mp4"
-    url = save_bytes(output, folder="gerador/video-generated", filename_hint=filename, content_type="video/mp4")
+        filename = f"trivox-video-{key}-{uuid.uuid4().hex}.mp4"
+        with output_path.open('rb') as output:
+            url = save_stream(output, 'gerador/video-generated', filename, 'video/mp4')
     return {
         "key": key,
         "label": label,
