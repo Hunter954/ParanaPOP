@@ -9,7 +9,9 @@ def _database_url() -> str:
     """
     url = os.getenv("DATABASE_URL", "sqlite:///dev.db")
     if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
 
 
@@ -21,7 +23,7 @@ def _engine_options(database_url: str) -> dict:
 
     # Avoid hanging the whole Gunicorn worker for a long time when Railway
     # private networking/Postgres is temporarily unavailable.
-    if database_url.startswith(("postgresql://", "postgres://")):
+    if database_url.startswith(("postgresql", "postgres://")):
         options.update(pool_size=int(os.getenv("DB_POOL_SIZE", "4")),
                        max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "1")),
                        pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "10")))

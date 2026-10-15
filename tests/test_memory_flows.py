@@ -193,3 +193,16 @@ def test_busy_generation_returns_social_warning_instead_of_failing_saved_article
         post=Post(title='Saved article',slug='saved',source='local')
         assert not wa.send_post_to_whatsapp(post).ok
         assert not ig.send_post_to_instagram(post).ok
+
+
+def test_postgres_uses_installed_driver_even_when_sqlalchemy_default_changes(monkeypatch):
+    from app.config import _database_url,_engine_options
+    from sqlalchemy import create_engine
+    for raw in ['postgres://user:password@localhost/db','postgresql://user:password@localhost/db',
+                'postgresql+psycopg2://user:password@localhost/db']:
+        monkeypatch.setenv('DATABASE_URL',raw)
+        url=_database_url()
+        engine=create_engine(url,**_engine_options(url))
+        assert engine.dialect.driver=='psycopg2'
+        assert engine.pool.size()==4
+        engine.dispose()
