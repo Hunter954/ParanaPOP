@@ -10,6 +10,7 @@ import requests
 from flask import current_app, url_for
 
 from .art_generator import generate_variants
+from .resources import GenerationBusy
 from .models import Post, SiteSetting, db
 from .storage import normalize_media_url
 
@@ -253,7 +254,10 @@ def send_post_to_whatsapp(post: Post) -> WhatsAppResult:
         return WhatsAppResult(False, "URL do serviço WhatsApp não configurada.")
     if not cfg.get("default_group_id"):
         return WhatsAppResult(False, "Grupo padrão do WhatsApp não configurado.")
-    payload = build_whatsapp_news_payload(post)
+    try:
+        payload = build_whatsapp_news_payload(post)
+    except GenerationBusy as exc:
+        return WhatsAppResult(False, str(exc))
     if not payload.get("images"):
         return WhatsAppResult(False, "Nenhum formato de arte está habilitado para envio.")
     return _service_request("POST", "/send-news", json_payload=payload)

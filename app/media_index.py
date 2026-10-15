@@ -40,6 +40,7 @@ def reconcile_media(app, refresh=False):
         if state and state.complete and not refresh:
             return
         token = state.cursor if state and not refresh else None
+        db.session.remove()
         if using_r2():
             while True:
                 params = {'Bucket': app.config['R2_BUCKET'], 'MaxKeys': 500}
@@ -75,8 +76,12 @@ def reconcile_media(app, refresh=False):
 
 def start_media_index(app):
     def run():
-        try:
-            reconcile_media(app)
-        except Exception:
-            app.logger.exception('Media metadata reconciliation interrupted; resume on next startup or index-media command')
+        for attempt in range(5):
+            try:
+                reconcile_media(app)
+                return
+            except Exception:
+                app.logger.warning('Media metadata reconciliation interrupted; retry %s/5', attempt + 1)
+                time.sleep(min(2 ** attempt, 16))
+        app.logger.error('Media metadata reconciliation incomplete; resume with index-media command or next startup')
     threading.Thread(target=run, name='media-index', daemon=True).start()

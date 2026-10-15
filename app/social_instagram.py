@@ -10,6 +10,7 @@ import requests
 from flask import current_app, url_for
 
 from .art_generator import generate_variants
+from .resources import GenerationBusy
 from .models import Post, SiteSetting, db
 from .storage import normalize_media_url
 
@@ -235,7 +236,10 @@ def send_post_to_instagram(post: Post) -> InstagramResult:
     cfg = instagram_settings()
     if not cfg.get("service_url"):
         return InstagramResult(False, "URL do serviço Instagram não configurada.")
-    payload = build_instagram_news_payload(post)
+    try:
+        payload = build_instagram_news_payload(post)
+    except GenerationBusy as exc:
+        return InstagramResult(False, str(exc))
     if not payload.get("images"):
         return InstagramResult(False, "Nenhum formato de arte está habilitado para o Instagram.")
     return _service_request("POST", "/publish", json_payload=payload)

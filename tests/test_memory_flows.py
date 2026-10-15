@@ -180,3 +180,16 @@ def test_admin_pages_and_health_smoke(app,client):
         response=client.get(route)
         assert response.status_code==200,(route,response.status_code)
     assert client.get('/health').json['memory_optimized']
+
+
+def test_busy_generation_returns_social_warning_instead_of_failing_saved_article(app,monkeypatch):
+    from app import social_whatsapp as wa,social_instagram as ig
+    from app.resources import GenerationBusy
+    monkeypatch.setattr(wa,'whatsapp_settings',lambda:dict(service_url='http://bot',default_group_id='group'))
+    monkeypatch.setattr(ig,'instagram_settings',lambda:dict(service_url='http://bot'))
+    monkeypatch.setattr(wa,'build_whatsapp_news_payload',Mock(side_effect=GenerationBusy('busy')))
+    monkeypatch.setattr(ig,'build_instagram_news_payload',Mock(side_effect=GenerationBusy('busy')))
+    with app.app_context():
+        post=Post(title='Saved article',slug='saved',source='local')
+        assert not wa.send_post_to_whatsapp(post).ok
+        assert not ig.send_post_to_instagram(post).ok
