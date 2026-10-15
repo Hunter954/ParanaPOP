@@ -819,4 +819,4 @@ def search():
 
 @site_bp.get('/health')
 def health():
-    return jsonify(ok=True, memory_optimized=True, media_upload='multipart')
+    return jsonify(ok=True, memory_optimized=True, media_upload='multipart', image_compression='webp-v1')

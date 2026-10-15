@@ -77,4 +77,6 @@ class Config:
 
     IMAGE_MAX_BYTES = int(os.getenv("IMAGE_MAX_BYTES", "15000000"))
     IMAGE_MAX_PIXELS = int(os.getenv("IMAGE_MAX_PIXELS", "24000000"))
+    IMAGE_WEB_MAX_EDGE = int(os.getenv("IMAGE_WEB_MAX_EDGE", "1280"))
+    IMAGE_WEB_QUALITY = int(os.getenv("IMAGE_WEB_QUALITY", "68"))
     FFMPEG_THREADS = int(os.getenv("FFMPEG_THREADS", "2"))

@@ -21,6 +21,7 @@ from botocore.exceptions import ClientError
 from flask import Response, current_app, send_file, send_from_directory, redirect, request
 from sqlalchemy import desc
 from werkzeug.http import dump_options_header
+from .image_uploads import prepared_image
 from .models import MediaAsset
 from .media_index import media_scope, record_asset, remove_asset
 from werkzeug.datastructures import FileStorage
@@ -30,6 +31,18 @@ _CLIENT_LOCK = threading.Lock()
 _TRANSFER_CONFIG = TransferConfig(max_concurrency=1, use_threads=False, max_io_queue=2)
 
 _ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".jfif", ".png", ".webp", ".gif", ".svg", ".avif", ".heic", ".heif"}
+
+
+class _UploadStream:
+    """boto may close its input; the caller owns the underlying upload."""
+    def __init__(self, stream):
+        self.stream = stream
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+    def close(self):
+        pass
 
 
 @dataclass
@@ -99,7 +112,9 @@ def key_from_media_url(url: str) -> str | None:
     if target_path.startswith(prefix):
         rel = target_path[len(prefix):].lstrip("/")
         return rel or None
-    if parsed.scheme and public_prefix and target_path.startswith(urlparse(public_media_base()).path + "/"):
+    if (parsed.scheme and public_prefix
+            and parsed.netloc.lower() == urlparse(public_media_base()).netloc.lower()
+            and target_path.startswith(urlparse(public_media_base()).path + "/")):
         rel = target_path[len(urlparse(public_media_base()).path) + 1:].lstrip("/")
         return rel or None
     return None
@@ -163,6 +178,8 @@ def _guess_extension(filename: str = "", content_type: str = "") -> str:
 
 
 def _content_type_for_name(filename: str, fallback: str = "application/octet-stream") -> str:
+    if Path(filename).suffix.lower() == ".webp":
+        return "image/webp"
     guessed, _ = mimetypes.guess_type(filename)
     return guessed or fallback
 
@@ -188,7 +205,12 @@ def _r2_client():
         return app.extensions['r2_client']
 
 
-def save_stream(stream: BinaryIO, folder: str, filename_hint='file', content_type='') -> str:
+def save_stream(stream: BinaryIO, folder: str, filename_hint='file', content_type='', *, optimize_image=True) -> str:
+    with prepared_image(stream, filename_hint, content_type, enabled=optimize_image) as prepared:
+        return _save_stream(prepared[0], folder, prepared[1], prepared[2])
+
+
+def _save_stream(stream: BinaryIO, folder: str, filename_hint='file', content_type='') -> str:
     """Upload without reading the entire file into a Python bytes object."""
     ext = _guess_extension(filename_hint, content_type)
     key = f"{folder.strip('/')}/{uuid4().hex}{ext}"
@@ -196,8 +218,9 @@ def save_stream(stream: BinaryIO, folder: str, filename_hint='file', content_typ
     size = stream.tell()
     stream.seek(0)
     if using_r2():
-        _r2_client().upload_fileobj(stream, current_app.config['R2_BUCKET'], key,
-            ExtraArgs={'ContentType': content_type or _content_type_for_name(filename_hint)},
+        _r2_client().upload_fileobj(_UploadStream(stream), current_app.config['R2_BUCKET'], key,
+            ExtraArgs={'ContentType': content_type or _content_type_for_name(filename_hint),
+                       'CacheControl': 'public, max-age=31536000, immutable'},
             Config=_TRANSFER_CONFIG)
     else:
         target = media_root() / key
@@ -209,6 +232,17 @@ def save_stream(stream: BinaryIO, folder: str, filename_hint='file', content_typ
 
 
 def save_file_storage(file_storage: FileStorage | None, subdir: str = "general") -> str:
+    if not file_storage or not getattr(file_storage, "filename", ""):
+        return ""
+    # Preserve validation before interpreting the supplied filename/type.
+    if _file_ext(file_storage.filename) not in _ALLOWED_IMAGE_EXTS:
+        raise ValueError("Formato de imagem não permitido")
+    with prepared_image(file_storage.stream, file_storage.filename, file_storage.mimetype) as prepared:
+        upload = FileStorage(stream=prepared[0], filename=prepared[1], content_type=prepared[2])
+        return _save_file_storage(upload, subdir)
+
+
+def _save_file_storage(file_storage: FileStorage | None, subdir: str = "general") -> str:
     if not file_storage or not getattr(file_storage, "filename", ""):
         return ""
 
@@ -229,9 +263,9 @@ def save_file_storage(file_storage: FileStorage | None, subdir: str = "general")
 
     if using_r2():
         try:
-            extra_args = {"ContentType": content_type} if content_type else None
+            extra_args = {"ContentType": content_type, "CacheControl": "public, max-age=31536000, immutable"}
             _r2_client().upload_fileobj(
-                Fileobj=file_storage.stream,
+                Fileobj=_UploadStream(file_storage.stream),
                 Bucket=current_app.config["R2_BUCKET"].strip(),
                 Key=key,
                 ExtraArgs=extra_args or {},

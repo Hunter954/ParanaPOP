@@ -1669,12 +1669,7 @@ def _bot_media_stream(data, kind):
 def _save_bot_image(data, folder):
     stream, filename, mimetype = _bot_media_stream(data, 'image')
     try:
-        # Decode only after validating file bytes/pixels; keep the original for publication.
-        from PIL import Image
-        with Image.open(stream) as image:
-            if image.width * image.height > current_app.config.get('IMAGE_MAX_PIXELS', 24_000_000):
-                raise ValueError('Imagem excede o limite de pixels permitido')
-        stream.seek(0)
+        # Shared storage validates and compresses editorial photos before R2.
         return save_stream(stream, folder, filename, mimetype)
     finally:
         stream.close()

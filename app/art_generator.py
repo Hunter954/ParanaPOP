@@ -109,7 +109,7 @@ def save_uploaded_image(upload: FileStorage | None, folder: str = "gerador/sourc
     if size > current_app.config.get('IMAGE_MAX_BYTES', 15_000_000):
         raise ArtGeneratorError('Imagem excede o limite permitido')
     from .storage import save_stream
-    return save_stream(upload.stream, folder, filename, upload.mimetype)
+    return save_stream(upload.stream, folder, filename, upload.mimetype, optimize_image=False)
 
 
 def _normalize_text(value: str | None) -> str:
@@ -714,7 +714,7 @@ def generate_variants(*, title: str, image_source: str, include_title: bool, cat
                     with image.convert('RGB') as rgb:
                         rgb.save(buffer, format='PNG')
                     from .storage import save_stream
-                    url = save_stream(buffer, 'gerador/generated', filename, 'image/png')
+                    url = save_stream(buffer, 'gerador/generated', filename, 'image/png', optimize_image=False)
             finally:
                 image.close()
             results.append({
