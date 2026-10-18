@@ -55,6 +55,29 @@ def test_all_editorial_entries_send_compressed_bytes_and_metadata_to_r2(app, mon
         assert MediaAsset.query.one().size_bytes == len(uploaded['body'])
 
 
+
+def test_r2_outage_does_not_create_local_upload(app, monkeypatch, large_photo):
+    remote = Mock()
+    remote.upload_fileobj.side_effect = OSError('r2 unavailable')
+    monkeypatch.setattr(storage, '_r2_client', lambda: remote)
+    app.config.update(R2_BUCKET='bucket', R2_ENDPOINT='https://r2.example', R2_ACCESS_KEY_ID='test',
+                      R2_SECRET_ACCESS_KEY='test', R2_PUBLIC_BASE_URL='https://images.example')
+    with app.app_context():
+        with pytest.raises(OSError, match='r2 unavailable'):
+            storage.save_file_storage(FileStorage(stream=BytesIO(large_photo), filename='phone.jpg', content_type='image/jpeg'))
+        assert not list(storage.media_root().rglob('*.webp'))
+        assert MediaAsset.query.count() == 0
+
+
+def test_incomplete_r2_configuration_blocks_local_upload(app, large_photo):
+    app.config.update(R2_BUCKET='bucket', R2_ENDPOINT='', R2_ACCESS_KEY_ID='', R2_SECRET_ACCESS_KEY='')
+    with app.app_context():
+        with pytest.raises(RuntimeError, match='R2 configurado'):
+            storage.save_file_storage(FileStorage(stream=BytesIO(large_photo), filename='phone.jpg', content_type='image/jpeg'))
+        assert not list(storage.media_root().rglob('*.webp'))
+        assert MediaAsset.query.count() == 0
+
+
 def test_alpha_orientation_metadata_and_size_do_not_regress(app):
     with app.app_context():
         with Image.new('RGBA', (1800, 900), (255, 0, 0, 90)) as image:
