@@ -64,6 +64,11 @@ def using_r2() -> bool:
     )
 
 
+def _reject_incomplete_r2() -> None:
+    if current_app.config.get('R2_BUCKET') and not using_r2():
+        raise RuntimeError('R2 configurado sem credenciais completas; upload local bloqueado')
+
+
 def media_root() -> Path:
     path = Path(current_app.config["MEDIA_ROOT"]).resolve()
     path.mkdir(parents=True, exist_ok=True)
@@ -223,6 +228,7 @@ def _save_stream(stream: BinaryIO, folder: str, filename_hint='file', content_ty
                        'CacheControl': 'public, max-age=31536000, immutable'},
             Config=_TRANSFER_CONFIG)
     else:
+        _reject_incomplete_r2()
         target = media_root() / key
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('wb') as output:
@@ -262,27 +268,20 @@ def _save_file_storage(file_storage: FileStorage | None, subdir: str = "general"
         pass
 
     if using_r2():
-        try:
-            extra_args = {"ContentType": content_type, "CacheControl": "public, max-age=31536000, immutable"}
-            _r2_client().upload_fileobj(
-                Fileobj=_UploadStream(file_storage.stream),
-                Bucket=current_app.config["R2_BUCKET"].strip(),
-                Key=key,
-                ExtraArgs=extra_args or {},
-                Config=_TRANSFER_CONFIG,
-            )
-            file_storage.stream.seek(0, 2)
-            record_asset(key, file_storage.stream.tell())
-            return media_url_from_key(key)
-        except Exception as exc:
-            # Do not block publication when the object-storage service has a
-            # temporary configuration/network failure. Save to the mounted
-            # media volume and return the local /media URL instead.
-            current_app.logger.exception("Falha no upload R2; usando armazenamento local: %s", exc)
-            try:
-                file_storage.stream.seek(0)
-            except Exception:
-                pass
+        extra_args = {"ContentType": content_type, "CacheControl": "public, max-age=31536000, immutable"}
+        _r2_client().upload_fileobj(
+            Fileobj=_UploadStream(file_storage.stream),
+            Bucket=current_app.config["R2_BUCKET"].strip(),
+            Key=key,
+            ExtraArgs=extra_args,
+            Config=_TRANSFER_CONFIG,
+        )
+        file_storage.stream.seek(0, 2)
+        record_asset(key, file_storage.stream.tell())
+        return media_url_from_key(key)
+
+    # A bucket outage must fail the upload, not create a second local source.
+    _reject_incomplete_r2()
 
     root = media_root()
     full_path = root / key
@@ -310,6 +309,7 @@ def save_bytes(content: bytes, folder: str, filename_hint: str = "file", content
         record_asset(key, len(content))
         return media_url_from_key(key)
 
+    _reject_incomplete_r2()
     target_dir = media_root() / folder
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / f"{uuid4().hex}{ext}"
