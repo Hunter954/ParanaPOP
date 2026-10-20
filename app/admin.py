@@ -859,6 +859,21 @@ def dashboard():
     )
 
 
+@admin_bp.get("/api/online")
+@login_required
+def online_visitors():
+    r = _require_admin()
+    if r:
+        return r
+    since = datetime.utcnow() - timedelta(seconds=90)
+    count = db.session.query(func.count(distinct(AnalyticsSession.visitor_id))).filter(
+        AnalyticsSession.updated_at >= since,
+    ).scalar() or 0
+    response = jsonify(online=count, window_seconds=90)
+    response.headers["Cache-Control"] = "no-store, private"
+    return response
+
+
 
 @admin_bp.route("/calendario-home", methods=["GET", "POST"])
 @login_required

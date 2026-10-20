@@ -276,8 +276,12 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   window.addEventListener('beforeunload', flushDuration);
+  setInterval(() => {
+    if (document.visibilityState === 'visible') flushDuration();
+  }, 30000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushDuration();
+    // Resume presence immediately when the reader returns to this tab.
+    if (document.visibilityState === 'visible') flushDuration();
   });
 })();
 

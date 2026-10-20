@@ -3,6 +3,14 @@
 {% block page_title %}Dashboard{% endblock %}
 {% block page_subtitle %}Resumo do portal, atalhos operacionais e áreas principais do administrativo.{% endblock %}
 {% block admin_content %}
+<section class="panel-card mb-4" data-online-url="{{ url_for('admin.online_visitors') }}">
+  <div class="panel-head">
+    <div><h2><i class="bi bi-broadcast text-success" aria-hidden="true"></i> Pessoas online</h2><p>Navegadores ativos nos últimos 90 segundos. Várias abas contam uma vez.</p></div>
+    <span class="badge text-bg-success">AO VIVO</span>
+  </div>
+  <strong class="d-block display-5 fw-bold" id="online-count" aria-live="polite">—</strong>
+  <small class="text-muted" id="online-status">Conectando…</small>
+</section>
 <section class="stats-grid">
   <article class="stat-card"><span>Pageviews totais</span><strong>{{ stats.pv_total }}</strong><small>Últimas 24h: {{ stats.pv_24h }}</small></article>
   <article class="stat-card"><span>Total de matérias</span><strong>{{ stats.posts_total }}</strong><small>{{ stats.local_posts }} locais / {{ stats.wp_posts }} WordPress</small></article>
@@ -120,4 +128,7 @@
     {% endfor %}
   </div>
 </section>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/online-dashboard.js', v='1') }}"></script>
 {% endblock %}
