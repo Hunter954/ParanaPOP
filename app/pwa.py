@@ -57,17 +57,17 @@ def manifest():
         'id': '/', 'name': 'Paraná Pop', 'short_name': 'Paraná Pop',
         'description': 'Notícias de Foz do Iguaçu e do Oeste do Paraná na palma da mão.',
         'lang': 'pt-BR', 'start_url': '/?origem=app', 'scope': '/',
-        'display': 'standalone', 'background_color': '#02d4fd',
-        'theme_color': '#02d4fd', 'categories': ['news'],
+        'display': 'standalone', 'background_color': '#00c8e8',
+        'theme_color': '#00c8e8', 'categories': ['news'],
         'icons': [
-            {'src': f'/static/pwa/icon-{size}.png', 'sizes': f'{size}x{size}',
+            {'src': f'/static/pwa/icon-v3-{size}.png', 'sizes': f'{size}x{size}',
              'type': 'image/png', 'purpose': 'any'} for size in (192, 512)
-        ] + [{'src': '/static/pwa/icon-maskable-512.png', 'sizes': '512x512',
+        ] + [{'src': '/static/pwa/icon-maskable-v3-512.png', 'sizes': '512x512',
               'type': 'image/png', 'purpose': 'maskable'}],
         'shortcuts': [{'name': 'Últimas notícias', 'url': '/'}],
     })
     response.mimetype = 'application/manifest+json'
-    response.headers['Cache-Control'] = 'public, max-age=3600'
+    response.headers['Cache-Control'] = 'no-cache'
     return response
 
 

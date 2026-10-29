@@ -1,7 +1,7 @@
 /* Keep news online and current; cache only this small offline shell. */
-const CACHE = 'paranapop-shell-v1';
+const CACHE = 'paranapop-shell-v3';
 const OFFLINE = '/static/pwa/offline.html';
-const ASSETS = [OFFLINE, '/static/pwa/icon-192.png', '/static/pwa/icon-512.png'];
+const ASSETS = [OFFLINE, '/static/pwa/icon-v3-192.png', '/static/pwa/icon-v3-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -31,7 +31,7 @@ self.addEventListener('push', (event) => {
   } catch (_) { /* Only same-origin news links are accepted. */ }
   event.waitUntil(self.registration.showNotification(data.title || 'Paraná Pop', {
     body: data.body || 'Tem notícia nova no Paraná Pop. Toque para conferir.',
-    icon: '/static/pwa/icon-192.png', badge: '/static/pwa/badge-96.png',
+    icon: '/static/pwa/icon-v3-192.png', badge: '/static/pwa/badge-96.png',
     tag: data.tag || 'paranapop', data: { url: target.href },
   }));
 });

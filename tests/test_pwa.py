@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import io
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
@@ -8,6 +9,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from pywebpush import WebPushException
+from PIL import Image
 
 from app.models import db, Post, PushSubscription, PushDelivery, SiteSetting
 from app.pwa import dispatch_news, _ensure_identity
@@ -59,6 +61,30 @@ def test_opt_in_idempotency_and_authenticated_opt_out(app, client):
     assert client.post('/api/pwa/unsubscribe', json=value, headers=HEADERS).status_code == 200
     with app.app_context():
         assert PushSubscription.query.count() == 0
+
+
+def test_native_splash_icons_have_no_embedded_rectangular_background(client):
+    manifest = client.get('/manifest.webmanifest').json
+    blue = (0, 200, 232)
+    assert manifest['background_color'] == manifest['theme_color'] == '#00c8e8'
+    for size in (192, 512):
+        im = Image.open(io.BytesIO(client.get(f'/static/pwa/icon-v3-{size}.png').data))
+        assert im.size == (size, size) and im.mode == 'RGBA'
+        assert im.getchannel('A').getextrema() == (0, 255)
+        # A broad transparent margin prevents the old square/edge in Android splash screens.
+        margin = size // 8
+        for rect in [(0, 0, size, margin), (0, size-margin, size, size),
+                     (0, 0, margin, size), (size-margin, 0, size, size)]:
+            assert im.crop(rect).getchannel('A').getextrema() == (0, 0)
+    for filename, size in [('icon-maskable-v3-512.png', 512), ('apple-touch-icon-v3.png', 180)]:
+        im = Image.open(io.BytesIO(client.get('/static/pwa/' + filename).data)).convert('RGB')
+        assert im.size == (size, size)
+        for rect in [(0, 0, size, size//8), (0, size-size//8, size, size),
+                     (0, 0, size//8, size), (size-size//8, 0, size, size)]:
+            assert im.crop(rect).getextrema() == tuple((c, c) for c in blue)
+    page = client.get('/').data
+    assert b'icon-v3-512.png' in page and b'pwa-logo-key' not in page
+    assert b'<meta name="theme-color" content="#00c8e8">' in page
 
 
 @pytest.mark.parametrize('endpoint', ['http://fcm.googleapis.com/push', 'https://127.0.0.1/push',

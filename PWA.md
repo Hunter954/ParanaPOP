@@ -4,6 +4,8 @@ O portal pode ser instalado pelo botão flutuante no canto inferior direito. O m
 
 Dentro do aplicativo instalado, o botão flutuante e a oferta de instalação ficam ocultos. O leitor gerencia os alertas pelo botão **Notificações** no rodapé. A primeira página da sessão mostra somente a marca sobre fundo azul, com uma entrada breve do ícone e saída suave; navegar entre matérias não repete a abertura. A preferência de movimento reduzido é respeitada. A tela nativa anterior ao carregamento é gerada pelo sistema operacional a partir do manifesto.
 
+Os ícones `icon-v3-*` usam transparência real; o maskable e o ícone iOS usam o mesmo azul sólido `#00c8e8` do manifesto e da animação, sem a antiga imagem retangular por trás. Os URLs dos ícones foram versionados para acionar a atualização da identidade instalada. O Android pode conservar a imagem anterior até atualizar o WebAPK; reinstalar pelo site aplica os ícones atuais. A logo transparente foi extraída da imagem original pela ferramenta integrada ImageGen e normalizada para os tamanhos nativos. Prompt: remover somente o fundo ciano externo, preservando o P, seus contornos e as faixas amarela, rosa e ciano, sem adicionar moldura ou sombra.
+
 No Android/Chrome/Edge, o botão abre a instalação nativa quando disponível. No iPhone/iPad, a tela explica **Compartilhar → Adicionar à Tela de Início**. Abra pelo novo ícone para permitir notificações no iOS. Navegadores internos de redes sociais recebem instruções para abrir no navegador do aparelho.
 
 Os alertas são opcionais. O leitor pode ativar ou desativar no mesmo botão; nenhuma permissão é solicitada ao carregar a página. A instalação e a autorização de notificações são ações distintas.

@@ -137,6 +137,15 @@ test('service worker does not intercept admin, APIs or media', () => {
   }
 });
 
+test('offline screen logo is available in the service worker offline cache', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../app/static/pwa/offline.html'), 'utf8');
+  const logo = html.match(/<img src="([^"]+)"/)[1];
+  const assets = vm.runInNewContext(swSource + '\nASSETS;', {
+    self: { addEventListener() {} }, URL, caches: {}, fetch() {},
+  });
+  assert.ok(assets.includes(logo));
+});
+
 test('push notifications restrict destinations to the portal', async () => {
   const app = worker();
   let wait;
