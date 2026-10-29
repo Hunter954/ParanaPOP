@@ -3,6 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c8e8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Paraná Pop">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="{{ url_for('pwa.manifest') }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='pwa/apple-touch-icon.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pwa.css', v='1') }}">
+  <script defer src="{{ url_for('static', filename='js/pwa.js', v='1') }}"></script>
   <title>{{ meta_title or site_name_value }}</title>
   <meta name="description" content="{{ meta_description or '' }}">
   <meta name="robots" content="{{ meta_robots or 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1' }}">
@@ -231,6 +240,7 @@
     </div>
   </footer>
 
+  {% include 'pwa_widget.html' %}
   <script>
     window.__SITE_ANALYTICS__ = {
       endpoint: "{{ url_for('site.analytics_collect') }}",

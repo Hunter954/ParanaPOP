@@ -108,6 +108,25 @@ class SiteSetting(db.Model):
     key = db.Column(db.String(80), unique=True, nullable=False)
     value = db.Column(db.Text, nullable=True)
 
+
+class PushSubscription(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    endpoint_hash = db.Column(db.String(64), unique=True, nullable=False)
+    endpoint = db.Column(db.Text, nullable=False)
+    p256dh = db.Column(db.String(180), nullable=False)
+    auth = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class PushDelivery(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    subscription_id = db.Column(db.Integer, db.ForeignKey('push_subscription.id', ondelete='CASCADE'), nullable=False, index=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id', ondelete='CASCADE'), nullable=False, index=True)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    next_attempt_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    sent_at = db.Column(db.DateTime, nullable=True)
+    __table_args__ = (db.UniqueConstraint('subscription_id', 'post_id'),)
+
 class PageView(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey("post.id"), nullable=True)

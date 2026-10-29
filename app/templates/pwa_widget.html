@@ -1,0 +1,20 @@
+<button class="pwa-fab" id="pwa-open" type="button" aria-haspopup="dialog" aria-controls="pwa-dialog" hidden>
+  <img src="{{ url_for('static', filename='pwa/icon-192.png') }}" width="42" height="42" alt="">
+  <span><small>PARANÁ POP NO CELULAR</small><strong id="pwa-fab-label">Instalar aplicativo</strong></span>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg>
+</button>
+<dialog id="pwa-dialog" class="pwa-dialog" aria-labelledby="pwa-title" aria-describedby="pwa-description">
+  <button class="pwa-close" id="pwa-close" type="button" aria-label="Fechar">×</button>
+  <div class="pwa-dialog-brand"><img src="{{ url_for('static', filename='pwa/icon-192.png') }}" width="72" height="72" alt="Ícone do Paraná Pop"><span>SEU PORTAL.<br>SEMPRE COM VOCÊ.</span></div>
+  <h2 id="pwa-title">O Paraná Pop<br>na palma da mão.</h2>
+  <p id="pwa-description">As notícias de Foz e do Oeste do Paraná, direto na tela inicial do seu celular.</p>
+  <div class="pwa-perks"><span>✓ Gratuito</span><span>✓ Leve e fácil</span><span>✓ Notícias em tempo real</span></div>
+  <button class="pwa-primary" id="pwa-install" type="button">Instalar aplicativo <span aria-hidden="true">↗</span></button>
+  <div class="pwa-instructions" id="pwa-instructions" hidden></div>
+  <section class="pwa-alerts" id="pwa-alerts" hidden aria-labelledby="pwa-alerts-title">
+    <h3 id="pwa-alerts-title">Fique por dentro</h3>
+    <p id="pwa-alerts-description">Ative os alertas para receber notícias novas. Você pode desativar quando quiser.</p>
+    <button class="pwa-secondary" id="pwa-notify" type="button">Ativar notificações</button>
+  </section>
+  <p class="pwa-status" id="pwa-status" role="status" aria-live="polite"></p>
+</dialog>

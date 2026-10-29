@@ -1,0 +1,28 @@
+# Aplicativo Paraná Pop
+
+O portal pode ser instalado pelo botão flutuante no canto inferior direito. O manifesto usa o ícone fornecido em 192 e 512 pixels, uma versão maskable e um ícone próprio para a Tela de Início do iOS.
+
+No Android/Chrome/Edge, o botão abre a instalação nativa quando disponível. No iPhone/iPad, a tela explica **Compartilhar → Adicionar à Tela de Início**. Abra pelo novo ícone para permitir notificações no iOS. Navegadores internos de redes sociais recebem instruções para abrir no navegador do aparelho.
+
+Os alertas são opcionais. O leitor pode ativar ou desativar no mesmo botão; nenhuma permissão é solicitada ao carregar a página. A instalação e a autorização de notificações são ações distintas.
+
+## Operação
+
+- `/manifest.webmanifest`: identidade e configuração do aplicativo.
+- `/sw.js`: service worker com escopo `/`; não armazena páginas de notícias, admin, APIs ou mídia no cache. Armazena apenas a tela offline e os ícones.
+- `/api/pwa/config`: somente a chave pública VAPID.
+- `/api/pwa/subscribe` e `/api/pwa/unsubscribe`: cadastro e cancelamento com validação de origem e da inscrição.
+- As chaves VAPID são geradas uma única vez e ficam no PostgreSQL (`site_setting`, chave `pwa_identity_v1`). Não apagar/alterar esse registro: instalações existentes dependem da mesma chave. O backup existente do banco inclui essas chaves e as inscrições.
+- `push_subscription` guarda inscrições; `push_delivery` guarda tentativas e confirmações. Cancelamentos removem os registros associados. Endpoints expirados (404/410) são removidos automaticamente.
+- O dispatcher roda em uma thread a cada 30 segundos. Um advisory lock do PostgreSQL impede envio concorrente entre workers. Cada ciclo processa no máximo 50 entregas; erros temporários têm até três tentativas com intervalo crescente. Recibos antigos são removidos após sete dias.
+- Só recebem alertas publicações posteriores à ativação do serviço e à inscrição daquele aparelho, com no máximo 24 horas. Rascunhos, publicações futuras e edições já notificadas não disparam. O dispatcher cobre publicação pelo admin, bot, hub, importação e agendamento sem depender de uma rota de publicação específica.
+- `PWA_PUSH_WORKER=0` desativa o envio automático; use em staging. `flask --app wsgi push-dispatch` executa um ciclo manual. A entrega segue a disponibilidade e as permissões do navegador/aparelho.
+
+## Validação
+
+```sh
+python -m pytest -q
+node --test tests/pwa-client.test.cjs
+```
+
+Os testes Python usam banco isolado e transporte push simulado. Os testes JavaScript verificam os fluxos de instalação/consentimento e o service worker sem navegador. A instalação e o recebimento real devem ser conferidos em aparelhos Android e iOS.

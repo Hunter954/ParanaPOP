@@ -243,4 +243,7 @@ def create_app():
         t = threading.Thread(target=_auto_sync_loop, args=(app,), daemon=True)
         t.start()
 
+    from .pwa import init_pwa
+    init_pwa(app, bootstrap_ok)
+
     return app
