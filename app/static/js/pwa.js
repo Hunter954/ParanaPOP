@@ -7,6 +7,21 @@
   const fab = document.getElementById('pwa-open');
   const dialog = document.getElementById('pwa-dialog');
   if (!fab || !dialog || !window.isSecureContext || !('serviceWorker' in navigator)) return;
+  // Old installations may still have the original max-age=3600 manifest in
+  // Chrome's HTTP cache. Bypass that cached copy and replace it, keeping the
+  // manifest URL and app identity stable. Do not clear user data/subscriptions.
+  (async () => {
+    const refreshKey = 'paranapop-manifest-refreshed-v4';
+    try { if (localStorage.getItem(refreshKey) === '1') return; } catch (_) { /* Storage is optional. */ }
+    const response = await fetch('/manifest.webmanifest', { cache: 'reload', credentials: 'same-origin' });
+    if (!response.ok) return;
+    const manifest = await response.json();
+    if (manifest.id !== '/' || !Array.isArray(manifest.icons) || !manifest.icons.some((icon) => icon.src === '/static/pwa/icon-v3-512.png')) return;
+    const link = document.querySelector('link[rel="manifest"]');
+    // Reattach the same link so Chrome processes the refreshed metadata too.
+    if (link) link.replaceWith(link.cloneNode());
+    try { localStorage.setItem(refreshKey, '1'); } catch (_) { /* Retry safely on a later visit. */ }
+  })().catch(() => { /* Offline/error: keep the reader working and retry next visit. */ });
   const install = document.getElementById('pwa-install');
   const notify = document.getElementById('pwa-notify');
   const alerts = document.getElementById('pwa-alerts');

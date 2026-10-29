@@ -9,9 +9,14 @@ const swSource = fs.readFileSync(path.join(__dirname, '../app/static/pwa/sw.js')
 const launchSource = fs.readFileSync(path.join(__dirname, '../app/static/js/pwa-launch.js'), 'utf8');
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-function widget({ ios = false, installed = false, push = true, saveFails = false, mode = 'standalone', legacyIOS = false } = {}) {
+function widget({ ios = false, installed = false, push = true, saveFails = false, mode = 'standalone', legacyIOS = false, manifestStorage = new Map() } = {}) {
   const elements = {};
   const events = {};
+  const requests = [];
+  let manifestReplaced = 0;
+  const manifestLink = { href: '/manifest.webmanifest', cloneNode() { return { href: this.href }; }, replaceWith(next) {
+    assert.equal(next.href, '/manifest.webmanifest'); manifestReplaced++;
+  } };
   const get = (id) => elements[id] ||= { hidden: true, textContent: '', innerHTML: '', disabled: false,
     classList: { toggle() {} },
     events: {}, addEventListener(name, handler) { this.events[name] = handler; },
@@ -22,15 +27,37 @@ function widget({ ios = false, installed = false, push = true, saveFails = false
     subscribe: async () => { enabled = true; return sub; } } };
   const window = { isSecureContext: true, matchMedia: (query) => ({ matches: installed && query === `(display-mode: ${mode})` }),
     addEventListener: (name, handler) => { events[name] = handler; }, ...(push ? { PushManager: {} } : {}) };
-  const context = { window, document: { getElementById: get },
+  const context = { window, document: { getElementById: get, querySelector: () => manifestLink },
+    localStorage: { getItem: (key) => manifestStorage.get(key), setItem: (key, value) => manifestStorage.set(key, value) },
     navigator: { standalone: legacyIOS, userAgent: ios ? 'iPhone' : 'Chrome', platform: ios ? 'iPhone' : 'Linux',
       serviceWorker: { register: async () => reg, ready: Promise.resolve(reg) } },
     Uint8Array, atob: (value) => Buffer.from(value, 'base64').toString('binary'),
-    fetch: async (url) => ({ ok: !saveFails || url === '/api/pwa/config', json: async () => ({ publicKey: 'YQ' }) }) };
+    fetch: async (url, options) => { requests.push({url, options}); return { ok: !saveFails || url === '/api/pwa/config',
+      json: async () => url === '/manifest.webmanifest' ? { id: '/', icons: [{src: '/static/pwa/icon-v3-512.png'}] } : { publicKey: 'YQ' } }; } };
   if (push) { context.Notification = { permission: 'default', requestPermission: async () => 'granted' }; window.Notification = context.Notification; }
   vm.runInNewContext(source, context);
-  return { get, events, context };
+  return { get, events, context, requests, manifestStorage, manifestReplaced: () => manifestReplaced };
 }
+
+test('refreshes the old browser manifest cache once without changing app identity', async () => {
+  const storage = new Map();
+  const app = widget({ manifestStorage: storage });
+  await settle();
+  const request = app.requests.find((r) => r.url === '/manifest.webmanifest');
+  assert.equal(request.options.cache, 'reload');
+  assert.equal(app.manifestReplaced(), 1);
+  const nextVisit = widget({ manifestStorage: storage });
+  await settle();
+  assert.equal(nextVisit.requests.some((r) => r.url === '/manifest.webmanifest'), false);
+});
+
+test('failed refresh remains retryable and does not block reading or installation', async () => {
+  const app = widget({ saveFails: true });
+  await settle();
+  assert.equal(app.manifestReplaced(), 0);
+  assert.equal(app.manifestStorage.size, 0);
+  assert.equal(app.get('pwa-open').hidden, false);
+});
 
 test('iOS without Notification API still offers install guidance without crashing', async () => {
   const app = widget({ ios: true, push: false });
