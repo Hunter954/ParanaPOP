@@ -9,10 +9,12 @@ const swSource = fs.readFileSync(path.join(__dirname, '../app/static/pwa/sw.js')
 const launchSource = fs.readFileSync(path.join(__dirname, '../app/static/js/pwa-launch.js'), 'utf8');
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-function widget({ ios = false, installed = false, push = true, saveFails = false, mode = 'standalone', legacyIOS = false, manifestStorage = new Map() } = {}) {
+function widget({ ios = false, installed = false, push = true, saveFails = false, mode = 'standalone', legacyIOS = false, manifestStorage = new Map(), permission = 'default', existingSubscription = false } = {}) {
   const elements = {};
   const events = {};
   const requests = [];
+  const timers = [];
+  let permissionRequests = 0;
   let manifestReplaced = 0;
   const manifestLink = { href: '/manifest.webmanifest', cloneNode() { return { href: this.href }; }, replaceWith(next) {
     assert.equal(next.href, '/manifest.webmanifest'); manifestReplaced++;
@@ -20,12 +22,13 @@ function widget({ ios = false, installed = false, push = true, saveFails = false
   const get = (id) => elements[id] ||= { hidden: true, textContent: '', innerHTML: '', disabled: false,
     classList: { toggle() {} },
     events: {}, addEventListener(name, handler) { this.events[name] = handler; },
-    showModal() { this.open = true; }, close() { this.open = false; } };
-  let enabled = false;
+    showModal() { this.open = true; }, close() { this.open = false; this.events.close?.(); } };
+  let enabled = existingSubscription;
   const sub = { toJSON: () => ({ endpoint: 'test' }), unsubscribe: async () => { enabled = false; return true; } };
   const reg = { pushManager: { getSubscription: async () => enabled ? sub : null,
     subscribe: async () => { enabled = true; return sub; } } };
   const window = { isSecureContext: true, matchMedia: (query) => ({ matches: installed && query === `(display-mode: ${mode})` }),
+    setTimeout: (fn, delay) => { timers.push({fn, delay}); return timers.length; },
     addEventListener: (name, handler) => { events[name] = handler; }, ...(push ? { PushManager: {} } : {}) };
   const context = { window, document: { getElementById: get, querySelector: () => manifestLink },
     localStorage: { getItem: (key) => manifestStorage.get(key), setItem: (key, value) => manifestStorage.set(key, value) },
@@ -34,10 +37,57 @@ function widget({ ios = false, installed = false, push = true, saveFails = false
     Uint8Array, atob: (value) => Buffer.from(value, 'base64').toString('binary'),
     fetch: async (url, options) => { requests.push({url, options}); return { ok: !saveFails || url === '/api/pwa/config',
       json: async () => url === '/manifest.webmanifest' ? { id: '/', icons: [{src: '/static/pwa/icon-v3-512.png'}] } : { publicKey: 'YQ' } }; } };
-  if (push) { context.Notification = { permission: 'default', requestPermission: async () => 'granted' }; window.Notification = context.Notification; }
+  if (push) { context.Notification = { permission, requestPermission: async () => { permissionRequests++; context.Notification.permission = 'granted'; return 'granted'; } }; window.Notification = context.Notification; }
   vm.runInNewContext(source, context);
-  return { get, events, context, requests, manifestStorage, manifestReplaced: () => manifestReplaced };
+  return { get, events, context, requests, manifestStorage, manifestReplaced: () => manifestReplaced,
+    permissionRequests: () => permissionRequests, runTimers: () => timers.splice(0).forEach((t) => t.fn()) };
 }
+
+test('first app opening offers news alerts after launch and requests native permission only on tap', async () => {
+  const app = widget({ installed: true });
+  await settle();
+  assert.notEqual(app.get('pwa-dialog').open, true);
+  app.runTimers();
+  assert.equal(app.get('pwa-dialog').open, true);
+  assert.equal(app.get('pwa-notify-later').hidden, false);
+  assert.equal(app.permissionRequests(), 0);
+  await app.get('pwa-notify').events.click();
+  assert.equal(app.permissionRequests(), 1);
+  assert.ok(app.requests.some((r) => r.url === '/api/pwa/subscribe'));
+  assert.match(app.get('pwa-status').textContent, /receberá alertas/);
+});
+
+test('declining the first invitation does not ask permission and does not repeat next opening', async () => {
+  const storage = new Map();
+  const app = widget({ installed: true, manifestStorage: storage });
+  await settle(); app.runTimers();
+  app.get('pwa-notify-later').events.click();
+  assert.equal(app.get('pwa-dialog').open, false);
+  assert.equal(app.permissionRequests(), 0);
+  const next = widget({ installed: true, manifestStorage: storage });
+  await settle(); next.runTimers();
+  assert.notEqual(next.get('pwa-dialog').open, true);
+});
+
+test('browser visitors, blocked readers and existing subscribers are not prompted automatically', async () => {
+  for (const options of [{ installed: false }, { installed: true, permission: 'denied' },
+    { installed: true, permission: 'granted', existingSubscription: true }]) {
+    const app = widget(options);
+    await settle(); app.runTimers();
+    assert.notEqual(app.get('pwa-dialog').open, true);
+    assert.equal(app.permissionRequests(), 0);
+  }
+});
+
+test('the iPhone installed app also invites and requests permission directly in the tap handler', async () => {
+  const app = widget({ ios: true, legacyIOS: true });
+  await settle(); app.runTimers();
+  assert.equal(app.get('pwa-dialog').open, true);
+  assert.equal(app.permissionRequests(), 0);
+  await app.get('pwa-notify').events.click();
+  assert.equal(app.permissionRequests(), 1);
+  assert.ok(app.requests.some((r) => r.url === '/api/pwa/subscribe'));
+});
 
 test('refreshes the old browser manifest cache once without changing app identity', async () => {
   const storage = new Map();

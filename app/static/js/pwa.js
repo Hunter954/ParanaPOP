@@ -2,6 +2,7 @@
   'use strict';
   let installPrompt = null;
   let installed = ['standalone', 'fullscreen', 'minimal-ui'].some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches) || navigator.standalone === true;
+  const openedAsApp = installed;
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const inApp = /Instagram|FBAN|FBAV|; wv\)/i.test(navigator.userAgent);
   const fab = document.getElementById('pwa-open');
@@ -28,6 +29,12 @@
   const instructions = document.getElementById('pwa-instructions');
   const status = document.getElementById('pwa-status');
   const manage = document.getElementById('pwa-manage-notifications');
+  const later = document.getElementById('pwa-notify-later');
+  const consentKey = 'paranapop-news-consent-v1';
+  let welcome = false;
+  function rememberConsentInvite() {
+    try { localStorage.setItem(consentKey, '1'); } catch (_) { /* Browser privacy mode may disable storage. */ }
+  }
   const canPush = 'PushManager' in window && 'Notification' in window && (!ios || installed);
   let subscription = null;
   let ready = false;
@@ -49,10 +56,11 @@
     if (manage) manage.hidden = !installed || !canPush;
     dialog.classList.toggle('pwa-dialog-installed', installed);
     if (installed) {
-      document.getElementById('pwa-title').textContent = 'Suas notificações';
-      document.getElementById('pwa-description').textContent = 'Escolha se deseja receber alertas das notícias do Paraná Pop neste aparelho.';
+      document.getElementById('pwa-title').textContent = welcome ? 'Fique por dentro das notícias' : 'Suas notificações';
+      document.getElementById('pwa-description').textContent = welcome ? 'Quer saber quando sair uma notícia nova? Ative os alertas do Paraná Pop neste celular.' : 'Escolha se deseja receber alertas das notícias do Paraná Pop neste aparelho.';
       instructions.hidden = true;
     }
+    if (later) later.hidden = !welcome;
     install.hidden = installed;
     if (canPush) updateUI();
   }
@@ -77,7 +85,9 @@
     refresh();
   });
   fab.addEventListener('click', () => { dialog.showModal(); });
-  if (manage) manage.addEventListener('click', () => { dialog.showModal(); });
+  if (manage) manage.addEventListener('click', () => { rememberConsentInvite(); welcome = false; refresh(); dialog.showModal(); });
+  if (later) later.addEventListener('click', () => { rememberConsentInvite(); welcome = false; refresh(); dialog.close(); });
+  dialog.addEventListener('close', () => { welcome = false; if (later) later.hidden = true; });
   document.getElementById('pwa-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', (event) => { if (event.target === dialog) {
     const rect = dialog.getBoundingClientRect();
@@ -103,8 +113,18 @@
       // Reconcile registrations after a temporary server/network failure.
       if (subscription) await saveSubscription('/api/pwa/subscribe', subscription);
       ready = true; refresh();
+      if (openedAsApp && !subscription && Notification.permission !== 'denied') {
+        // Invite once, after the launch animation. The native permission dialog
+        // still requires the reader to tap the activation button (including iOS).
+        window.setTimeout(() => {
+          try { if (localStorage.getItem(consentKey) === '1') return; } catch (_) { /* Best effort. */ }
+          if (dialog.open || subscription || Notification.permission === 'denied') return;
+          welcome = true; refresh(); dialog.showModal(); rememberConsentInvite();
+        }, 1300);
+      }
     }).catch(() => { status.textContent = 'Não foi possível conectar os alertas. Atualize a página para tentar novamente.'; });
     notify.addEventListener('click', async () => {
+      rememberConsentInvite();
       notify.disabled = true; status.textContent = '';
       try {
         if (subscription) {
@@ -127,6 +147,7 @@
           await saveSubscription('/api/pwa/subscribe', candidate);
           subscription = candidate;
           status.textContent = 'Pronto! Você receberá alertas das próximas notícias publicadas.';
+          welcome = false;
         }
       } catch (_) {
         status.textContent = 'Não foi possível atualizar seus alertas. Verifique a conexão e tente novamente.';

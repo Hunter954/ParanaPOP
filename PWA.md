@@ -10,7 +10,7 @@ O widget v4 renova uma vez o cache HTTP do manifesto com `fetch(..., {cache: 're
 
 No Android/Chrome/Edge, o botão abre a instalação nativa quando disponível. No iPhone/iPad, a tela explica **Compartilhar → Adicionar à Tela de Início**. Abra pelo novo ícone para permitir notificações no iOS. Navegadores internos de redes sociais recebem instruções para abrir no navegador do aparelho.
 
-Os alertas são opcionais. O leitor pode ativar ou desativar no mesmo botão; nenhuma permissão é solicitada ao carregar a página. A instalação e a autorização de notificações são ações distintas.
+Os alertas são opcionais. No primeiro acesso pelo aplicativo instalado, após a animação de abertura, aparece um convite com **Ativar notificações** e **Agora não**. O pedido nativo de permissão ocorre somente ao tocar em ativar, como exigem Android/iOS. O convite não se repete após ser visto/dispensado e não aparece para visitantes do navegador, leitores já inscritos ou que bloquearam a permissão. O leitor pode ativar/desativar depois pelo rodapé. A instalação e a autorização de notificações são ações distintas.
 
 ## Operação
 
