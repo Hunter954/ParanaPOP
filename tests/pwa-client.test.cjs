@@ -9,10 +9,11 @@ const swSource = fs.readFileSync(path.join(__dirname, '../app/static/pwa/sw.js')
 const launchSource = fs.readFileSync(path.join(__dirname, '../app/static/js/pwa-launch.js'), 'utf8');
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-function widget({ ios = false, installed = false, push = true, saveFails = false, mode = 'standalone', legacyIOS = false, manifestStorage = new Map(), permission = 'default', existingSubscription = false } = {}) {
+function widget({ ios = false, installed = false, push = true, saveFails = false, mode = 'standalone', legacyIOS = false, manifestStorage = new Map(), permission = 'default', existingSubscription = false, userAgent, serviceWorker = true, clipboard = true } = {}) {
   const elements = {};
   const events = {};
   const requests = [];
+  const copiedLinks = [];
   const timers = [];
   let permissionRequests = 0;
   let manifestReplaced = 0;
@@ -32,14 +33,16 @@ function widget({ ios = false, installed = false, push = true, saveFails = false
     addEventListener: (name, handler) => { events[name] = handler; }, ...(push ? { PushManager: {} } : {}) };
   const context = { window, document: { getElementById: get, querySelector: () => manifestLink },
     localStorage: { getItem: (key) => manifestStorage.get(key), setItem: (key, value) => manifestStorage.set(key, value) },
-    navigator: { standalone: legacyIOS, userAgent: ios ? 'iPhone' : 'Chrome', platform: ios ? 'iPhone' : 'Linux',
+    navigator: { standalone: legacyIOS, userAgent: userAgent || (ios ? 'Mozilla/5.0 (iPhone) Version/18.0 Mobile/15E148 Safari/604.1' : 'Chrome'), platform: ios ? 'iPhone' : 'Linux',
       serviceWorker: { register: async () => reg, ready: Promise.resolve(reg) } },
     Uint8Array, atob: (value) => Buffer.from(value, 'base64').toString('binary'),
     fetch: async (url, options) => { requests.push({url, options}); return { ok: !saveFails || url === '/api/pwa/config',
       json: async () => url === '/manifest.webmanifest' ? { id: '/', icons: [{src: '/static/pwa/icon-v3-512.png'}] } : { publicKey: 'YQ' } }; } };
   if (push) { context.Notification = { permission, requestPermission: async () => { permissionRequests++; context.Notification.permission = 'granted'; return 'granted'; } }; window.Notification = context.Notification; }
+  if (!serviceWorker) delete context.navigator.serviceWorker;
+  if (clipboard) context.navigator.clipboard = { writeText: async (value) => copiedLinks.push(value) };
   vm.runInNewContext(source, context);
-  return { get, events, context, requests, manifestStorage, manifestReplaced: () => manifestReplaced,
+  return { get, events, context, requests, manifestStorage, copiedLinks, manifestReplaced: () => manifestReplaced,
     permissionRequests: () => permissionRequests, runTimers: () => timers.splice(0).forEach((t) => t.fn()) };
 }
 
@@ -113,9 +116,42 @@ test('iOS without Notification API still offers install guidance without crashin
   const app = widget({ ios: true, push: false });
   await settle();
   assert.equal(app.get('pwa-open').hidden, false);
-  await app.get('pwa-install').events.click();
+  app.get('pwa-open').events.click();
   assert.match(app.get('pwa-instructions').innerHTML, /Adicionar à Tela de Início/);
   assert.equal(app.get('pwa-alerts').hidden, true);
+});
+
+test('iPhone first tap immediately shows the Home Screen steps, with no false download button', async () => {
+  const app = widget({ ios: true, push: false });
+  await settle();
+  app.get('pwa-open').events.click();
+  assert.equal(app.get('pwa-dialog').open, true);
+  assert.equal(app.get('pwa-instructions').hidden, false);
+  assert.equal(app.get('pwa-install').hidden, true);
+  assert.match(app.get('pwa-instructions').innerHTML, /Compartilhar/);
+  assert.match(app.get('pwa-instructions').innerHTML, /Abrir como App da Web/);
+  assert.match(app.get('pwa-instructions').innerHTML, /Editar Ações/);
+  assert.equal(app.get('pwa-copy-link').hidden, true);
+});
+
+test('iPhone embedded browsers without service workers still provide Safari help and copyable link', async () => {
+  for (const userAgent of ['Mozilla/5.0 (iPhone) Instagram', 'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148']) {
+    const app = widget({ ios: true, push: false, serviceWorker: false, userAgent });
+    await settle();
+    assert.equal(app.get('pwa-open').hidden, false);
+    app.get('pwa-open').events.click();
+    assert.match(app.get('pwa-title').textContent, /Safari/);
+    assert.equal(app.get('pwa-copy-link').hidden, false);
+    await app.get('pwa-copy-link').events.click();
+    assert.deepEqual(app.copiedLinks, ['https://paranapop.com.br/']);
+  }
+});
+
+test('iPhone copy fallback exposes the address when clipboard is unavailable', async () => {
+  const app = widget({ ios: true, push: false, clipboard: false, userAgent: 'iPhone WhatsApp' });
+  await settle(); app.get('pwa-open').events.click();
+  await app.get('pwa-copy-link').events.click();
+  assert.match(app.get('pwa-status').textContent, /paranapop.com.br/);
 });
 
 test('native install prompt is triggered from the install button once', async () => {

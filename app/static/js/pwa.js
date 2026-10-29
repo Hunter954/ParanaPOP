@@ -4,10 +4,11 @@
   let installed = ['standalone', 'fullscreen', 'minimal-ui'].some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches) || navigator.standalone === true;
   const openedAsApp = installed;
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const inApp = /Instagram|FBAN|FBAV|; wv\)/i.test(navigator.userAgent);
+  const inApp = /Instagram|FBAN|FBAV|WhatsApp|; wv\)/i.test(navigator.userAgent) || (ios && !/Safari\//i.test(navigator.userAgent));
   const fab = document.getElementById('pwa-open');
   const dialog = document.getElementById('pwa-dialog');
-  if (!fab || !dialog || !window.isSecureContext || !('serviceWorker' in navigator)) return;
+  if (!fab || !dialog || !window.isSecureContext) return;
+  const supportsServiceWorker = 'serviceWorker' in navigator;
   // Old installations may still have the original max-age=3600 manifest in
   // Chrome's HTTP cache. Bypass that cached copy and replace it, keeping the
   // manifest URL and app identity stable. Do not clear user data/subscriptions.
@@ -30,16 +31,17 @@
   const status = document.getElementById('pwa-status');
   const manage = document.getElementById('pwa-manage-notifications');
   const later = document.getElementById('pwa-notify-later');
+  const copyLink = document.getElementById('pwa-copy-link');
   const consentKey = 'paranapop-news-consent-v1';
   let welcome = false;
   function rememberConsentInvite() {
     try { localStorage.setItem(consentKey, '1'); } catch (_) { /* Browser privacy mode may disable storage. */ }
   }
-  const canPush = 'PushManager' in window && 'Notification' in window && (!ios || installed);
+  const canPush = supportsServiceWorker && 'PushManager' in window && 'Notification' in window && (!ios || installed);
   let subscription = null;
   let ready = false;
-  const registration = navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
-    .then(() => navigator.serviceWorker.ready);
+  const registration = supportsServiceWorker ? navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
+    .then(() => navigator.serviceWorker.ready) : Promise.resolve(null);
   registration.catch(() => { status.textContent = 'Não foi possível preparar o aplicativo. Atualize a página e tente novamente.'; });
   function updateUI() {
     alerts.hidden = !canPush;
@@ -55,21 +57,29 @@
     fab.hidden = installed;
     if (manage) manage.hidden = !installed || !canPush;
     dialog.classList.toggle('pwa-dialog-installed', installed);
+    dialog.classList.toggle('pwa-dialog-ios', ios && !installed);
     if (installed) {
       document.getElementById('pwa-title').textContent = welcome ? 'Fique por dentro das notícias' : 'Suas notificações';
       document.getElementById('pwa-description').textContent = welcome ? 'Quer saber quando sair uma notícia nova? Ative os alertas do Paraná Pop neste celular.' : 'Escolha se deseja receber alertas das notícias do Paraná Pop neste aparelho.';
       instructions.hidden = true;
+      if (copyLink) copyLink.hidden = true;
+    } else if (ios) {
+      document.getElementById('pwa-fab-label').textContent = 'Adicionar ao iPhone';
+      document.getElementById('pwa-title').textContent = inApp ? 'Abra no Safari para instalar' : 'Instale no seu iPhone';
+      document.getElementById('pwa-description').textContent = 'O ícone do Paraná Pop é adicionado à Tela de Início pelo menu do iPhone.';
     }
     if (later) later.hidden = !welcome;
-    install.hidden = installed;
+    install.hidden = installed || ios;
     if (canPush) updateUI();
   }
   function showInstructions() {
     instructions.hidden = false;
-    if (inApp) {
+    if (ios) {
+      const opening = inApp ? '<p>Use o menu deste aplicativo e escolha <strong>Abrir no Safari</strong> ou <strong>Abrir no navegador</strong>. Se não houver essa opção, copie o link abaixo e cole no Safari.</p>' : '<p>No Safari, siga estes passos:</p>';
+      instructions.innerHTML = '<strong>Adicionar à Tela de Início</strong>' + opening + '<ol><li>Toque em <strong>Compartilhar</strong> (quadrado com seta para cima). Em alguns layouts, ele fica dentro do menu <strong>…</strong>.</li><li>Role a lista e escolha <strong>Adicionar à Tela de Início</strong>.</li><li>Se aparecer <strong>Abrir como App da Web</strong>, deixe ativado. Confirme em <strong>Adicionar</strong>.</li><li>Abra o Paraná Pop pelo novo ícone na Tela de Início para ativar as notificações.</li></ol><p class="pwa-ios-note">Se a opção não aparecer na lista, toque em <strong>Editar Ações</strong> e adicione <strong>Adicionar à Tela de Início</strong>.</p>';
+      if (copyLink) copyLink.hidden = !inApp;
+    } else if (inApp) {
       instructions.innerHTML = '<strong>Abra no navegador do celular</strong><p>Use o menu deste aplicativo e escolha “Abrir no navegador”. Depois, volte a tocar em Instalar aplicativo.</p>';
-    } else if (ios) {
-      instructions.innerHTML = '<strong>Instale no seu iPhone ou iPad</strong><ol><li>Toque em <strong>Compartilhar</strong> no navegador.</li><li>Escolha <strong>Adicionar à Tela de Início</strong> e confirme em <strong>Adicionar</strong>.</li><li>Abra o Paraná Pop pelo novo ícone para ativar as notificações.</li></ol>';
     } else {
       instructions.innerHTML = '<strong>Adicione o Paraná Pop à sua tela</strong><ol><li>Abra o menu do navegador <strong>⋮</strong> ou <strong>⋯</strong>.</li><li>Escolha <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.</li><li>Confirme a instalação. Se a opção não aparecer, abra este site no Chrome ou Edge atualizado.</li></ol>';
     }
@@ -84,7 +94,15 @@
     status.textContent = 'Aplicativo instalado! Abra o Paraná Pop pelo ícone na sua tela inicial.';
     refresh();
   });
-  fab.addEventListener('click', () => { dialog.showModal(); });
+  fab.addEventListener('click', () => { if (ios) showInstructions(); dialog.showModal(); });
+  if (copyLink) copyLink.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText('https://paranapop.com.br/');
+      status.textContent = 'Link copiado! Abra o Safari, cole o endereço e siga os passos acima.';
+    } catch (_) {
+      status.textContent = 'Abra o Safari e digite: paranapop.com.br';
+    }
+  });
   if (manage) manage.addEventListener('click', () => { rememberConsentInvite(); welcome = false; refresh(); dialog.showModal(); });
   if (later) later.addEventListener('click', () => { rememberConsentInvite(); welcome = false; refresh(); dialog.close(); });
   dialog.addEventListener('close', () => { welcome = false; if (later) later.hidden = true; });

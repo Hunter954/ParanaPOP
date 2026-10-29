@@ -10,6 +10,8 @@ O widget v4 renova uma vez o cache HTTP do manifesto com `fetch(..., {cache: 're
 
 No Android/Chrome/Edge, o botão abre a instalação nativa quando disponível. No iPhone/iPad, a tela explica **Compartilhar → Adicionar à Tela de Início**. Abra pelo novo ícone para permitir notificações no iOS. Navegadores internos de redes sociais recebem instruções para abrir no navegador do aparelho.
 
+O widget v6 apresenta as instruções do iPhone já no primeiro toque no botão **Adicionar ao iPhone**. Não exibe uma ação de download automático inexistente no iOS. Explica **Abrir como App da Web** quando disponível e **Editar Ações** caso a opção não esteja na lista. Navegadores internos recebem instruções para abrir no Safari e um botão de copiar o link. Esse auxílio continua disponível mesmo quando o navegador interno não oferece service workers; suporte a instalação e a notificações são verificados separadamente. O site não consegue acionar o menu nativo Adicionar à Tela de Início por JavaScript no iOS. Referência: https://support.apple.com/pt-br/guide/iphone/iph42ab2f3a7/ios.
+
 Os alertas são opcionais. No primeiro acesso pelo aplicativo instalado, após a animação de abertura, aparece um convite com **Ativar notificações** e **Agora não**. O pedido nativo de permissão ocorre somente ao tocar em ativar, como exigem Android/iOS. O convite não se repete após ser visto/dispensado e não aparece para visitantes do navegador, leitores já inscritos ou que bloquearam a permissão. O leitor pode ativar/desativar depois pelo rodapé. A instalação e a autorização de notificações são ações distintas.
 
 ## Operação
