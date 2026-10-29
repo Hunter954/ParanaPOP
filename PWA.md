@@ -2,6 +2,8 @@
 
 O portal pode ser instalado pelo botão flutuante no canto inferior direito. O manifesto usa o ícone fornecido em 192 e 512 pixels, uma versão maskable e um ícone próprio para a Tela de Início do iOS.
 
+Dentro do aplicativo instalado, o botão flutuante e a oferta de instalação ficam ocultos. O leitor gerencia os alertas pelo botão **Notificações** no rodapé. A primeira página da sessão mostra somente a marca sobre fundo azul, com uma entrada breve do ícone e saída suave; navegar entre matérias não repete a abertura. A preferência de movimento reduzido é respeitada. A tela nativa anterior ao carregamento é gerada pelo sistema operacional a partir do manifesto.
+
 No Android/Chrome/Edge, o botão abre a instalação nativa quando disponível. No iPhone/iPad, a tela explica **Compartilhar → Adicionar à Tela de Início**. Abra pelo novo ícone para permitir notificações no iOS. Navegadores internos de redes sociais recebem instruções para abrir no navegador do aparelho.
 
 Os alertas são opcionais. O leitor pode ativar ou desativar no mesmo botão; nenhuma permissão é solicitada ao carregar a página. A instalação e a autorização de notificações são ações distintas.

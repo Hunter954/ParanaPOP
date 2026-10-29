@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   let installPrompt = null;
-  let installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let installed = ['standalone', 'fullscreen', 'minimal-ui'].some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches) || navigator.standalone === true;
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const inApp = /Instagram|FBAN|FBAV|; wv\)/i.test(navigator.userAgent);
   const fab = document.getElementById('pwa-open');
@@ -12,6 +12,7 @@
   const alerts = document.getElementById('pwa-alerts');
   const instructions = document.getElementById('pwa-instructions');
   const status = document.getElementById('pwa-status');
+  const manage = document.getElementById('pwa-manage-notifications');
   const canPush = 'PushManager' in window && 'Notification' in window && (!ios || installed);
   let subscription = null;
   let ready = false;
@@ -19,9 +20,6 @@
     .then(() => navigator.serviceWorker.ready);
   registration.catch(() => { status.textContent = 'Não foi possível preparar o aplicativo. Atualize a página e tente novamente.'; });
   function updateUI() {
-    fab.hidden = installed && !canPush;
-    document.getElementById('pwa-fab-label').textContent = installed ? 'Notificações' : 'Instalar aplicativo';
-    install.hidden = installed;
     alerts.hidden = !canPush;
     notify.disabled = !ready || Notification.permission === 'denied';
     notify.textContent = subscription ? 'Desativar notificações' : 'Ativar notificações';
@@ -32,8 +30,14 @@
   // Access Notification only on platforms where the API exists.
   if (!('Notification' in window)) alerts.hidden = true;
   function refresh() {
-    fab.hidden = installed && !canPush;
-    document.getElementById('pwa-fab-label').textContent = installed ? 'Notificações' : 'Instalar aplicativo';
+    fab.hidden = installed;
+    if (manage) manage.hidden = !installed || !canPush;
+    dialog.classList.toggle('pwa-dialog-installed', installed);
+    if (installed) {
+      document.getElementById('pwa-title').textContent = 'Suas notificações';
+      document.getElementById('pwa-description').textContent = 'Escolha se deseja receber alertas das notícias do Paraná Pop neste aparelho.';
+      instructions.hidden = true;
+    }
     install.hidden = installed;
     if (canPush) updateUI();
   }
@@ -58,6 +62,7 @@
     refresh();
   });
   fab.addEventListener('click', () => { dialog.showModal(); });
+  if (manage) manage.addEventListener('click', () => { dialog.showModal(); });
   document.getElementById('pwa-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', (event) => { if (event.target === dialog) {
     const rect = dialog.getBoundingClientRect();

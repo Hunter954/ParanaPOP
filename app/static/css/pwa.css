@@ -1,4 +1,10 @@
 .pwa-fab[hidden],.pwa-dialog [hidden]{display:none!important}
+html.pwa-app #pwa-open{display:none!important}
+@media(display-mode:standalone),(display-mode:fullscreen),(display-mode:minimal-ui){#pwa-open{display:none!important}}
+.pwa-dialog-installed .pwa-dialog-brand,.pwa-dialog-installed .pwa-perks{display:none}
+.pwa-dialog-installed .pwa-alerts{border-top:0;padding-top:0}
+.pwa-notifications-link{border:0;background:none;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:3px;margin:0 0 0 14px;padding:8px 0;cursor:pointer}
+.pwa-notifications-link[hidden]{display:none!important}
 .pwa-fab{position:fixed;right:max(20px,env(safe-area-inset-right));bottom:calc(20px + env(safe-area-inset-bottom));z-index:1035;display:flex;align-items:center;gap:12px;border:1px solid #29414a;border-radius:22px;background:#102830;color:#fff;padding:10px 16px 10px 10px;box-shadow:0 7px 30px #001e2940;text-align:left;font-family:inherit;cursor:pointer;transition:transform .2s,box-shadow .2s}
 .pwa-fab:hover{transform:translateY(-3px);box-shadow:0 12px 34px #001e2955}.pwa-fab img{border-radius:13px;object-fit:cover}.pwa-fab small{display:block;font-size:9px;letter-spacing:1.2px;font-weight:700;color:#8cdce8;margin-bottom:2px}.pwa-fab strong{display:block;font-size:14px;line-height:1.4}.pwa-fab svg{color:#ffe500;margin-left:5px;flex-shrink:0}
 .pwa-fab:focus-visible,.pwa-dialog button:focus-visible{outline:3px solid #ffda00;outline-offset:4px}

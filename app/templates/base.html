@@ -3,15 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#00c8e8">
+  <meta name="theme-color" content="#02d4fd">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Paraná Pop">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="manifest" href="{{ url_for('pwa.manifest') }}">
   <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='pwa/apple-touch-icon.png') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/pwa.css', v='1') }}">
-  <script defer src="{{ url_for('static', filename='js/pwa.js', v='1') }}"></script>
+  <style>
+    .pwa-splash{display:none}
+    html.pwa-launching .pwa-splash{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:#02d4fd;pointer-events:none;animation:pwa-launch-out .24s ease-out .9s both}
+    .pwa-splash-mark{display:block;overflow:visible;border:0;border-radius:0;box-shadow:none;animation:pwa-logo-in .85s cubic-bezier(.22,1,.36,1) both}
+    @keyframes pwa-logo-in{0%{opacity:0;transform:translateY(12px) scale(.82) rotate(-5deg)}60%{opacity:1;transform:translateY(-3px) scale(1.035) rotate(1deg)}100%{opacity:1;transform:translateY(0) scale(1) rotate(0)}}
+    @keyframes pwa-launch-out{0%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden}}
+    @media(prefers-reduced-motion:reduce){.pwa-splash-mark{animation:none}html.pwa-launching .pwa-splash{animation-duration:.1s;animation-delay:.2s}}
+  </style>
+  <script src="{{ url_for('static', filename='js/pwa-launch.js', v='2') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pwa.css', v='2') }}">
+  <script defer src="{{ url_for('static', filename='js/pwa.js', v='2') }}"></script>
   <title>{{ meta_title or site_name_value }}</title>
   <meta name="description" content="{{ meta_description or '' }}">
   <meta name="robots" content="{{ meta_robots or 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1' }}">
@@ -89,6 +98,7 @@
   {% endif %}
 </head>
 <body>
+  {% include 'pwa_splash.html' %}
   <header class="site-header">
     <div class="container-xl site-header-container header-shell">
       <div class="mobile-topbar d-md-none">
@@ -237,6 +247,7 @@
     </div>
     <div class="container-xl site-footer-container footer-credit">
       Desenvolvido e Atualizado por: <a href="https://www.instagram.com/kpremoli/" target="_blank" rel="noopener">Kevin Premoli</a>
+      <button id="pwa-manage-notifications" class="pwa-notifications-link" type="button" aria-haspopup="dialog" aria-controls="pwa-dialog" hidden>Notificações</button>
     </div>
   </footer>
 

@@ -1,0 +1,11 @@
+<div class="pwa-splash" aria-hidden="true">
+  <svg class="pwa-splash-mark" viewBox="90 70 340 380" width="160" height="179" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <!-- Remove only the cyan backdrop at render time; keep the supplied P artwork. -->
+      <filter id="pwa-logo-key" color-interpolation-filters="sRGB" x="0" y="0" width="512" height="512" filterUnits="userSpaceOnUse">
+        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  1 -1 -1 0 1"/>
+      </filter>
+    </defs>
+    <image href="{{ url_for('static', filename='pwa/icon-512.png') }}" width="512" height="512" filter="url(#pwa-logo-key)"/>
+  </svg>
+</div>
