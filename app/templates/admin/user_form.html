@@ -24,6 +24,11 @@
       <small class="text-muted">Mínimo de 4 caracteres.</small>
     </div>
 
+    <div>
+      <label class="form-label" for="whatsapp">WhatsApp para recuperação de senha</label>
+      <input id="whatsapp" class="form-control" type="tel" name="whatsapp" maxlength="16" placeholder="+5546999999999" value="{{ request.form.get('whatsapp', user_obj.whatsapp or '' if user_obj else '') }}">
+    </div>
+
     <div class="row g-3">
       <div class="col-md-6">
         <label class="settings-category-option">

@@ -17,6 +17,12 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=True, nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    whatsapp = db.Column(db.String(16), nullable=True)
+    reset_hash = db.Column(db.String(64), nullable=True)
+    reset_expires = db.Column(db.DateTime, nullable=True)
+    reset_requested = db.Column(db.DateTime, nullable=True)
+    reset_attempts = db.Column(db.Integer, nullable=False, default=0)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

@@ -10,7 +10,7 @@ import base64
 import secrets
 from urllib.parse import urlparse
 
-from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort, jsonify
+from flask import session, Blueprint, render_template, redirect, url_for, request, flash, current_app, abort, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy import func, desc, or_, case, distinct
 from sqlalchemy.orm import load_only, selectinload
@@ -809,6 +809,10 @@ def inject_admin_helpers():
     }
 
 
+from .recovery import register_recovery_routes
+register_recovery_routes(admin_bp, "paranapop")
+
+
 @admin_bp.get("/login")
 def login():
     form = LoginForm()
@@ -825,6 +829,7 @@ def login_post():
                 flash('Este usuário está desativado. Fale com o administrador.', 'danger')
                 return render_template("admin/login.html", form=form)
             login_user(user)
+            session["admin_password_stamp"] = user.password_hash
             return redirect(url_for("admin.dashboard"))
         flash("Email ou senha inválidos.", "danger")
     return render_template("admin/login.html", form=form)
@@ -1481,17 +1486,20 @@ def users_new():
     if request.method == 'POST':
         email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password') or ''
+        whatsapp = (request.form.get('whatsapp') or '').strip()
         is_admin = bool(request.form.get('is_admin'))
         is_active = bool(request.form.get('is_active'))
 
-        if not email:
+        if whatsapp and not re.fullmatch(r'\+[1-9][0-9]{7,14}', whatsapp):
+            flash('Informe o WhatsApp no formato +5546999999999.', 'danger')
+        elif not email:
             flash('Informe o e-mail do usuário.', 'danger')
         elif len(password) < 4:
             flash('A senha precisa ter pelo menos 4 caracteres.', 'danger')
         elif User.query.filter_by(email=email).first():
             flash('Já existe um usuário com esse e-mail.', 'danger')
         else:
-            user_obj = User(email=email, is_admin=is_admin, is_active=is_active)
+            user_obj = User(email=email, whatsapp=whatsapp or None, is_admin=is_admin, is_active=is_active)
             user_obj.set_password(password)
             db.session.add(user_obj)
             db.session.commit()
@@ -1511,10 +1519,13 @@ def users_edit(user_id):
     if request.method == 'POST':
         email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password') or ''
+        whatsapp = (request.form.get('whatsapp') or '').strip()
         is_admin = bool(request.form.get('is_admin'))
         is_active = bool(request.form.get('is_active'))
 
-        if not email:
+        if whatsapp and not re.fullmatch(r'\+[1-9][0-9]{7,14}', whatsapp):
+            flash('Informe o WhatsApp no formato +5546999999999.', 'danger')
+        elif not email:
             flash('Informe o e-mail do usuário.', 'danger')
         elif User.query.filter(User.email == email, User.id != user_obj.id).first():
             flash('Já existe outro usuário com esse e-mail.', 'danger')
@@ -1523,6 +1534,7 @@ def users_edit(user_id):
         elif user_obj.id == current_user.id and not is_active:
             flash('Você não pode desativar seu próprio usuário.', 'danger')
         else:
+            user_obj.whatsapp = whatsapp or None
             user_obj.email = email
             user_obj.is_admin = is_admin
             user_obj.is_active = is_active
