@@ -1,0 +1,41 @@
+services:
+  web:
+    build: .
+    image: paranapop-recovery:latest
+    container_name: paranapop-dokploy
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - uploads:/data
+    networks:
+      - private
+      - proxy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5)"
+      interval: 15s
+      timeout: 7s
+      retries: 3
+      start_period: 40s
+    labels:
+      org.opencontainers.image.source: https://github.com/Hunter954/ParanaPOP
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  uploads:
+    external: true
+    name: paranapop_uploads
+networks:
+  private:
+    external: true
+    name: paranapop-private
+  proxy:
+    external: true
+    name: dokploy-network
