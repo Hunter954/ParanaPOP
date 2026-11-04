@@ -21,7 +21,7 @@ class RequestForm(FlaskForm):
 
 class VerifyForm(FlaskForm):
     code = StringField("Código", validators=[DataRequired(), Length(min=6, max=6)])
-    password = PasswordField("Nova senha", validators=[DataRequired(), Length(min=10, max=200)])
+    password = PasswordField("Nova senha", validators=[DataRequired(), Length(min=8, max=200)])
     confirm = PasswordField("Confirme a senha", validators=[DataRequired(), EqualTo("password")])
 
 
