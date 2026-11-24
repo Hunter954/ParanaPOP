@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from flask import session, Blueprint, render_template, redirect, url_for, request, flash, current_app, abort, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy import func, desc, or_, case, distinct
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import load_only, selectinload
 from .storage import delete_media, is_managed_media_url, list_media_files, local_path_from_url, media_root, normalize_media_url, rewrite_media_urls, save_file_storage, save_bytes, save_stream
 
@@ -28,6 +29,7 @@ from .video_generator import (
 )
 from .news_api import search_google_news, generate_article_with_openai, enrich_news_item, test_openai_connection
 from .forms import LoginForm, AdSlotForm, CategoryForm, PostAdminForm
+from .ad_popup import SETTING_KEY as POPUP_SETTING_KEY, PopupAdForm, campaign_status, local_date, popup_config, popup_setting
 from .social_whatsapp import (
     DEFAULT_CAPTION_TEMPLATE,
     auto_send_post_to_whatsapp,
@@ -2437,7 +2439,68 @@ def ads_editor():
         return r
     slots = AdSlot.query.order_by(AdSlot.key.asc()).all()
     slot_cards = [_slot_card_data(slot) for slot in slots]
-    return render_template("admin/ads_editor.html", slot_cards=slot_cards, **_common_admin_context("ads"))
+    return render_template("admin/ads_editor.html", slot_cards=slot_cards,
+                           popup_status=campaign_status(popup_config(popup_setting())),
+                           **_common_admin_context("ads"))
+
+
+@admin_bp.route("/ads/popup", methods=["GET", "POST"])
+@login_required
+def ads_popup():
+    denied = _require_admin()
+    if denied:
+        return denied
+    setting = popup_setting(lock=request.method == "POST")
+    config = popup_config(setting)
+    initial = {
+        **config, "starts_at": local_date(config["starts_at"]), "ends_at": local_date(config["ends_at"]),
+    } if request.method == "GET" else None
+    form = PopupAdForm(data=initial)
+
+    def page(status=200):
+        return render_template("admin/ads_popup.html", form=form, popup=config, popup_status=campaign_status(config),
+                               **_common_admin_context("ads")), status
+
+    if request.method == "GET":
+        return page()
+    if not form.validate_on_submit():
+        return page(400)
+    if (form.revision.data or "") != config["revision"]:
+        flash("Outra edição foi salva. Recarregue a página para ver a campanha atual.", "warning")
+        return page(409)
+    has_upload = bool(form.image.data and form.image.data.filename)
+    image = "" if form.remove_image.data else config["image"]
+    if form.enabled.data and not (image or has_upload):
+        form.image.errors = ["Envie uma arte para ativar a campanha."]
+        return page(400)
+    uploaded = ""
+    if has_upload:
+        try:
+            uploaded = _save_upload(form.image.data, "popup-ads")
+        except (ValueError, OSError):
+            form.image.errors = ["Não foi possível salvar a imagem. Use JPG, PNG, WebP ou GIF dentro do limite de upload."]
+            return page(400)
+        image = uploaded
+    values = {
+        "enabled": form.enabled.data, "image": image, "title": (form.title.data or "").strip(),
+        "link": (form.link.data or "").strip(), "seconds": form.seconds.data,
+        "starts_at": form.schedule(form.starts_at), "ends_at": form.schedule(form.ends_at),
+        "scope": form.scope.data, "frequency": form.frequency.data, "revision": uuid4().hex,
+    }
+    if setting is None:
+        setting = SiteSetting(key=POPUP_SETTING_KEY)
+        db.session.add(setting)
+    setting.value = json.dumps(values, ensure_ascii=False)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        if uploaded:
+            _delete_local_media(uploaded)
+        flash("Outra edição foi salva. Recarregue a página antes de tentar novamente.", "warning")
+        return page(409)
+    flash("Campanha do banner pop-up salva.", "success")
+    return redirect(url_for("admin.ads_popup"))
 
 
 @admin_bp.get("/ads/<int:slot_id>/manage")

@@ -12,6 +12,7 @@ from .models import db, Post, Category, AdSlot, SiteSetting, PageView, Analytics
 from .sync import download_external_image
 from .storage import normalize_media_url, rewrite_media_urls, send_media, send_media_download
 from .art_generator import ArtGeneratorError, build_generator_payload, generate_variants
+from .ad_popup import visible_popup
 
 site_bp = Blueprint("site", __name__)
 
@@ -198,6 +199,7 @@ def inject_site_globals():
         "site_name_value": _site_name(),
         "favicon_url": _normalize_setting_media(_setting("favicon_url", "")),
         "ad_home_bottom": _get_ad("home_bottom"),
+        "ad_popup": visible_popup(request.endpoint) if request.blueprint == "site" else None,
         "clean_text": _clean_text,
         "format_date_br": _format_date_br,
         "display_category_name": _display_category_name,

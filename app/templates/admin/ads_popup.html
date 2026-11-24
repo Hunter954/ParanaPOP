@@ -1,0 +1,98 @@
+{% extends 'admin/layout.html' %}
+{% block admin_title %}Banner pop-up{% endblock %}
+{% block page_title %}Banner pop-up{% endblock %}
+{% block page_subtitle %}Configure a arte, o link e o período de exibição da campanha.{% endblock %}
+{% block admin_content %}
+{% macro field_errors(field) %}
+  {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+{% endmacro %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ad-popup.css', v=1) }}">
+<div class="row g-4">
+  <div class="col-lg-8">
+    <section class="panel-card">
+      <div class="panel-head d-flex flex-wrap align-items-center gap-3">
+        <div class="flex-grow-1"><h2>Configuração da campanha</h2><p>Horários de Brasília.</p></div>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.ads_editor') }}">Voltar à publicidade</a>
+      </div>
+      <form class="row g-3" method="post" enctype="multipart/form-data" data-popup-form>
+        {{ form.hidden_tag() }}
+        {% if form.csrf_token is defined %}{{ field_errors(form.csrf_token) }}{% endif %}
+        <div class="col-12">
+          <div class="form-check form-switch">
+            {{ form.enabled(class_='form-check-input') }}
+            {{ form.enabled.label(class_='form-check-label') }}
+          </div>
+        </div>
+        <div class="col-md-6">
+          {{ form.title.label(class_='form-label') }}
+          {{ form.title(class_='form-control', maxlength=150) }}
+          {{ field_errors(form.title) }}
+        </div>
+        <div class="col-md-6">
+          {{ form.link.label(class_='form-label') }}
+          {{ form.link(class_='form-control', type='url', placeholder='https://', maxlength=800) }}
+          {{ field_errors(form.link) }}
+        </div>
+        <div class="col-12">
+          {{ form.image.label(class_='form-label') }}
+          {{ form.image(class_='form-control', accept='image/jpeg,image/png,image/webp,image/gif') }}
+          <div class="form-text">JPG, PNG, WebP ou GIF. A arte é ajustada à tela do visitante.</div>
+          {{ field_errors(form.image) }}
+          {% if popup.image %}
+          <div class="form-check mt-2">
+            {{ form.remove_image(class_='form-check-input') }}
+            {{ form.remove_image.label(class_='form-check-label') }}
+          </div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          {{ form.starts_at.label(class_='form-label') }}
+          {{ form.starts_at(class_='form-control') }}
+          <div class="form-text">Em branco, começa ao ativar.</div>
+          {{ field_errors(form.starts_at) }}
+        </div>
+        <div class="col-md-6">
+          {{ form.ends_at.label(class_='form-label') }}
+          {{ form.ends_at(class_='form-control') }}
+          <div class="form-text">Em branco, fica no ar até ser pausada.</div>
+          {{ field_errors(form.ends_at) }}
+        </div>
+        <div class="col-md-4">
+          {{ form.seconds.label(class_='form-label') }}
+          <div class="input-group">{{ form.seconds(class_='form-control', min=0, max=300) }}<span class="input-group-text">seg</span></div>
+          <div class="form-text">Use 0 para fechar só manualmente.</div>
+          {{ field_errors(form.seconds) }}
+        </div>
+        <div class="col-md-4">
+          {{ form.scope.label(class_='form-label') }}
+          {{ form.scope(class_='form-select') }}
+          {{ field_errors(form.scope) }}
+        </div>
+        <div class="col-md-4">
+          {{ form.frequency.label(class_='form-label') }}
+          {{ form.frequency(class_='form-select') }}
+          {{ field_errors(form.frequency) }}
+        </div>
+        <div class="col-12"><button class="btn btn-dark" type="submit">Salvar campanha</button></div>
+      </form>
+    </section>
+  </div>
+  <div class="col-lg-4">
+    <section class="panel-card">
+      <div class="panel-head d-flex align-items-center gap-3">
+        <h2 class="flex-grow-1">Prévia</h2>
+        <span class="badge rounded-pill {{ 'text-bg-success' if popup_status == 'No ar' else 'text-bg-light' }}">{{ popup_status }}</span>
+      </div>
+      <img class="pp-popup-admin-image" data-popup-thumbnail data-current-image="{{ popup.image }}" alt="Arte do banner"
+           {% if popup.image %}src="{{ popup.image }}"{% else %}hidden{% endif %}>
+      <p class="text-muted small mt-2" data-popup-empty {% if popup.image %}hidden{% endif %}>Selecione uma imagem para testar a exibição.</p>
+      <button type="button" class="btn btn-outline-dark mt-3" data-popup-test {% if not popup.image %}disabled{% endif %}>Testar pop-up</button>
+    </section>
+  </div>
+</div>
+<dialog class="pp-ad-popup" aria-label="Prévia do anúncio" data-popup-preview>
+  <button class="pp-ad-popup-close" type="button" aria-label="Fechar prévia" autofocus data-popup-close>×</button>
+  <img alt="Arte do banner">
+</dialog>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('static', filename='js/ad-popup.js', v=1) }}" defer></script>{% endblock %}

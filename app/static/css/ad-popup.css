@@ -1,0 +1,53 @@
+.pp-ad-popup {
+  inset: 0;
+  width: max-content;
+  max-width: min(680px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 1rem;
+  overflow: visible;
+  background: #111;
+  box-shadow: 0 20px 80px rgb(0 0 0 / 46%);
+}
+.pp-ad-popup::backdrop { background: rgb(0 0 0 / 68%); }
+.pp-ad-popup a { display: block; }
+.pp-ad-popup img {
+  display: block;
+  width: auto;
+  max-width: min(680px, calc(100vw - 2rem));
+  height: auto;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  object-fit: contain;
+  border-radius: inherit;
+}
+.pp-ad-popup a img { border-radius: 1rem; }
+.pp-ad-popup-close {
+  position: absolute;
+  z-index: 1;
+  top: .55rem;
+  right: .55rem;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 66%);
+  border-radius: 50%;
+  background: rgb(17 17 17 / 93%);
+  color: #fff;
+  font: 1.65rem/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.pp-ad-popup-close:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+html:has(.pp-ad-popup[open]) { overflow: hidden; }
+.pp-popup-admin-image {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: .75rem;
+  background: #f5f5f5;
+}

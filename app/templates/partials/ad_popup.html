@@ -1,0 +1,12 @@
+{% if ad_popup %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ad-popup.css', v=1) }}">
+<dialog class="pp-ad-popup" aria-label="Publicidade" data-ad-popup data-image="{{ ad_popup.image }}"
+        data-seconds="{{ ad_popup.seconds }}" data-frequency="{{ ad_popup.frequency }}"
+        data-revision="{{ ad_popup.revision }}" data-ends-at="{{ ad_popup.ends_at or '' }}">
+  <button class="pp-ad-popup-close" type="button" aria-label="Fechar anúncio" autofocus data-popup-close>×</button>
+  {% if ad_popup.link %}<a href="{{ ad_popup.link }}" target="_blank" rel="noopener noreferrer sponsored">{% endif %}
+    <img alt="{{ ad_popup.title or 'Anúncio' }}">
+  {% if ad_popup.link %}</a>{% endif %}
+</dialog>
+<script src="{{ url_for('static', filename='js/ad-popup.js', v=1) }}" defer></script>
+{% endif %}

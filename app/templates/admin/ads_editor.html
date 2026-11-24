@@ -3,6 +3,16 @@
 {% block page_title %}Editor visual de publicidade{% endblock %}
 {% block page_subtitle %}Clique em um espaço do site para subir banners, links e definir o intervalo da rotação.{% endblock %}
 {% block admin_content %}
+<section class="panel-card mb-4">
+  <div class="panel-head d-flex flex-wrap align-items-center gap-3">
+    <div class="flex-grow-1">
+      <h2>Banner pop-up</h2>
+      <p>Campanha em destaque com arte, link e horário programado.</p>
+    </div>
+    <span class="badge rounded-pill {{ 'text-bg-success' if popup_status == 'No ar' else 'text-bg-light' }}">{{ popup_status }}</span>
+    <a class="btn btn-dark" href="{{ url_for('admin.ads_popup') }}">Configurar pop-up</a>
+  </div>
+</section>
 <section class="panel-card ads-guide-card">
   <div class="ads-guide-grid">
     <div>
